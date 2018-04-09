@@ -1,5 +1,8 @@
 package main
 
-type IVCS interface{u()
-d()
+// IVCS is an simplified interface to version control system
+type IVCS interface {
+	upload()
+	download()
+	gui()
 }
