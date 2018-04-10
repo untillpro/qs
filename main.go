@@ -13,7 +13,7 @@ func main() {
 		Use:   "qg",
 		Short: "Quick git wrapper",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Inside rootCmd Run with args: %v\n", args)
+			v.Status()
 		},
 	}
 

@@ -5,4 +5,5 @@ type IVCS interface {
 	Upload()
 	Download()
 	Gui()
+	Status()
 }

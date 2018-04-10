@@ -8,3 +8,8 @@ func detect() IVCS {
 func Upload() {
 	detect().Upload()
 }
+
+// Status detects VCS and runs its status
+func Status() {
+	detect().Status()
+}
