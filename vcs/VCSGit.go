@@ -12,7 +12,7 @@ func NewVCSGit() IVCS {
 	return &gitConf{}
 }
 
-func (conf *gitConf) upload() {
+func (conf *gitConf) Upload() {
 	fmt.Println("Git upload")
 }
 

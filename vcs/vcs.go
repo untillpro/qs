@@ -6,5 +6,5 @@ func detect() IVCS {
 
 // Upload sources
 func Upload() {
-	detect().upload()
+	detect().Upload()
 }
