@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	cobra "github.com/spf13/cobra"
+	v "github.com/untillpro/qg/vcs"
 )
 
 func main() {
@@ -20,6 +21,7 @@ func main() {
 		Use:   "u",
 		Short: "Upload sources",
 		Run: func(cmd *cobra.Command, args []string) {
+			v.Upload()
 		},
 	}
 
