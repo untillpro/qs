@@ -1,0 +1,1 @@
+// https://github.com/b4b4r07/go-pipe/blob/master/README.md
