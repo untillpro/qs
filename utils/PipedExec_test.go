@@ -10,5 +10,4 @@ func TestPipedExec_Start(t *testing.T) {
 		Command("ls").Wd("/").
 		Command("grep", "eclipse").
 		Run(os.Stdout, os.Stdout)
-
 }
