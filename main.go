@@ -17,13 +17,18 @@ func main() {
 		},
 	}
 
+	var uploadCmdMessage []string
 	var uploadCmd = &cobra.Command{
 		Use:   "u",
 		Short: "Upload sources",
 		Run: func(cmd *cobra.Command, args []string) {
-			v.Upload()
+			v.Upload(uploadCmdMessage)
 		},
 	}
+	uploadCmd.Flags().StringSliceVarP(&uploadCmdMessage, "message", "m", []string{"misc"},
+		`Use the given as the commit message. If multiple -m options are given
+their values are concatenated as separate paragraphs`,
+	)
 
 	var downloadCmd = &cobra.Command{
 		Use:   "d",

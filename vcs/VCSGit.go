@@ -2,8 +2,7 @@ package vcs
 
 import (
 	"fmt"
-	"log"
-	"os/exec"
+	"os"
 
 	u "github.com/untillpro/qg/utils"
 )
@@ -17,17 +16,18 @@ func NewVCSGit() IVCS {
 }
 
 func (conf *gitConf) Status() {
-	p, err := exec.LookPath("git")
-	u.PanicIfError(err)
+	new(u.PipedExec).
+		Command("git", "remote", "-v").
+		Command("grep", "fetch").
+		Run(os.Stdout, os.Stdout)
 
-	log.Println(p)
+	new(u.PipedExec).
+		Command("git", "status", "-s", "-b", "-uall").
+		Run(os.Stdout, os.Stdout)
 
-	o, err := exec.Command(p, "remote", "-v").Output()
-	u.PanicIfError(err)
-	fmt.Printf(string(o))
 }
-func (conf *gitConf) Upload() {
-	fmt.Println("Git upload")
+func (conf *gitConf) Upload(uploadCmdMessage []string) {
+	fmt.Println("Git upload", uploadCmdMessage)
 }
 
 func (conf *gitConf) Download() {
