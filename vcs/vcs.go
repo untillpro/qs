@@ -5,8 +5,8 @@ func detect() IVCS {
 }
 
 // Upload sources
-func Upload(uploadCmdMessage []string) {
-	detect().Upload(uploadCmdMessage)
+func Upload() {
+	detect().Upload()
 }
 
 // Status detects VCS and runs its status

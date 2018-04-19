@@ -5,6 +5,7 @@ import (
 	"os"
 
 	u "github.com/untillpro/qg/utils"
+	"github.com/untillpro/qg/cmdupload"
 )
 
 type gitConf struct {
@@ -26,7 +27,7 @@ func (conf *gitConf) Status() {
 		Run(os.Stdout, os.Stdout)
 
 }
-func (conf *gitConf) Upload(uploadCmdMessage []string) {
+func (conf *gitConf) Upload() {
 	fmt.Println("Git upload", uploadCmdMessage)
 }
 
