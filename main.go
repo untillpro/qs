@@ -1,32 +1,38 @@
 package main
 
 import (
-	"fmt"
-
 	cobra "github.com/spf13/cobra"
-	"github.com/untillpro/qg/cmdupload"
+	"github.com/untillpro/qg/git"
 	"github.com/untillpro/qg/vcs"
 )
 
 func main() {
 
+	var cfgStatus vcs.CfgStatus
+
 	var rootCmd = &cobra.Command{
 		Use:   "qg",
 		Short: "Quick git wrapper",
 		Run: func(cmd *cobra.Command, args []string) {
-			vcs.Status()
-		},
-	}
-	var downloadCmd = &cobra.Command{
-		Use:   "d",
-		Short: "Download sources",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Inside download with args: %v\n", args)
+			git.Status(cfgStatus)
 		},
 	}
 
-	rootCmd.AddCommand(cmdupload.Command())
-	rootCmd.AddCommand(downloadCmd)
+	var cfgUpload vcs.CfgUpload
+	var uploadCmd = &cobra.Command{
+		Use:   "u",
+		Short: "Upload sources",
+		Run: func(cmd *cobra.Command, args []string) {
+			git.Upload(cfgUpload)
+		},
+	}
+
+	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, "message", "m", []string{"misc"},
+		`Use the given string as the commit message. If multiple -m options are given
+their values are concatenated as separate paragraphs`,
+	)
+
+	rootCmd.AddCommand(uploadCmd)
 
 	rootCmd.Execute()
 

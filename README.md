@@ -2,8 +2,11 @@ Quick source management tool
 
 # Usage
 
-qs [options] command [args]
+- `qg`: show status of current folder
+- `qg d`: download sources (git pull)
+- `qg u`: upload sources (git add + commit + push)
 
-qs: Show status
-qs u: Upload all  changes
-qs d: Download all changes
+# Under the Hood
+
+- `vcs/cmdconfigs.go` defines generic vcs command configs
+- `git/gitcmds` implement git commands
