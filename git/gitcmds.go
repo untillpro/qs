@@ -47,3 +47,10 @@ func Download(cfg vcs.CfgDownload) {
 		Command("git", "pull").
 		Run(os.Stdout, os.Stdout)
 }
+
+// Gui shows gui
+func Gui() {
+	new(u.PipedExec).
+		Command("git", "gui").
+		Run(os.Stdout, os.Stdout)
+}

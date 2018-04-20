@@ -40,12 +40,15 @@ func main() {
 			Run: func(cmd *cobra.Command, args []string) {
 				globalConfig()
 				git.Status(cfgStatus)
-				fmt.Print("\n*** Changes shown above will be uploaded to repository, enter 'y' if agree->")
+				fmt.Print("\n*** Changes shown above will be uploaded to repository, 'y': agree, 'g': show GUI >")
 				var response string
 				fmt.Scanln(&response)
-				if "y" == response {
+				switch response {
+				case "y":
 					git.Upload(cfgUpload)
-				} else {
+				case "g":
+					git.Gui()
+				default:
 					fmt.Print("Ok, see you")
 				}
 			},
@@ -71,6 +74,20 @@ their values are concatenated as separate paragraphs`,
 		}
 		rootCmd.AddCommand(cmd)
 	}
+
+	// GUI
+	{
+		var cmd = &cobra.Command{
+			Use:   "g",
+			Short: "Show GUI",
+			Run: func(cmd *cobra.Command, args []string) {
+				globalConfig()
+				git.Gui()
+			},
+		}
+		rootCmd.AddCommand(cmd)
+	}
+
 	rootCmd.Execute()
 
 }
