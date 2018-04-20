@@ -40,7 +40,7 @@ func main() {
 			Run: func(cmd *cobra.Command, args []string) {
 				globalConfig()
 				git.Status(cfgStatus)
-				fmt.Print("\n*** Changes shown above will be uploaded to repository, enter 'y' if agree")
+				fmt.Print("\n*** Changes shown above will be uploaded to repository, enter 'y' if agree->")
 				var response string
 				fmt.Scanln(&response)
 				if "y" == response {
