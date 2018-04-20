@@ -40,3 +40,10 @@ func Upload(cfg vcs.CfgUpload) {
 		Command("git", "push").
 		Run(os.Stdout, os.Stdout)
 }
+
+// Download sources from git repo
+func Download(cfg vcs.CfgDownload) {
+	new(u.PipedExec).
+		Command("git", "pull").
+		Run(os.Stdout, os.Stdout)
+}

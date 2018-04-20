@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 
@@ -13,7 +12,6 @@ import (
 var verbose bool
 
 func globalConfig() {
-	fmt.Println("Verbose=", verbose)
 	if !verbose {
 		log.SetOutput(ioutil.Discard)
 	}
@@ -32,11 +30,12 @@ func main() {
 	}
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 
+	// Upload
 	{
 		var cfgUpload vcs.CfgUpload
 		var uploadCmd = &cobra.Command{
 			Use:   "u",
-			Short: "Upload sources",
+			Short: "Upload sources to repo",
 			Run: func(cmd *cobra.Command, args []string) {
 				globalConfig()
 				git.Upload(cfgUpload)
@@ -47,10 +46,22 @@ func main() {
 			`Use the given string as the commit message. If multiple -m options are given
 their values are concatenated as separate paragraphs`,
 		)
-
 		rootCmd.AddCommand(uploadCmd)
 	}
 
+	// Download
+	{
+		var cfg vcs.CfgDownload
+		var cmd = &cobra.Command{
+			Use:   "d",
+			Short: "Download sources from repo",
+			Run: func(cmd *cobra.Command, args []string) {
+				globalConfig()
+				git.Download(cfg)
+			},
+		}
+		rootCmd.AddCommand(cmd)
+	}
 	rootCmd.Execute()
 
 }
