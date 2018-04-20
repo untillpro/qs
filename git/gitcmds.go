@@ -10,11 +10,13 @@ import (
 
 // Status shows git repo status
 func Status(cfg vcs.CfgStatus) {
-	new(u.PipedExec).
+	err := new(u.PipedExec).
 		Command("git", "remote", "-v").
 		Command("grep", "fetch").
 		Run(os.Stdout, os.Stdout)
-
+	if nil != err {
+		return
+	}
 	new(u.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
 		Run(os.Stdout, os.Stdout)

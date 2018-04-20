@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"io"
 	"log"
 	"os/exec"
@@ -50,7 +51,7 @@ func (Self *PipedExec) Wd(wd string) *PipedExec {
 }
 
 // Run starts the pipe
-func (Self *PipedExec) Run(out io.Writer, err io.Writer) {
+func (Self *PipedExec) Run(out io.Writer, err io.Writer) error {
 	for _, cmd := range Self.cmds {
 		if cmd.stderrRedirection == StderrRedirectNone {
 			cmd.cmd.Stderr = err
@@ -58,7 +59,7 @@ func (Self *PipedExec) Run(out io.Writer, err io.Writer) {
 	}
 	lastIdx := len(Self.cmds) - 1
 	if lastIdx < 0 {
-		return
+		return errors.New("Empty command list")
 	}
 	Self.cmds[lastIdx].cmd.Stdout = out
 
@@ -70,5 +71,6 @@ func (Self *PipedExec) Run(out io.Writer, err io.Writer) {
 		}
 	}
 
-	Self.cmds[lastIdx].cmd.Wait()
+	return Self.cmds[lastIdx].cmd.Wait()
+
 }
