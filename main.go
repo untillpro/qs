@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 
@@ -38,7 +39,15 @@ func main() {
 			Short: "Upload sources to repo",
 			Run: func(cmd *cobra.Command, args []string) {
 				globalConfig()
-				git.Upload(cfgUpload)
+				git.Status(cfgStatus)
+				fmt.Print("\n*** Changes shown above will be uploaded to repository, enter 'y' if agree")
+				var response string
+				fmt.Scanln(&response)
+				if "y" == response {
+					git.Upload(cfgUpload)
+				} else {
+					fmt.Print("Ok, see you")
+				}
 			},
 		}
 
