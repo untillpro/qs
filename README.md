@@ -9,4 +9,4 @@ Quick source management tool
 # Under the Hood
 
 - `vcs/cmdconfigs.go` defines generic vcs command configs
-- `git/gitcmds` implement git commands
+- `git/gitcmds` implement git commands 
