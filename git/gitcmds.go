@@ -13,6 +13,7 @@ func Status(cfg vcs.CfgStatus) {
 	err := new(u.PipedExec).
 		Command("git", "remote", "-v").
 		Command("grep", "fetch").
+		Command("sed", "s/(fetch)//").
 		Run(os.Stdout, os.Stdout)
 	if nil != err {
 		return
