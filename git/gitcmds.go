@@ -2,10 +2,8 @@ package git
 
 import (
 	"os"
-
-	"github.com/untillpro/qg/vcs"
-
-	u "github.com/untillpro/qg/utils"
+	"github.com/untillpro/qs/vcs"
+	u "github.com/untillpro/qs/utils"
 )
 
 // Status shows git repo status

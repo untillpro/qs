@@ -6,8 +6,8 @@ import (
 	"log"
 
 	cobra "github.com/spf13/cobra"
-	"github.com/untillpro/qg/git"
-	"github.com/untillpro/qg/vcs"
+	"github.com/untillpro/qs/git"
+	"github.com/untillpro/qs/vcs"
 )
 
 var verbose bool
