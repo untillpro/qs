@@ -2,9 +2,9 @@ Quick source management tool
 
 # Usage
 
-- `gg`: show status of current folder
-- `gg d`: download sources (git pull)
-- `gg u -m [message]`: upload sources (git add + commit + push)
+- `gs`: show status of current folder
+- `gs d`: download sources (git pull)
+- `gs u -m [message]`: upload sources (git add + commit + push)
 
 # Under the Hood
 
