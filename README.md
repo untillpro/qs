@@ -4,7 +4,7 @@ Quick source management tool
 
 - `qg`: show status of current folder
 - `qg d`: download sources (git pull)
-- `qg u`: upload sources (git add + commit + push)
+- `qg u -m [message]`: upload sources (git add + commit + push)
 
 # Under the Hood
 
