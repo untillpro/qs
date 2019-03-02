@@ -2,8 +2,9 @@ package git
 
 import (
 	"os"
-	"github.com/untillpro/qs/vcs"
+
 	u "github.com/untillpro/qs/utils"
+	"github.com/untillpro/qs/vcs"
 )
 
 // Status shows git repo status
@@ -19,6 +20,18 @@ func Status(cfg vcs.CfgStatus) {
 	new(u.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
 		Run(os.Stdout, os.Stdout)
+
+}
+
+/*
+	- Add v* tag
+	- Increase version
+	-
+
+
+*/
+
+func Release() {
 
 }
 
