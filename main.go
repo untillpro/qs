@@ -75,6 +75,19 @@ their values are concatenated as separate paragraphs`,
 		rootCmd.AddCommand(cmd)
 	}
 
+	// Release
+	{
+		var cmd = &cobra.Command{
+			Use:   "r",
+			Short: "Create a release",
+			Run: func(cmd *cobra.Command, args []string) {
+				globalConfig()
+				git.Release()
+			},
+		}
+		rootCmd.AddCommand(cmd)
+	}
+
 	// GUI
 	{
 		var cmd = &cobra.Command{

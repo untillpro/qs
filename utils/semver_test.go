@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"log"
 	"testing"
 
 	"github.com/blang/semver"
@@ -10,18 +9,25 @@ import (
 )
 
 func TestCoreOsSemver(t *testing.T) {
+	// Trim PreRelease and bump
 	{
-		sv1 := coreos.New("1.2.3-SNAPSHOT")
+		sv1 := *coreos.New("1.2.3-SNAPSHOT")
 		assert.Equal(t, sv1.PreRelease, coreos.PreRelease("SNAPSHOT"))
-		log.Println("*** PreRelease", sv1.PreRelease, " Metadata", sv1.Metadata)
-		sv2 := coreos.New("1.2.4-SNAPSHOT")
-		log.Println("***sv2 ", sv2)
-		assert.True(t, sv1.LessThan(*sv2))
-		sv2.Patch += 1
-		log.Println("***sv2 ", sv2)
+		assert.Equal(t, "1.2.3-SNAPSHOT", sv1.String())
 
-		sv3 := coreos.New("1.2.4")
-		assert.Equal(t, sv3.PreRelease, coreos.PreRelease(""))
+		sv1Release := sv1
+		sv1Release.PreRelease = ""
+
+		sv1Next := sv1
+		sv1Next.Minor++
+		assert.Equal(t, "1.3.3-SNAPSHOT", sv1Next.String())
+	}
+
+	// Metadata?
+	{
+		sv := *coreos.New("1.2.3-SNAPSHOT+argo")
+		sv.PreRelease = ""
+		assert.Equal(t, "1.2.3+argo", sv.String())
 	}
 
 }
