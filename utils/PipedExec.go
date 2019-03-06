@@ -67,10 +67,17 @@ func (Self *PipedExec) Run(out io.Writer, err io.Writer) error {
 		log.Println(cmd.cmd.Path, cmd.cmd.Args)
 		err := cmd.cmd.Start()
 		if nil != err {
-			panic("Failed:" + cmd.cmd.Path)
+			return err
 		}
 	}
 
-	return Self.cmds[lastIdx].cmd.Wait()
+	for _, cmd := range Self.cmds {
+		err := cmd.cmd.Wait()
+		if nil != err {
+			return err
+		}
+	}
+
+	return nil
 
 }
