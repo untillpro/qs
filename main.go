@@ -35,7 +35,8 @@ func main() {
 	{
 		var cfgUpload vcs.CfgUpload
 		var uploadCmd = &cobra.Command{
-			Use:   "u",
+			Use: "u",
+			//			Aliases: []string{"u"},
 			Short: "Upload sources to repo",
 			Run: func(cmd *cobra.Command, args []string) {
 				globalConfig()

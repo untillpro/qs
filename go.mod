@@ -10,4 +10,5 @@ require (
 	github.com/spf13/viper v1.3.1 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/stretchr/testify v1.3.0
+	github.com/untillpro/gochips v1.1.0
 )
