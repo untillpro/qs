@@ -20,7 +20,7 @@ func main() {
 
 	var cfgStatus vcs.CfgStatus
 	var rootCmd = &cobra.Command{
-		Use:   "qg",
+		Use:   "qs",
 		Short: "Quick git wrapper",
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
