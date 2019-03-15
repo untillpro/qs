@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
 
 	coreos "github.com/coreos/go-semver/semver"
 	"github.com/untillpro/gochips"
@@ -86,7 +87,9 @@ func Release() {
 	// *************************************************
 	gochips.Doing("Tagging")
 	{
-		params := []string{"tag", "v" + targetVersion.String()}
+		tagName := "v" + targetVersion.String()
+		n := time.Now()
+		params := []string{"tag", "-m", "Version " + tagName + " of " + n.Format("2006/01/02 15:04:05"), tagName}
 		err = new(gochips.PipedExec).
 			Command("git", params...).
 			Run(os.Stdout, os.Stdout)
@@ -114,17 +117,7 @@ func Release() {
 	// *************************************************
 	gochips.Doing("Pushing to origin")
 	{
-		params := []string{"push", "origin"}
-		err = new(gochips.PipedExec).
-			Command("git", params...).
-			Run(os.Stdout, os.Stdout)
-		gochips.ExitIfError(err)
-	}
-
-	// *************************************************
-	gochips.Doing("Pushing tags to origin")
-	{
-		params := []string{"push", "origin", "--tags"}
+		params := []string{"push", "--follow-tags", "origin"}
 		err = new(gochips.PipedExec).
 			Command("git", params...).
 			Run(os.Stdout, os.Stdout)

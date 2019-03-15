@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
 
 	cobra "github.com/spf13/cobra"
+	qc "github.com/untillpro/gochips"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/vcs"
 )
@@ -13,9 +12,8 @@ import (
 var verbose bool
 
 func globalConfig() {
-	if !verbose {
-		log.SetOutput(ioutil.Discard)
-	}
+	qc.IsVerbose = verbose
+
 }
 
 func main() {
