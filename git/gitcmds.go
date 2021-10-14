@@ -1,13 +1,21 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/untillpro/gochips"
 	"github.com/untillpro/qs/utils"
 	"github.com/untillpro/qs/vcs"
+)
+
+const (
+	repoNotFound        = "git repo name not found"
+	userNotFound        = "git user name not found"
+	errAlreadyForkedMsg = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 )
 
 // Status shows git repo status
@@ -156,4 +164,92 @@ func Gui() {
 	new(gochips.PipedExec).
 		Command("git", "gui").
 		Run(os.Stdout, os.Stdout)
+}
+
+// GetRepoName  -from .git/config
+func GetRepoName() (repo string) {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("git", "config", "--local", "remote.origin.url").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	repourl := strings.TrimSpace(stdouts)
+	repo = getLastEntryfromURL(repourl)
+	return
+}
+
+func getLastEntryfromURL(url string) string {
+	var entry string
+	arr := strings.Split(url, "/")
+	if len(arr) > 0 {
+		entry = arr[len(arr)-1]
+	}
+	return entry
+}
+
+// GetRemoteUpstreamURL - from .git/config
+func GetRemoteUpstreamURL() string {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("git", "config", "--local", "remote.upstream.url").
+		RunToStrings()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(stdouts)
+}
+
+// Fork repo
+func Fork() (repo string, err error) {
+	repo = GetRepoName()
+	if len(repo) == 0 {
+		fmt.Println(repoNotFound)
+		os.Exit(1)
+	}
+	remoteurl := GetRemoteUpstreamURL()
+	if len(remoteurl) > 0 {
+		return repo, errors.New(errAlreadyForkedMsg)
+	}
+
+	new(gochips.PipedExec).
+		Command("gh", "repo", "fork", "heeus/"+repo, "--clone=false").
+		Run(os.Stdout, os.Stdout)
+
+	return repo, nil
+}
+
+// MakeUpstream s.e.
+func MakeUpstream(repo string) {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("git", "config", "--global", "user.name").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	user := strings.TrimSpace(stdouts)
+
+	if len(user) == 0 {
+		fmt.Println(userNotFound)
+		os.Exit(1)
+	}
+
+	new(gochips.PipedExec).
+		Command("git", "remote", "rename", "origin", "upstream").
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command("git", "remote", "add", "origin", "https://github.com/"+user+"/"+repo).
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command("git", "push", "origin", "main").
+		Run(os.Stdout, os.Stdout)
+}
+
+// Dev branch
+func Dev(branch string) {
+	new(gochips.PipedExec).
+		Command("git", "pull", "-r", "-p", "upstream", "main").
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command("git", "checkout", "-b", branch).
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command("git", "push", "-u", "origin", branch).
+		Run(os.Stdout, os.Stdout)
+	return
 }
