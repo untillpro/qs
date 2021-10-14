@@ -1,5 +1,27 @@
 Quick source management tool
 
+# Installation Prerequisites
+
+## gh
+- https://github.com/cli/cli
+- MSI: https://github.com/cli/cli/releases/tag/v2.0.0
+- chocolatey: choco install gh
+  - https://docs.chocolatey.org/en-us/choco/setup#install-with-cmd.exe
+  - Also
+    - choco install gh
+    - choco install git
+    - choco install golang
+
+## git
+
+- $Git\usr\bin must be in PATH
+  - gives `yes`, `grep`, `sed` and other Unix utilities
+
+# Installation
+
+go install github.com/untillpro/qs@latest
+
+
 # Usage
 Must be run in cloned github repo folder.
 Path qs.exe should be added to system PATH env variable.
