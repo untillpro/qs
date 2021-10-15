@@ -46,7 +46,7 @@ const (
 	devParam      = "dev"
 	devParamDesc  = "Create developer branch"
 	devConfirm    = "Dev branch '$reponame' will be created. Yes/No? "
-	devNeedToFork = "You are in heeus/$repo repo\nExecute 'qs fork' first"
+	devNeedToFork = "You are in $org/$repo repo\nExecute 'qs fork' first"
 )
 
 var verbose bool
@@ -88,6 +88,10 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 			git.Status(cp.cfgStatus)
+			if len(args) > 0 && args[0] == "i" {
+				git.Upload(cfgUpload)
+				return
+			}
 			fmt.Print(pushConfirm)
 			var response string
 			fmt.Scanln(&response)
@@ -164,10 +168,15 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 			remoteURL := strings.TrimSpace(git.GetRemoteUpstreamURL())
+			repo, org := git.GetRepoAndOrgName()
 			if len(remoteURL) == 0 {
-				errMsg := strings.ReplaceAll(devNeedToFork, "$repo", git.GetRepoName())
-				fmt.Println(errMsg)
-				return
+				if git.IsMainOrg() {
+					errMsg := strings.ReplaceAll(devNeedToFork, "$repo", repo)
+					errMsg = strings.ReplaceAll(errMsg, "$org", org)
+					fmt.Println(errMsg)
+					return
+				}
+				git.MakeUpstream(repo)
 			}
 			branch := getBranchName(args...)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
@@ -199,6 +208,7 @@ func (cp *commandProcessor) addForkBranch() *commandProcessor {
 				return
 			}
 			git.MakeUpstream(repo)
+
 		},
 	}
 	cp.rootcmd.AddCommand(cmd)

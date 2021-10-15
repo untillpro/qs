@@ -16,6 +16,8 @@ const (
 	repoNotFound        = "git repo name not found"
 	userNotFound        = "git user name not found"
 	errAlreadyForkedMsg = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
+	orgHeeus            = "heeus"
+	orgUntillPro        = "untillpro"
 )
 
 // Status shows git repo status
@@ -167,23 +169,22 @@ func Gui() {
 }
 
 // GetRepoName  -from .git/config
-func GetRepoName() (repo string) {
+func GetRepoAndOrgName() (repo string, org string) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("git", "config", "--local", "remote.origin.url").
 		RunToStrings()
 	gochips.ExitIfError(err)
 	repourl := strings.TrimSpace(stdouts)
-	repo = getLastEntryfromURL(repourl)
-	return
-}
 
-func getLastEntryfromURL(url string) string {
-	var entry string
-	arr := strings.Split(url, "/")
+	arr := strings.Split(repourl, "/")
 	if len(arr) > 0 {
-		entry = arr[len(arr)-1]
+		repo = arr[len(arr)-1]
 	}
-	return entry
+
+	if len(arr) > 1 {
+		org = arr[len(arr)-2]
+	}
+	return
 }
 
 // GetRemoteUpstreamURL - from .git/config
@@ -197,9 +198,14 @@ func GetRemoteUpstreamURL() string {
 	return strings.TrimSpace(stdouts)
 }
 
+func IsMainOrg() bool {
+	_, org := GetRepoAndOrgName()
+	return (org != getUserName())
+}
+
 // Fork repo
 func Fork() (repo string, err error) {
-	repo = GetRepoName()
+	repo, org := GetRepoAndOrgName()
 	if len(repo) == 0 {
 		fmt.Println(repoNotFound)
 		os.Exit(1)
@@ -209,26 +215,45 @@ func Fork() (repo string, err error) {
 		return repo, errors.New(errAlreadyForkedMsg)
 	}
 
-	new(gochips.PipedExec).
-		Command("gh", "repo", "fork", "heeus/"+repo, "--clone=false").
+	if !IsMainOrg() {
+		return repo, errors.New(errAlreadyForkedMsg)
+	}
+	err = new(gochips.PipedExec).
+		Command("gh", "repo", "fork", org+"/"+repo, "--clone=false").
 		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return repo, err
+	}
 
 	return repo, nil
 }
 
-// MakeUpstream s.e.
-func MakeUpstream(repo string) {
+func getBranch() string {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("git", "symbolic-ref", "--short", "HEAD").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	return strings.TrimSpace(stdouts)
+}
+
+func getUserName() string {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("git", "config", "--global", "user.name").
 		RunToStrings()
 	gochips.ExitIfError(err)
-	user := strings.TrimSpace(stdouts)
+	return strings.TrimSpace(stdouts)
+}
+
+// MakeUpstream s.e.
+func MakeUpstream(repo string) {
+	user := getUserName()
 
 	if len(user) == 0 {
 		fmt.Println(userNotFound)
 		os.Exit(1)
 	}
 
+	branchname := getBranch()
 	new(gochips.PipedExec).
 		Command("git", "remote", "rename", "origin", "upstream").
 		Run(os.Stdout, os.Stdout)
@@ -236,14 +261,14 @@ func MakeUpstream(repo string) {
 		Command("git", "remote", "add", "origin", "https://github.com/"+user+"/"+repo).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command("git", "push", "origin", "main").
+		Command("git", "push", "origin", branchname).
 		Run(os.Stdout, os.Stdout)
 }
 
 // Dev branch
 func Dev(branch string) {
 	new(gochips.PipedExec).
-		Command("git", "pull", "-r", "-p", "upstream", "main").
+		Command("git", "pull", "-r", "-p", "upstream", getBranch()).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
 		Command("git", "checkout", "-b", branch).
