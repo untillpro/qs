@@ -2,12 +2,17 @@ package utils
 
 import (
 	"fmt"
-	coreos "github.com/coreos/go-semver/semver"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
 	"strconv"
+
+	coreos "github.com/coreos/go-semver/semver"
+)
+
+const (
+	writeFilePermission = 0644
 )
 
 type Version struct {
@@ -41,11 +46,11 @@ func ReadVersion() (*Version, error) {
 
 func (v *Version) Save() error {
 	if v.filename == "version" {
-		return ioutil.WriteFile(v.filename, []byte(v.String()), 0644)
-	} else {
-		data := fmt.Sprintf("package main\n\nvar Major = %d\nvar Minor = %d\nvar Patch = %d", v.Major, v.Minor, v.Patch)
-		return ioutil.WriteFile(v.filename, []byte(data), 0644)
+		return ioutil.WriteFile(v.filename, []byte(v.String()), writeFilePermission)
 	}
+	data := fmt.Sprintf("package main\n\nvar Major = %d\nvar Minor = %d\nvar Patch = %d", v.Major, v.Minor, v.Patch)
+	return ioutil.WriteFile(v.filename, []byte(data), writeFilePermission)
+
 }
 
 func getValue(idx int, file *ast.File) int64 {

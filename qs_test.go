@@ -6,15 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const TESTFOLDERNAME = "TestQS"
-const MAINFOLDER = "MAIN"
-const FOLDER1 = "F1"
-const FOLDER2 = "F2"
-const TESTFILENAME = "txtFile"
-
-var basepath string = ""
-
-
 func TestDeleteDup(t *testing.T) {
 	str := deleteDupMinus("13427-Show--must----go---on")
 	assert.Equal(t, str, "13427-Show-must-go-on")
@@ -40,4 +31,3 @@ func TestGetBranchName(t *testing.T) {
 	str = getBranchName("Show")
 	assert.Equal(t, str, "Show")
 }
-

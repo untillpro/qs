@@ -1,0 +1,40 @@
+# options for analysis running
+linters:
+  disable-all: true
+  enable:
+    - megacheck
+    - govet
+    - revive
+    - cyclop
+    - gosec
+    - nakedret
+    - forcetypeassert	
+  fast: true
+linters-settings:
+  cyclop:
+    max-complexity: 15
+  revive:
+  # see https://github.com/mgechev/revive#available-rules for details.
+    ignore-generated-header: true
+    exclude: "*_test.go"
+    severity: warning
+    rules:
+      - name: indent-error-flow
+        severity: warning	
+      - name: add-constant
+        severity: warning
+        arguments:
+          - maxLitCount: "3"
+            allowStrs: '""'
+            allowInts: "0,1,2"
+            allowFloats: "0.0,0.,1.0,1.,2.0,2."
+issues:
+  exclude:
+   - underscore
+   - underscores
+  exclude-rules:
+   - path: _test.go
+     linters:
+       - gocyclo
+       - revive
+       - gosec

@@ -15,6 +15,7 @@ import (
 const (
 	utilityName = "qs"                //root command name
 	utilityDesc = "Quick git wrapper" //root command description
+	msymbol     = "-"
 
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
@@ -181,7 +182,6 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			branch := getBranchName(args...)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 			fmt.Print(devMsg)
-
 			var response string
 			fmt.Scanln(&response)
 			switch response {
@@ -208,7 +208,6 @@ func (cp *commandProcessor) addForkBranch() *commandProcessor {
 				return
 			}
 			git.MakeUpstream(repo)
-
 		},
 	}
 	cp.rootcmd.AddCommand(cmd)
@@ -231,6 +230,7 @@ func getTaskIDFromURL(url string) string {
 }
 
 func getBranchName(args ...string) string {
+
 	if len(args) == 0 {
 		fmt.Println("Need branch name for dev")
 		os.Exit(1)
@@ -243,9 +243,9 @@ func getBranchName(args ...string) string {
 			url := ar
 			topicid := getTaskIDFromURL(url)
 			if strings.TrimSpace(topicid) == strings.TrimSpace(ar) {
-				arg = arg + "-" + topicid
+				arg = arg + msymbol + topicid
 			} else {
-				arg = topicid + "-" + arg
+				arg = topicid + msymbol + arg
 			}
 			break
 		}
@@ -265,10 +265,10 @@ func getBranchName(args ...string) string {
 	for _, symbol = range replaceToNone {
 		arg = strings.ReplaceAll(arg, symbol, "")
 	}
-	for string(arg[len(arg)-1]) == "-" {
+	for string(arg[len(arg)-1]) == msymbol {
 		arg = arg[:len(arg)-1]
 	}
-	for string(arg[0]) == "-" {
+	for string(arg[0]) == msymbol {
 		arg = arg[1:]
 	}
 
@@ -280,7 +280,7 @@ func deleteDupMinus(str string) string {
 	var buf bytes.Buffer
 	var pc rune
 	for _, c := range str {
-		if pc == c && string(c) == "-" {
+		if pc == c && string(c) == msymbol {
 			continue
 		}
 		pc = c
