@@ -2,7 +2,7 @@ package main
 
 func main() {
 
-	cmdproc := BuildCommandProcessor().
+	cmdproc := buildCommandProcessor().
 		addUpdateCmd().
 		addDownloadCmd().
 		addReleaseCmd().

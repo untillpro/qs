@@ -6,16 +6,19 @@ import (
 	"os"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	cobra "github.com/spf13/cobra"
+	"github.com/untillpro/gochips"
 	qc "github.com/untillpro/gochips"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/vcs"
 )
 
 const (
-	utilityName = "qs"                //root command name
-	utilityDesc = "Quick git wrapper" //root command description
-	msymbol     = "-"
+	maxDevBranchName = 50
+	utilityName      = "qs"                //root command name
+	utilityDesc      = "Quick git wrapper" //root command description
+	msymbol          = "-"
 
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
@@ -48,6 +51,8 @@ const (
 	devParamDesc  = "Create developer branch"
 	devConfirm    = "Dev branch '$reponame' will be created. Yes/No? "
 	devNeedToFork = "You are in $org/$repo repo\nExecute 'qs fork' first"
+
+	errMsgModFiles = "You have modified files. Please commit all changes first!"
 )
 
 var verbose bool
@@ -62,7 +67,7 @@ type commandProcessor struct {
 }
 
 // BuildCommandProcessor s.e.
-func BuildCommandProcessor() *commandProcessor {
+func buildCommandProcessor() *commandProcessor {
 	cp := commandProcessor{}
 	return cp.setRootCmd()
 }
@@ -168,6 +173,10 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 		Short: devParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+			if changedFilesExist() {
+				fmt.Println(errMsgModFiles)
+				return
+			}
 			remoteURL := strings.TrimSpace(git.GetRemoteUpstreamURL())
 			repo, org := git.GetRepoAndOrgName()
 			if len(remoteURL) == 0 {
@@ -196,12 +205,24 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	return cp
 }
 
+func changedFilesExist() bool {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("git", "status", "-s").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	return len(strings.TrimSpace(stdouts)) > 0
+}
+
 func (cp *commandProcessor) addForkBranch() *commandProcessor {
 	var cmd = &cobra.Command{
 		Use:   forkParam,
 		Short: forkParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+			if changedFilesExist() {
+				fmt.Println(errMsgModFiles)
+				return
+			}
 			repo, err := git.Fork()
 			if err != nil {
 				fmt.Println(err)
@@ -220,48 +241,84 @@ func getTaskIDFromURL(url string) string {
 	if len(str) > 0 {
 		entry = str[len(str)-1]
 	}
-	if string(entry[0]) == "#" {
-		entry = entry[1:]
-	}
-	if string(entry[0]) == "!" {
-		entry = entry[1:]
-	}
-	return entry
+	entry = strings.ReplaceAll(entry, "#", "")
+	entry = strings.ReplaceAll(entry, "!", "")
+	return strings.TrimSpace(entry)
 }
 
 func getBranchName(args ...string) string {
 
 	if len(args) == 0 {
+		args = append(args, getArgStringFromClipboard())
+	}
+	if len(args) == 0 {
 		fmt.Println("Need branch name for dev")
 		os.Exit(1)
 	}
 
-	var arg string
-	for i, ar := range args {
-		if i == len(args)-1 {
+	newargs := splitQuotedArgs(args...)
+	var branch string
+	for i, arg := range newargs {
+		arg = strings.TrimSpace(arg)
+		if i == 0 {
+			branch = arg
+			continue
+		}
+		if i == len(newargs)-1 {
 			// Retrieve taskID from url and add it first to branch name
-			url := ar
+			url := arg
 			topicid := getTaskIDFromURL(url)
-			if strings.TrimSpace(topicid) == strings.TrimSpace(ar) {
-				arg = arg + msymbol + topicid
+			if topicid == arg {
+				branch = branch + msymbol + topicid
 			} else {
-				arg = topicid + msymbol + arg
+				branch = topicid + msymbol + branch
 			}
 			break
 		}
-		if i == 0 {
-			arg = strings.TrimSpace(ar)
-		} else {
-			arg = arg + "-" + strings.TrimSpace(ar)
+		branch = branch + "-" + arg
+	}
+
+	branch = cleanArgfromSpecSymbols(branch)
+	return branch
+}
+
+func splitQuotedArgs(args ...string) []string {
+	var newargs []string
+	for _, arg := range args {
+		subargs := strings.Split(arg, " ")
+		if len(subargs) == 0 {
+			continue
+		}
+		for _, a := range subargs {
+			if len(a) > 0 {
+				newargs = append(newargs, a)
+			}
 		}
 	}
-	// Clean branch name from bad symbols
+	return newargs
+}
+
+func getArgStringFromClipboard() string {
+	arg, err := clipboard.ReadAll()
+	if err != nil {
+		return ""
+	}
+	args := strings.Split(arg, "\n")
+	var newarg string
+	for _, str := range args {
+		newarg += str
+		newarg += " "
+	}
+	return newarg
+}
+
+func cleanArgfromSpecSymbols(arg string) string {
 	var symbol string
 	replaceToMinus := []string{" ", ",", ";", ".", ":", "?", "!"}
 	for _, symbol = range replaceToMinus {
 		arg = strings.ReplaceAll(arg, symbol, "-")
 	}
-	replaceToNone := []string{"/", "\\", "(", ")", "{", "}", "[", "]", "'", "\""}
+	replaceToNone := []string{"$", "@", "%", "/", "\\", "(", ")", "{", "}", "[", "]", "'", "\""}
 	for _, symbol = range replaceToNone {
 		arg = strings.ReplaceAll(arg, symbol, "")
 	}
@@ -273,6 +330,9 @@ func getBranchName(args ...string) string {
 	}
 
 	arg = deleteDupMinus(arg)
+	if len(arg) > maxDevBranchName {
+		arg = arg[:maxDevBranchName]
+	}
 	return arg
 }
 

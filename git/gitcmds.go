@@ -14,7 +14,9 @@ import (
 
 const (
 	mm                  = "-m"
+	slash               = "/"
 	git                 = "git"
+	push                = "push"
 	origin              = "origin"
 	repoNotFound        = "git repo name not found"
 	userNotFound        = "git user name not found"
@@ -126,7 +128,7 @@ func Release() {
 	// *************************************************
 	gochips.Doing("Pushing to origin")
 	{
-		params := []string{"push", "--follow-tags", origin}
+		params := []string{push, "--follow-tags", origin}
 		err = new(gochips.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
@@ -151,7 +153,7 @@ func Upload(cfg vcs.CfgUpload) {
 		Run(os.Stdout, os.Stdout)
 
 	new(gochips.PipedExec).
-		Command(git, "push").
+		Command(git, push).
 		Run(os.Stdout, os.Stdout)
 }
 
@@ -177,7 +179,7 @@ func GetRepoAndOrgName() (repo string, org string) {
 	gochips.ExitIfError(err)
 	repourl := strings.TrimSpace(stdouts)
 
-	arr := strings.Split(repourl, "/")
+	arr := strings.Split(repourl, slash)
 	if len(arr) > 0 {
 		repo = arr[len(arr)-1]
 	}
@@ -220,7 +222,7 @@ func Fork() (repo string, err error) {
 		return repo, errors.New(errAlreadyForkedMsg)
 	}
 	err = new(gochips.PipedExec).
-		Command("gh", "repo", "fork", org+"/"+repo, "--clone=false").
+		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
 		return repo, err
@@ -229,8 +231,17 @@ func Fork() (repo string, err error) {
 	return repo, nil
 }
 
-func getBranch() string {
+func getMainBranch() string {
 	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, "symbolic-ref", "--short", "refs/remotes/upstream/HEAD").
+		RunToStrings()
+	if err == nil {
+		str := strings.Split(stdouts, slash)
+		if len(str) > 0 {
+			return strings.TrimSpace(str[len(str)-1])
+		}
+	}
+	stdouts, _, err = new(gochips.PipedExec).
 		Command(git, "symbolic-ref", "--short", "HEAD").
 		RunToStrings()
 	gochips.ExitIfError(err)
@@ -254,12 +265,12 @@ func MakeUpstream(repo string) {
 		os.Exit(1)
 	}
 
-	branch := getBranch()
+	branch := getMainBranch()
 	new(gochips.PipedExec).
 		Command(git, "remote", "rename", "origin", "upstream").
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, "remote", "add", "origin", "https://github.com/"+user+"/"+repo).
+		Command(git, "remote", "add", "origin", "https://github.com/"+user+slash+repo).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
 		Command(git, "fetch", "origin").
@@ -271,13 +282,20 @@ func MakeUpstream(repo string) {
 
 // Dev branch
 func Dev(branch string) {
+	mainbrach := getMainBranch()
 	new(gochips.PipedExec).
-		Command(git, "pull", "-r", "-p", "upstream", branch).
+		Command(git, "checkout", mainbrach).
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command(git, "pull", "-p", "upstream", mainbrach).
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command(git, push).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, "push", "-u", origin, branch).
+		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
 }

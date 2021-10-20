@@ -30,4 +30,21 @@ func TestGetBranchName(t *testing.T) {
 	assert.Equal(t, str, "Show-must-go-on")
 	str = getBranchName("Show")
 	assert.Equal(t, str, "Show")
+	str = getBranchName("Show   ivv? must $   go on---  https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
+	str = getBranchName("Show   ivv? must $   ", "go on---  https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
+	str = getBranchName("Show   ivv? must $   go  on---", "https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
+	str = getBranchName("Show", "ivv? must $   go  on--- https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
+	str = getBranchName("Show", "ivv? must $   go  on---", "https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
+	str = getBranchName("q", "dev", "https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-q-dev")
+
+	//Logn name
+	str = getBranchName("Show", "me this  very long string more than fifty symbols in lenth with long task number 11111111111111", "https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-Show-me-this-very-long-string-more-than-fift")
+
 }
