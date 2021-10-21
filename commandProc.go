@@ -318,7 +318,7 @@ func cleanArgfromSpecSymbols(arg string) string {
 	for _, symbol = range replaceToMinus {
 		arg = strings.ReplaceAll(arg, symbol, "-")
 	}
-	replaceToNone := []string{"$", "@", "%", "/", "\\", "(", ")", "{", "}", "[", "]", "'", "\""}
+	replaceToNone := []string{"&", "$", "@", "%", "/", "\\", "(", ")", "{", "}", "[", "]", "'", "\""}
 	for _, symbol = range replaceToNone {
 		arg = strings.ReplaceAll(arg, symbol, "")
 	}
