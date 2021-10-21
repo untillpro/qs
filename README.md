@@ -19,7 +19,7 @@ Quick source management tool
 
 # Installation
 
-go install github.com/untillpro/qs@v1.8.0
+go install github.com/untillpro/qs@v1.9.0
 
 
 # Usage
