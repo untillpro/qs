@@ -233,7 +233,7 @@ func Fork() (repo string, err error) {
 
 func getMainBranch() string {
 	stdouts, _, err := new(gochips.PipedExec).
-		Command(git, "symbolic-ref", "--short", "refs/remotes/upstream/HEAD").
+		Command(git, "symbolic-ref", "--short", "refs/remotes/origin/HEAD").
 		RunToStrings()
 	if err == nil {
 		str := strings.Split(stdouts, slash)
@@ -291,6 +291,20 @@ func Dev(branch string) {
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
 		Command(git, push).
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command(git, "checkout", "-b", branch).
+		Run(os.Stdout, os.Stdout)
+	new(gochips.PipedExec).
+		Command(git, push, "-u", origin, branch).
+		Run(os.Stdout, os.Stdout)
+}
+
+// DevShort  - dev branch in trunk
+func DevShort(branch string) {
+	mainbrach := getMainBranch()
+	new(gochips.PipedExec).
+		Command(git, "checkout", mainbrach).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).

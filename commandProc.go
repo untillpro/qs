@@ -178,24 +178,19 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 			remoteURL := strings.TrimSpace(git.GetRemoteUpstreamURL())
-			repo, org := git.GetRepoAndOrgName()
-			if len(remoteURL) == 0 {
-				if git.IsMainOrg() {
-					errMsg := strings.ReplaceAll(devNeedToFork, "$repo", repo)
-					errMsg = strings.ReplaceAll(errMsg, "$org", org)
-					fmt.Println(errMsg)
-					return
-				}
-				git.MakeUpstream(repo)
-			}
 			branch := getBranchName(args...)
+			fmt.Println("branch:", branch)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 			fmt.Print(devMsg)
 			var response string
 			fmt.Scanln(&response)
 			switch response {
 			case pushYes:
-				git.Dev(branch)
+				if len(remoteURL) == 0 {
+					git.DevShort(branch)
+				} else {
+					git.Dev(branch)
+				}
 			default:
 				fmt.Print(pushFail)
 			}
