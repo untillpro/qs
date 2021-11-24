@@ -19,7 +19,7 @@ Quick source management tool
 
 # Installation
 
-go install github.com/untillpro/qs@v1.10.0
+go install github.com/untillpro/qs@v1.11.0
 
 
 # Usage
@@ -35,9 +35,10 @@ Path qs.exe should be added to system PATH env variable.
 - `qs -h`, `qs --help`   : Help for qs
 - `qs -v`, `qs --verbose`: Verbose output
 
-- `qs fork`  : Forks repo to user's account and creates upstream. 
+- `qs fork`  		 : Forks repo to user's account and creates upstream. 
 - `qs dev repo-name`     : Makes new dev branch with name repo-name. 
 Repo-name can be copied as [Name and Permanent link] from Project Kaiser task. 
+- `qs dev -d`     	 : Deletes branches in user's repository, which were accepted & mergred to parent repo. 
 
 # Read version from go file
 Create file `version.go` in src folder with body
