@@ -46,5 +46,4 @@ func TestGetBranchName(t *testing.T) {
 	//Logn name
 	str = getBranchName("Show", "me this  very long string more than fifty symbols in lenth with long task number 11111111111111", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-me-this-very-long-string-more-than-fift")
-
 }

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	mm                  = "-m"
+	mimm                = "-m"
 	slash               = "/"
 	git                 = "git"
 	push                = "push"
@@ -21,6 +21,7 @@ const (
 	repoNotFound        = "git repo name not found"
 	userNotFound        = "git user name not found"
 	errAlreadyForkedMsg = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
+	strLen              = 1024
 )
 
 // Status shows git repo status
@@ -87,7 +88,7 @@ func Release() {
 	// *************************************************
 	gochips.Doing("Commiting target version")
 	{
-		params := []string{"commit", "-a", mm, "#scm-ver " + targetVersion.String()}
+		params := []string{"commit", "-a", mimm, "#scm-ver " + targetVersion.String()}
 		err = new(gochips.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
@@ -99,7 +100,7 @@ func Release() {
 	{
 		tagName := "v" + targetVersion.String()
 		n := time.Now()
-		params := []string{"tag", mm, "Version " + tagName + " of " + n.Format("2006/01/02 15:04:05"), tagName}
+		params := []string{"tag", mimm, "Version " + tagName + " of " + n.Format("2006/01/02 15:04:05"), tagName}
 		err = new(gochips.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
@@ -118,7 +119,7 @@ func Release() {
 	// *************************************************
 	gochips.Doing("Commiting new version")
 	{
-		params := []string{"commit", "-a", mm, "#scm-ver " + newVersion.String()}
+		params := []string{"commit", "-a", mimm, "#scm-ver " + newVersion.String()}
 		err = new(gochips.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
@@ -145,7 +146,7 @@ func Upload(cfg vcs.CfgUpload) {
 
 	params := []string{"commit", "-a"}
 	for _, m := range cfg.Message {
-		params = append(params, mm, m)
+		params = append(params, mimm, m)
 	}
 
 	new(gochips.PipedExec).
@@ -171,7 +172,7 @@ func Gui() {
 		Run(os.Stdout, os.Stdout)
 }
 
-// GetRepoName  -from .git/config
+// GetRepoAndOrgName - from .git/config
 func GetRepoAndOrgName() (repo string, org string) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "config", "--local", "remote.origin.url").
@@ -312,4 +313,93 @@ func DevShort(branch string) {
 	new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
+}
+
+// GetParentRepoName - parent repo of forked
+func GetParentRepoName() (name string) {
+	repo, org := GetRepoAndOrgName()
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("gh", "api", "repos/"+org+"/"+repo, "--jq", ".parent.full_name").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	name = strings.TrimSpace(stdouts)
+	return
+}
+
+// GetMergedBranchList returns merged user's branch list
+func GetMergedBranchList() (brlist []string, err error) {
+
+	mbrlist := []string{}
+
+	_, org := GetRepoAndOrgName()
+	repo := GetParentRepoName()
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("gh", "pr", "list", "--state", "merged", "--author", org, "--repo", repo).
+		RunToStrings()
+	if err != nil {
+		return []string{}, err
+	}
+
+	mbrlistraw := strings.Split(stdouts, "\n")
+	for _, mbranchstr := range mbrlistraw {
+		arr := strings.Split(mbranchstr, ":")
+		if len(arr) > 1 {
+			if strings.Contains(arr[1], "MERGED") {
+				arrstr := strings.ReplaceAll(strings.TrimSpace(arr[1]), "MERGED", "")
+				arrstr = strings.TrimSpace(arrstr)
+				if !strings.Contains(arrstr, "master") && !strings.Contains(arrstr, "main") {
+					//					fmt.Println("arrstr=", arrstr)
+					mbrlist = append(mbrlist, arrstr)
+				}
+			}
+		}
+	}
+
+	stdouts, _, err = new(gochips.PipedExec).
+		Command("git", "branch", "-r").
+		RunToStrings()
+	mybrlist := strings.Split(stdouts, "\n")
+
+	for _, mybranch := range mybrlist {
+		mybranch := strings.TrimSpace(string(mybranch))
+		mybranch = strings.ReplaceAll(strings.TrimSpace(mybranch), "origin/", "")
+		mybranch = strings.TrimSpace(mybranch)
+		bfound := false
+		if strings.Contains(mybranch, "master") || strings.Contains(mybranch, "main") || strings.Contains(mybranch, "HEAD") {
+			bfound = false
+		} else {
+			for _, mbranch := range mbrlist {
+				mbranch = strings.ReplaceAll(strings.TrimSpace(mbranch), "MERGED", "")
+				mbranch = strings.TrimSpace(mbranch)
+				if mybranch == mbranch {
+					bfound = true
+					break
+				}
+			}
+		}
+		if bfound {
+			// delete branch in fork
+			brlist = append(brlist, mybranch)
+		}
+	}
+	return brlist, nil
+}
+
+// DeleteBranches delete branch list
+func DeleteBranches(brs []string) {
+	if len(brs) == 0 {
+		return
+	}
+
+	for _, br := range brs {
+		_, _, err := new(gochips.PipedExec).
+			Command(git, push, origin, ":"+br).
+			RunToStrings()
+		if err != nil {
+			fmt.Printf("Branch %s was not deleted\n", br)
+		}
+		gochips.ExitIfError(err)
+		fmt.Printf("Branch %s were deleted\n", br)
+	}
+
 }

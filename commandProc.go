@@ -31,6 +31,9 @@ const (
 	pushMsgComment   = `Use the given string as the commit message. If multiple -m options are given
  their values are concatenated as separate paragraphs`
 
+	delBranchConfirm = "\n*** Branches shown above will be deleted from your forked repository, 'y': agree>"
+	delBranchNothing = "\n*** There are no branches to delete>"
+
 	pullParam     = "d"
 	pullParamDesc = "Download sources from repo"
 
@@ -47,10 +50,14 @@ const (
 	forkParam     = "fork"
 	forkParamDesc = "Fork original repo"
 
-	devParam      = "dev"
-	devParamDesc  = "Create developer branch"
-	devConfirm    = "Dev branch '$reponame' will be created. Yes/No? "
-	devNeedToFork = "You are in $org/$repo repo\nExecute 'qs fork' first"
+	devParam        = "dev"
+	devDelParam     = "d"
+	devDelParamFull = "delete"
+
+	devDelMsgComment = "Deletes all merged branches from forked repository"
+	devParamDesc     = "Create developer branch"
+	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
+	devNeedToFork    = "You are in $org/$repo repo\nExecute 'qs fork' first"
 
 	errMsgModFiles = "You have modified files. Please commit all changes first!"
 )
@@ -88,8 +95,7 @@ func (cp *commandProcessor) setRootCmd() *commandProcessor {
 func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 	var cfgUpload vcs.CfgUpload
 	var uploadCmd = &cobra.Command{
-		Use: pushParam,
-
+		Use:   pushParam,
 		Short: pushParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
@@ -168,11 +174,17 @@ func (cp *commandProcessor) Execute() {
 }
 
 func (cp *commandProcessor) addDevBranch() *commandProcessor {
+	//var cfgUpload vcs.CfgUpload
 	var cmd = &cobra.Command{
 		Use:   devParam,
 		Short: devParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+			if cmd.Flag(devDelParamFull).Value.String() == "true" {
+				cp.deleteBranches()
+				return
+			}
+
 			if changedFilesExist() {
 				fmt.Println(errMsgModFiles)
 				return
@@ -196,6 +208,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			}
 		},
 	}
+	cmd.Flags().BoolP(devDelParamFull, devDelParam, false, devDelMsgComment)
 	cp.rootcmd.AddCommand(cmd)
 	return cp
 }
@@ -342,4 +355,33 @@ func deleteDupMinus(str string) string {
 		buf.WriteRune(c)
 	}
 	return buf.String()
+}
+
+func (cp *commandProcessor) deleteBranches() {
+	lst, err := git.GetMergedBranchList()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if len(lst) == 0 {
+		fmt.Print(delBranchNothing)
+		return
+	}
+	fmt.Println("------------------------------------------")
+	for _, l := range lst {
+		fmt.Println(l)
+	}
+	fmt.Println("------------------------------------------")
+
+	fmt.Print(delBranchConfirm)
+	var response string
+	fmt.Scanln(&response)
+	switch response {
+	case pushYes:
+		git.DeleteBranches(lst)
+	default:
+		fmt.Print(pushFail)
+	}
+
 }
