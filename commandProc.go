@@ -19,6 +19,7 @@ const (
 	utilityName      = "qs"                //root command name
 	utilityDesc      = "Quick git wrapper" //root command description
 	msymbol          = "-"
+	devider          = "------------------------------------------"
 
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
@@ -368,11 +369,11 @@ func (cp *commandProcessor) deleteBranches() {
 		fmt.Print(delBranchNothing)
 		return
 	}
-	fmt.Println("------------------------------------------")
+	fmt.Println(devider)
 	for _, l := range lst {
 		fmt.Println(l)
 	}
-	fmt.Println("------------------------------------------")
+	fmt.Println(devider)
 
 	fmt.Print(delBranchConfirm)
 	var response string
