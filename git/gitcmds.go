@@ -405,7 +405,7 @@ func DeleteBranches(brs []string) {
 			fmt.Printf("Branch %s was not deleted\n", br)
 		}
 		gochips.ExitIfError(err)
-		fmt.Printf("Branch %s were deleted\n", br)
+		fmt.Printf("Branch %s deleted\n", br)
 	}
 
 }
