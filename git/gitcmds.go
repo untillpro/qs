@@ -331,7 +331,7 @@ func GetMergedBranchList() (brlist []string, err error) {
 
 	mbrlist := []string{}
 
-	_, org := GetRepoAndOrgName()
+	myrepo, org := GetRepoAndOrgName()
 	repo := GetParentRepoName()
 
 	stdouts, _, err := new(gochips.PipedExec).
@@ -357,7 +357,7 @@ func GetMergedBranchList() (brlist []string, err error) {
 	}
 
 	err = new(gochips.PipedExec).
-		Command("git", "remote", "prune", "origin", repo).
+		Command("git", "remote", "prune", "origin", "https://github.com/"+org+"/"+myrepo).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
