@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetMainBranch(t *testing.T) {
+func TestMainBranch(t *testing.T) {
 	str := getMainBranch()
 	assert.Equal(t, str, "master")
 }
