@@ -17,6 +17,9 @@ const (
 	slash               = "/"
 	git                 = "git"
 	push                = "push"
+	fetch               = "fetch"
+	branch              = "branch"
+	checkout            = "checkout"
 	origin              = "origin"
 	repoNotFound        = "git repo name not found"
 	userNotFound        = "git user name not found"
@@ -28,7 +31,7 @@ const (
 func Status(cfg vcs.CfgStatus) {
 	err := new(gochips.PipedExec).
 		Command("git", "remote", "-v").
-		Command("grep", "fetch").
+		Command("grep", fetch).
 		Command("sed", "s/(fetch)//").
 		Run(os.Stdout, os.Stdout)
 	if nil != err {
@@ -234,19 +237,23 @@ func Fork() (repo string, err error) {
 
 func getMainBranch() string {
 	stdouts, _, err := new(gochips.PipedExec).
-		Command(git, "symbolic-ref", "--short", "refs/remotes/origin/HEAD").
+		Command(git, branch, "-r").
 		RunToStrings()
 	if err == nil {
-		str := strings.Split(stdouts, slash)
-		if len(str) > 0 {
-			return strings.TrimSpace(str[len(str)-1])
+		brlistraw := strings.Split(stdouts, "\n")
+		for _, branchstr := range brlistraw {
+			arr := strings.Split(branchstr, "->")
+			if len(arr) > 1 {
+				if strings.Contains(arr[1], "/") {
+					str := strings.Split(arr[1], slash)
+					if len(str) > 0 {
+						return strings.TrimSpace(str[len(str)-1])
+					}
+				}
+			}
 		}
 	}
-	stdouts, _, err = new(gochips.PipedExec).
-		Command(git, "symbolic-ref", "--short", "HEAD").
-		RunToStrings()
-	gochips.ExitIfError(err)
-	return strings.TrimSpace(stdouts)
+	return ""
 }
 
 func getUserName() string {
@@ -266,7 +273,7 @@ func MakeUpstream(repo string) {
 		os.Exit(1)
 	}
 
-	branch := getMainBranch()
+	mainbranch := getMainBranch()
 	new(gochips.PipedExec).
 		Command(git, "remote", "rename", "origin", "upstream").
 		Run(os.Stdout, os.Stdout)
@@ -274,18 +281,18 @@ func MakeUpstream(repo string) {
 		Command(git, "remote", "add", "origin", "https://github.com/"+user+slash+repo).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, "fetch", "origin").
+		Command(git, fetch, "origin").
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, "branch", "--set-upstream-to", "origin/"+branch, branch).
+		Command(git, mainbranch, "--set-upstream-to", "origin/"+mainbranch, mainbranch).
 		Run(os.Stdout, os.Stdout)
 }
 
 // Dev branch
-func Dev(branch string) {
+func Dev(abranch string) {
 	mainbrach := getMainBranch()
 	new(gochips.PipedExec).
-		Command(git, "checkout", mainbrach).
+		Command(git, checkout, mainbrach).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
 		Command(git, "pull", "-p", "upstream", mainbrach).
@@ -294,24 +301,24 @@ func Dev(branch string) {
 		Command(git, push).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, "checkout", "-b", branch).
+		Command(git, checkout, "-b", abranch).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, push, "-u", origin, branch).
+		Command(git, push, "-u", origin, abranch).
 		Run(os.Stdout, os.Stdout)
 }
 
 // DevShort  - dev branch in trunk
-func DevShort(branch string) {
+func DevShort(abranch string) {
 	mainbrach := getMainBranch()
 	new(gochips.PipedExec).
-		Command(git, "checkout", mainbrach).
+		Command(git, checkout, mainbrach).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, "checkout", "-b", branch).
+		Command(git, checkout, "-b", abranch).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, push, "-u", origin, branch).
+		Command(git, push, "-u", origin, abranch).
 		Run(os.Stdout, os.Stdout)
 }
 
@@ -331,7 +338,7 @@ func GetMergedBranchList() (brlist []string, err error) {
 
 	mbrlist := []string{}
 
-	myrepo, org := GetRepoAndOrgName()
+	_, org := GetRepoAndOrgName()
 	repo := GetParentRepoName()
 
 	stdouts, _, err := new(gochips.PipedExec).
@@ -349,17 +356,11 @@ func GetMergedBranchList() (brlist []string, err error) {
 				arrstr := strings.ReplaceAll(strings.TrimSpace(arr[1]), "MERGED", "")
 				arrstr = strings.TrimSpace(arrstr)
 				if !strings.Contains(arrstr, "master") && !strings.Contains(arrstr, "main") {
-					//					fmt.Println("arrstr=", arrstr)
 					mbrlist = append(mbrlist, arrstr)
 				}
 			}
 		}
 	}
-
-	err = new(gochips.PipedExec).
-		Command("git", "remote", "prune", "origin", "https://github.com/"+org+"/"+myrepo).
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(err)
 
 	stdouts, _, err = new(gochips.PipedExec).
 		Command("git", "branch", "-r").
@@ -391,8 +392,8 @@ func GetMergedBranchList() (brlist []string, err error) {
 	return brlist, nil
 }
 
-// DeleteBranches delete branch list
-func DeleteBranches(brs []string) {
+// DeleteBranchesRemote delete branch list
+func DeleteBranchesRemote(brs []string) {
 	if len(brs) == 0 {
 		return
 	}
@@ -407,5 +408,48 @@ func DeleteBranches(brs []string) {
 		gochips.ExitIfError(err)
 		fmt.Printf("Branch %s deleted\n", br)
 	}
+}
 
+// GetGoneBranchesLocal returns gone local branches
+func GetGoneBranchesLocal() *[]string {
+	// https://dev.heeus.io/launchpad/#!14544
+	// 1. Step
+	_, _, err := new(gochips.PipedExec).
+		Command(git, fetch, "-p", "--dry-run").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	_, _, err = new(gochips.PipedExec).
+		Command(git, fetch, "-p").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	// 2. Step
+	mainbranch := getMainBranch()
+	_, _, err = new(gochips.PipedExec).
+		Command(git, checkout, mainbranch).
+		RunToStrings()
+	gochips.ExitIfError(err)
+	// 3. Step
+	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, branch, "-vv").
+		Command("grep", ": gone]").
+		Command("gawk", "{print $1}").
+		RunToStrings()
+	if nil != err {
+		return &[]string{}
+	}
+	strs := strings.Split(stdouts, "\n")
+	return &strs
+}
+
+// DeleteBranchesLocal s.e.
+func DeleteBranchesLocal(strs *[]string) {
+	for _, str := range *strs {
+		if strings.TrimSpace(str) != "" {
+			_, _, err := new(gochips.PipedExec).
+				Command(git, branch, "-D", str).
+				RunToStrings()
+				fmt.Printf("Branch %s deleted\n", str)
+				gochips.ExitIfError(err)
+		}
+	}
 }

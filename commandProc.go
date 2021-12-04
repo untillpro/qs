@@ -19,7 +19,7 @@ const (
 	utilityName      = "qs"                //root command name
 	utilityDesc      = "Quick git wrapper" //root command description
 	msymbol          = "-"
-	devider          = "------------------------------------------"
+	devider          = "\n------------------------------------------"
 
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
@@ -32,8 +32,9 @@ const (
 	pushMsgComment   = `Use the given string as the commit message. If multiple -m options are given
  their values are concatenated as separate paragraphs`
 
-	delBranchConfirm = "\n*** Branches shown above will be deleted from your forked repository, 'y': agree>"
-	delBranchNothing = "\n*** There are no branches to delete>"
+	delBranchConfirm      = "\n*** Branches shown above will be deleted from your forked repository, 'y': agree>"
+	delBranchNothing      = "\n*** There are no remote branches to delete."
+	delLocalBranchConfirm = "\n*** Branches shown above are unused local branches. Delete them all? 'y': agree>"
 
 	pullParam     = "d"
 	pullParamDesc = "Download sources from repo"
@@ -365,24 +366,45 @@ func (cp *commandProcessor) deleteBranches() {
 		return
 	}
 
+	var response string
 	if len(lst) == 0 {
 		fmt.Print(delBranchNothing)
+	} else {
+		fmt.Print(devider)
+		for _, l := range lst {
+			fmt.Print("\n" + l)
+		}
+		fmt.Print(devider)
+
+		fmt.Print(delBranchConfirm)
+		fmt.Scanln(&response)
+		switch response {
+		case pushYes:
+			git.DeleteBranchesRemote(lst)
+		default:
+			fmt.Print(pushFail)
+		}
+	}
+	fmt.Print("\nChecking if unused local branches exist...")
+	var strs *[]string
+	strs = git.GetGoneBranchesLocal()
+	if len(*strs) == 0 {
+		fmt.Print("\n***There no unused local branches.")
 		return
 	}
-	fmt.Println(devider)
-	for _, l := range lst {
-		fmt.Println(l)
+	fmt.Print(devider)
+	for _, str := range *strs {
+		if strings.TrimSpace(str) != "" {
+			fmt.Print("\n" + str)
+		}
 	}
-	fmt.Println(devider)
-
-	fmt.Print(delBranchConfirm)
-	var response string
+	fmt.Print(devider)
+	fmt.Print(delLocalBranchConfirm)
 	fmt.Scanln(&response)
 	switch response {
 	case pushYes:
-		git.DeleteBranches(lst)
+		git.DeleteBranchesLocal(strs)
 	default:
 		fmt.Print(pushFail)
 	}
-
 }
