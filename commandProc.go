@@ -191,7 +191,6 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				fmt.Println(errMsgModFiles)
 				return
 			}
-			remoteURL := strings.TrimSpace(git.GetRemoteUpstreamURL())
 			branch := getBranchName(args...)
 			fmt.Println("branch:", branch)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
@@ -200,7 +199,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			fmt.Scanln(&response)
 			switch response {
 			case pushYes:
-				if len(remoteURL) == 0 {
+				if git.IsBranchInMain() {
 					git.DevShort(branch)
 				} else {
 					git.Dev(branch)
