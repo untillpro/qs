@@ -4,7 +4,7 @@ Quick source management tool
 
 ## gh
 - https://github.com/cli/cli
-- MSI: https://github.com/cli/cli/releases/tag/v2.0.0
+- MSI: https://github.com/cli/cli/releases/tag/v2.3.0
 - chocolatey: choco install gh
   - https://docs.chocolatey.org/en-us/choco/setup#install-with-cmd.exe
   - Also
@@ -19,7 +19,7 @@ Quick source management tool
 
 # Installation
 
-go install github.com/untillpro/qs@v1.13.0
+go install github.com/untillpro/qs@v1.14.0
 
 
 # Usage
