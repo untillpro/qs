@@ -206,7 +206,7 @@ func Fork() (repo string, err error) {
 		fmt.Println(repoNotFound)
 		os.Exit(1)
 	}
-	remoteurl := getRemoteUpstreamURL()
+	remoteurl := GetRemoteUpstreamURL()
 	if len(remoteurl) > 0 {
 		return repo, errors.New(errAlreadyForkedMsg)
 	}
@@ -224,7 +224,7 @@ func Fork() (repo string, err error) {
 	return repo, nil
 }
 
-func getRemoteUpstreamURL() string {
+func GetRemoteUpstreamURL() string {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "config", "--local", "remote.upstream.url").
 		RunToStrings()
@@ -294,7 +294,7 @@ func Dev(abranch string) {
 		Command(git, checkout, mainbrach).
 		Run(os.Stdout, os.Stdout)
 
-	remoteurl := getRemoteUpstreamURL()
+	remoteurl := GetRemoteUpstreamURL()
 	if len(remoteurl) == 0 {
 		new(gochips.PipedExec).
 			Command(git, "remote", "rename", "origin", "upstream").

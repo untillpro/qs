@@ -176,7 +176,6 @@ func (cp *commandProcessor) Execute() {
 }
 
 func (cp *commandProcessor) addDevBranch() *commandProcessor {
-	//var cfgUpload vcs.CfgUpload
 	var cmd = &cobra.Command{
 		Use:   devParam,
 		Short: devParamDesc,
@@ -197,9 +196,10 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			fmt.Print(devMsg)
 			var response string
 			fmt.Scanln(&response)
+			remoteURL := strings.TrimSpace(git.GetRemoteUpstreamURL())
 			switch response {
 			case pushYes:
-				if git.IsBranchInMain() {
+				if len(remoteURL) == 0 {
 					git.DevShort(branch)
 				} else {
 					git.Dev(branch)
