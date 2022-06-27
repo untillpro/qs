@@ -289,6 +289,7 @@ func MakeUpstream(repo string) {
 
 // Dev branch
 func Dev(abranch string) {
+	fmt.Println("Dev")
 	mainbrach := getMainBranch()
 	new(gochips.PipedExec).
 		Command(git, checkout, mainbrach).
