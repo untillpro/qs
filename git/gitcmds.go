@@ -22,10 +22,19 @@ const (
 	checkout            = "checkout"
 	origin              = "origin"
 	repoNotFound        = "git repo name not found"
+	stashedfiles        = "Stashed files"
 	userNotFound        = "git user name not found"
 	errAlreadyForkedMsg = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	strLen              = 1024
 )
+
+func changedFilesExist() bool {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("git", "status", "-s").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	return len(strings.TrimSpace(stdouts)) > 0
+}
 
 // Status shows git repo status
 func Status(cfg vcs.CfgStatus) {
@@ -214,13 +223,21 @@ func Fork() (repo string, err error) {
 	if !IsMainOrg() {
 		return repo, errors.New(errAlreadyForkedMsg)
 	}
+	var chExist bool = changedFilesExist()
+	if chExist {
+		new(gochips.PipedExec).
+			Command(git, "add", ".").
+			Run(os.Stdout, os.Stdout)
+		new(gochips.PipedExec).
+			Command(git, "stash").
+			Run(os.Stdout, os.Stdout)
+	}
 	err = new(gochips.PipedExec).
 		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
 		return repo, err
 	}
-
 	return repo, nil
 }
 
@@ -232,6 +249,12 @@ func GetRemoteUpstreamURL() string {
 		return ""
 	}
 	return strings.TrimSpace(stdouts)
+}
+
+func PopStashedFiles() {
+	new(gochips.PipedExec).
+		Command(git, "stash", "pop").
+		Run(os.Stdout, os.Stdout)
 }
 
 func getMainBranch() string {
@@ -288,20 +311,20 @@ func MakeUpstream(repo string) {
 }
 
 // Dev branch
-func Dev(abranch string) {
-	fmt.Println("Dev")
+func Dev(branch string) {
 	mainbrach := getMainBranch()
-	new(gochips.PipedExec).
-		Command(git, checkout, mainbrach).
-		Run(os.Stdout, os.Stdout)
-
-	remoteurl := GetRemoteUpstreamURL()
-	if len(remoteurl) == 0 {
+	var chExist bool = changedFilesExist()
+	if chExist {
 		new(gochips.PipedExec).
-			Command(git, "remote", "rename", "origin", "upstream").
+			Command(git, "add", ".").
+			Run(os.Stdout, os.Stdout)
+		new(gochips.PipedExec).
+			Command(git, "stash").
 			Run(os.Stdout, os.Stdout)
 	}
-
+	new(gochips.PipedExec).
+		Command(git, "checkout", mainbrach).
+		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
 		Command(git, "pull", "-p", "upstream", mainbrach).
 		Run(os.Stdout, os.Stdout)
@@ -309,25 +332,44 @@ func Dev(abranch string) {
 		Command(git, push).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, checkout, "-b", abranch).
+		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, push, "-u", origin, abranch).
+		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
+	if chExist {
+		new(gochips.PipedExec).
+			Command(git, "stash", "pop").
+			Run(os.Stdout, os.Stdout)
+	}
 }
 
 // DevShort  - dev branch in trunk
-func DevShort(abranch string) {
+func DevShort(branch string) {
 	mainbrach := getMainBranch()
+	var chExist bool = changedFilesExist()
+	if chExist {
+		new(gochips.PipedExec).
+			Command(git, "add", ".").
+			Run(os.Stdout, os.Stdout)
+		new(gochips.PipedExec).
+			Command(git, "stash").
+			Run(os.Stdout, os.Stdout)
+	}
 	new(gochips.PipedExec).
-		Command(git, checkout, mainbrach).
+		Command(git, "checkout", mainbrach).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, checkout, "-b", abranch).
+		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
 	new(gochips.PipedExec).
-		Command(git, push, "-u", origin, abranch).
+		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
+	if chExist {
+		new(gochips.PipedExec).
+			Command(git, "stash", "pop").
+			Run(os.Stdout, os.Stdout)
+	}
 }
 
 // GetParentRepoName - parent repo of forked

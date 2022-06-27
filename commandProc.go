@@ -8,7 +8,6 @@ import (
 
 	"github.com/atotto/clipboard"
 	cobra "github.com/spf13/cobra"
-	"github.com/untillpro/gochips"
 	qc "github.com/untillpro/gochips"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/vcs"
@@ -186,10 +185,6 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 
-			if changedFilesExist() {
-				fmt.Println(errMsgModFiles)
-				return
-			}
 			branch := getBranchName(args...)
 			fmt.Println("branch:", branch)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
@@ -214,30 +209,19 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	return cp
 }
 
-func changedFilesExist() bool {
-	stdouts, _, err := new(gochips.PipedExec).
-		Command("git", "status", "-s").
-		RunToStrings()
-	gochips.ExitIfError(err)
-	return len(strings.TrimSpace(stdouts)) > 0
-}
-
 func (cp *commandProcessor) addForkBranch() *commandProcessor {
 	var cmd = &cobra.Command{
 		Use:   forkParam,
 		Short: forkParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
-			if changedFilesExist() {
-				fmt.Println(errMsgModFiles)
-				return
-			}
 			repo, err := git.Fork()
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
 			git.MakeUpstream(repo)
+			git.PopStashedFiles()
 		},
 	}
 	cp.rootcmd.AddCommand(cmd)
@@ -327,7 +311,7 @@ func cleanArgfromSpecSymbols(arg string) string {
 	for _, symbol = range replaceToMinus {
 		arg = strings.ReplaceAll(arg, symbol, "-")
 	}
-	replaceToNone := []string{"&", "$", "@", "%", "/", "\\", "(", ")", "{", "}", "[", "]", "'", "\""}
+	replaceToNone := []string{"&", "$", "@", "%", "/", "\\", "(", ")", "{", "}", "[", "]", "<", ">", "'", "\""}
 	for _, symbol = range replaceToNone {
 		arg = strings.ReplaceAll(arg, symbol, "")
 	}
