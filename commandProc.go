@@ -55,13 +55,18 @@ const (
 	devDelParam     = "d"
 	devDelParamFull = "delete"
 
+	prParam     = "pr"
+	prParamDesc = "Make pull request"
+
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
 	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
 	devNeedToFork    = "You are in $org/$repo repo\nExecute 'qs fork' first"
+	errMsgModFiles   = "You have modified files. Please first commit & push them?"
 
-	confMsgModFiles1 = "You have modified files: "
-	confMsgModFiles2 = "All will be kept not commted. Continue(y/n)?"
+	confMsgModFiles1      = "You have modified files: "
+	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
+	errMsgPRNotesNotFound = "Comments for Pull request not found. Please add comments manually."
 )
 
 var verbose bool
@@ -192,6 +197,38 @@ func notCommitedRefused() bool {
 	return false
 }
 
+func (cp *commandProcessor) addPr() *commandProcessor {
+	var cmd = &cobra.Command{
+		Use:   prParam,
+		Short: prParamDesc,
+		Run: func(cmd *cobra.Command, args []string) {
+			globalConfig()
+
+			if _, ok := git.ChangedFilesExist(); ok {
+				fmt.Println(errMsgModFiles)
+				return
+			}
+
+			notes := git.GetNotesObj()
+			if len(notes) == 0 {
+				fmt.Println(errMsgPRNotesNotFound)
+				var response string
+				fmt.Scanln(&response)
+				response = strings.TrimSpace(response)
+				notes = append(notes, response)
+			}
+
+			err := git.MakePR(notes)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		},
+	}
+	cp.rootcmd.AddCommand(cmd)
+	return cp
+}
+
 func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	var cmd = &cobra.Command{
 		Use:   devParam,
@@ -207,7 +244,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 
-			branch := getBranchName(args...)
+			branch, notes := getBranchName(args...)
 			fmt.Println("branch:", branch)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 			fmt.Print(devMsg)
@@ -217,9 +254,9 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			switch response {
 			case pushYes:
 				if len(remoteURL) == 0 {
-					git.DevShort(branch)
+					git.DevShort(branch, notes)
 				} else {
-					git.Dev(branch)
+					git.Dev(branch, notes)
 				}
 			default:
 				fmt.Print(pushFail)
@@ -266,7 +303,7 @@ func getTaskIDFromURL(url string) string {
 	return strings.TrimSpace(entry)
 }
 
-func getBranchName(args ...string) string {
+func getBranchName(args ...string) (branch string, comments []string) {
 
 	if len(args) == 0 {
 		args = append(args, getArgStringFromClipboard())
@@ -277,7 +314,7 @@ func getBranchName(args ...string) string {
 	}
 
 	newargs := splitQuotedArgs(args...)
-	var branch string
+	comments = newargs
 	for i, arg := range newargs {
 		arg = strings.TrimSpace(arg)
 		if i == 0 {
@@ -299,7 +336,8 @@ func getBranchName(args ...string) string {
 	}
 
 	branch = cleanArgfromSpecSymbols(branch)
-	return branch
+
+	return branch, comments
 }
 
 func splitQuotedArgs(args ...string) []string {

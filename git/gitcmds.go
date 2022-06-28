@@ -13,19 +13,20 @@ import (
 )
 
 const (
-	mimm                = "-m"
-	slash               = "/"
-	git                 = "git"
-	push                = "push"
-	fetch               = "fetch"
-	branch              = "branch"
-	checkout            = "checkout"
-	origin              = "origin"
-	repoNotFound        = "git repo name not found"
-	stashedfiles        = "Stashed files"
-	userNotFound        = "git user name not found"
-	errAlreadyForkedMsg = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
-	strLen              = 1024
+	mimm                    = "-m"
+	slash                   = "/"
+	git                     = "git"
+	push                    = "push"
+	fetch                   = "fetch"
+	branch                  = "branch"
+	checkout                = "checkout"
+	origin                  = "origin"
+	repoNotFound            = "git repo name not found"
+	stashedfiles            = "Stashed files"
+	userNotFound            = "git user name not found"
+	errAlreadyForkedMsg     = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
+	errMsgPRNotesImpossible = "Pull request without comments is impossible."
+	strLen                  = 1024
 )
 
 func ChangedFilesExist() (string, bool) {
@@ -313,7 +314,7 @@ func MakeUpstream(repo string) {
 }
 
 // Dev branch
-func Dev(branch string) {
+func Dev(branch string, comments []string) {
 	mainbrach := getMainBranch()
 	var chExist bool
 	_, chExist = ChangedFilesExist()
@@ -340,6 +341,9 @@ func Dev(branch string) {
 	new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
+
+	addNotes(comments)
+
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "stash", "pop").
@@ -347,8 +351,55 @@ func Dev(branch string) {
 	}
 }
 
+func addNotes(comments []string) {
+	if len(comments) == 0 {
+		return
+	}
+	// Remove all existing Notes
+	notesObsj := GetNotesObj()
+	for _, notesObj := range notesObsj {
+		str := strings.TrimSpace(notesObj)
+		if len(str) > 0 {
+			new(gochips.PipedExec).
+				Command(git, "notes", "remove", str).
+				Run(os.Stdout, os.Stdout)
+		}
+	}
+	// Add new Notes
+	for _, s := range comments {
+		str := strings.TrimSpace(s)
+		if len(str) > 0 {
+			new(gochips.PipedExec).
+				Command(git, "notes", "append", "-m", s).
+				Run(os.Stdout, os.Stdout)
+		}
+	}
+}
+
+// GetNotesObj s.e.
+func GetNotesObj() []string {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, "notes", "list").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	noteLines := strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
+	if len(noteLines) == 0 {
+		return nil
+	}
+	res := make([]string, len(noteLines))
+	for _, noteLine := range noteLines {
+		noteLine = strings.TrimSpace(noteLine)
+		notes := strings.Split(noteLine, " ")
+		if len(notes) == 2 {
+			s := strings.TrimSpace(notes[1])
+			res = append(res, s)
+		}
+	}
+	return res
+}
+
 // DevShort  - dev branch in trunk
-func DevShort(branch string) {
+func DevShort(branch string, comments []string) {
 	mainbrach := getMainBranch()
 	var chExist bool
 	_, chExist = ChangedFilesExist()
@@ -366,6 +417,9 @@ func DevShort(branch string) {
 	new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
+
+	addNotes(comments)
+
 	new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
@@ -514,4 +568,24 @@ func DeleteBranchesLocal(strs *[]string) {
 			gochips.ExitIfError(err)
 		}
 	}
+}
+
+// MakePR s.e.
+func MakePR(notes []string) (err error) {
+	if len(notes) == 0 {
+		return errors.New(errMsgPRNotesImpossible)
+	}
+	var strnotes string
+	for _, s := range notes {
+		if len(strnotes) == 0 {
+			strnotes = s
+		} else {
+			strnotes = strnotes + " " + s
+		}
+	}
+
+	err = new(gochips.PipedExec).
+		Command("gh", "pr", "create", "-b", "strnotes").
+		Run(os.Stdout, os.Stdout)
+	return err
 }
