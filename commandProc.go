@@ -55,8 +55,10 @@ const (
 	devDelParam     = "d"
 	devDelParamFull = "delete"
 
-	prParam     = "pr"
-	prParamDesc = "Make pull request"
+	prParam       = "pr"
+	prParamDesc   = "Make pull request"
+	prMakeParam   = "make"
+	errMsgPRMerge = "URL of PR is needed"
 
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
@@ -209,7 +211,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				return
 			}
 
-			notes := git.GetNotesObj()
+			notes := git.GetNotes()
 			if len(notes) == 0 {
 				fmt.Println(errMsgPRNotesNotFound)
 				var response string
@@ -218,7 +220,28 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				notes = append(notes, response)
 			}
 
-			err := git.MakePR(notes)
+			bDirectPR := true
+			var prurl string
+			for _, arg := range args {
+				if bDirectPR {
+					prurl = arg
+				} else {
+					if arg == prMakeParam {
+						bDirectPR = false
+					}
+				}
+			}
+
+			var err error
+			if bDirectPR {
+				err = git.MakePR(notes)
+			} else {
+				if len(prurl) == 0 {
+					fmt.Println(errMsgPRMerge)
+					return
+				}
+				err = git.MakePRMerge(prurl, notes)
+			}
 			if err != nil {
 				fmt.Println(err)
 				return

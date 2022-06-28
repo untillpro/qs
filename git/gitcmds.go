@@ -26,6 +26,7 @@ const (
 	userNotFound            = "git user name not found"
 	errAlreadyForkedMsg     = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	errMsgPRNotesImpossible = "Pull request without comments is impossible."
+	errMsgPRMerge           = "URL of PR is needed"
 	strLen                  = 1024
 )
 
@@ -376,6 +377,19 @@ func addNotes(comments []string) {
 	}
 }
 
+func GetNotes() []string {
+	noteobjs := GetNotesObj()
+	obj := ""
+	if len(noteobjs) > 0 {
+		obj = noteobjs[len(noteobjs)-1]
+	}
+	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, "notes", "show", obj).
+		RunToStrings()
+	gochips.ExitIfError(err)
+	return strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
+}
+
 // GetNotesObj s.e.
 func GetNotesObj() []string {
 	stdouts, _, err := new(gochips.PipedExec).
@@ -576,17 +590,58 @@ func MakePR(notes []string) (err error) {
 		return errors.New(errMsgPRNotesImpossible)
 	}
 	var strnotes string
+	var url string
 	for _, s := range notes {
-		if len(strnotes) == 0 {
-			strnotes = s
-		} else {
-			strnotes = strnotes + " " + s
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			if strings.Contains(s, "https") {
+				url = s
+			} else {
+				if len(strnotes) == 0 {
+					strnotes = s
+				} else {
+					strnotes = strnotes + " " + s
+				}
+			}
 		}
 	}
 
-	strbody := fmt.Sprint(notes)
+	body := strnotes + "\n" + url
+	strbody := fmt.Sprintln(body)
+	parentrepo := GetParentRepoName()
 	err = new(gochips.PipedExec).
-		Command("gh", "pr", "create", "-b", "strnotes", "-b", strbody).
+		Command("gh", "pr", "create", "-t", strnotes, "-b", strbody, "-R", parentrepo).
+		Run(os.Stdout, os.Stdout)
+	return err
+}
+
+// MakePRMerge s.e.
+func MakePRMerge(prurl string, notes []string) (err error) {
+	if len(prurl) == 0 {
+		return errors.New(errMsgPRMerge)
+	}
+	if len(notes) == 0 {
+		return errors.New(errMsgPRNotesImpossible)
+	}
+	var strnotes string
+	var url string
+	for _, s := range notes {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			if strings.Contains(s, "https") {
+				url = s
+			} else {
+				if len(strnotes) == 0 {
+					strnotes = s
+				} else {
+					strnotes = strnotes + " " + s
+				}
+			}
+		}
+	}
+
+	err = new(gochips.PipedExec).
+		Command("gh", "pr", "merge", url, "-s", "-t", strnotes, "-m").
 		Run(os.Stdout, os.Stdout)
 	return err
 }
