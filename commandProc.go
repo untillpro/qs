@@ -181,7 +181,7 @@ func notCommitedRefused() bool {
 	s, fileExists = git.ChangedFilesExist()
 	if fileExists {
 		fmt.Println(confMsgModFiles1)
-		fmt.Println("------ " + s + " ------")
+		fmt.Println("------ " + s)
 		fmt.Println(confMsgModFiles2)
 		var response string
 		fmt.Scanln(&response)
