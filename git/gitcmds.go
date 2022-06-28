@@ -28,12 +28,13 @@ const (
 	strLen              = 1024
 )
 
-func changedFilesExist() bool {
+func ChangedFilesExist() (string, bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("git", "status", "-s").
 		RunToStrings()
 	gochips.ExitIfError(err)
-	return len(strings.TrimSpace(stdouts)) > 0
+	str := strings.TrimSpace(stdouts)
+	return str, len(str) > 0
 }
 
 // Status shows git repo status
@@ -223,7 +224,8 @@ func Fork() (repo string, err error) {
 	if !IsMainOrg() {
 		return repo, errors.New(errAlreadyForkedMsg)
 	}
-	var chExist bool = changedFilesExist()
+	var chExist bool
+	_, chExist = ChangedFilesExist()
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "add", ".").
@@ -313,7 +315,8 @@ func MakeUpstream(repo string) {
 // Dev branch
 func Dev(branch string) {
 	mainbrach := getMainBranch()
-	var chExist bool = changedFilesExist()
+	var chExist bool
+	_, chExist = ChangedFilesExist()
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "add", ".").
@@ -347,7 +350,8 @@ func Dev(branch string) {
 // DevShort  - dev branch in trunk
 func DevShort(branch string) {
 	mainbrach := getMainBranch()
-	var chExist bool = changedFilesExist()
+	var chExist bool
+	_, chExist = ChangedFilesExist()
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "add", ".").

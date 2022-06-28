@@ -60,7 +60,8 @@ const (
 	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
 	devNeedToFork    = "You are in $org/$repo repo\nExecute 'qs fork' first"
 
-	errMsgModFiles = "You have modified files. Please commit all changes first!"
+	confMsgModFiles1 = "You have modified files: "
+	confMsgModFiles2 = "All will be kept not commted. Continue(y/n)?"
 )
 
 var verbose bool
@@ -174,6 +175,23 @@ func (cp *commandProcessor) Execute() {
 	cp.rootcmd.Execute()
 }
 
+func notCommitedRefused() bool {
+	var s string
+	var fileExists = false
+	s, fileExists = git.ChangedFilesExist()
+	if fileExists {
+		fmt.Println(confMsgModFiles1)
+		fmt.Println("------ " + s + "------")
+		fmt.Println(confMsgModFiles2)
+		var response string
+		fmt.Scanln(&response)
+		if response != pushYes {
+			return true
+		}
+	}
+	return false
+}
+
 func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	var cmd = &cobra.Command{
 		Use:   devParam,
@@ -182,6 +200,10 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			globalConfig()
 			if cmd.Flag(devDelParamFull).Value.String() == "true" {
 				cp.deleteBranches()
+				return
+			}
+
+			if notCommitedRefused() {
 				return
 			}
 
@@ -215,6 +237,11 @@ func (cp *commandProcessor) addForkBranch() *commandProcessor {
 		Short: forkParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+
+			if notCommitedRefused() {
+				return
+			}
+
 			repo, err := git.Fork()
 			if err != nil {
 				fmt.Println(err)
