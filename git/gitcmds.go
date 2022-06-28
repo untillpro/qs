@@ -586,7 +586,7 @@ func MakePR(notes []string) (err error) {
 
 	strbody := fmt.Sprint(notes)
 	err = new(gochips.PipedExec).
-		Command("gh", "pr", "create", "-b", "strnotes", "-d", strbody).
+		Command("gh", "pr", "create", "-b", "strnotes", "-b", strbody).
 		Run(os.Stdout, os.Stdout)
 	return err
 }
