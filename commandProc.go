@@ -182,7 +182,7 @@ func notCommitedRefused() bool {
 	if fileExists {
 		fmt.Println(confMsgModFiles1)
 		fmt.Println("------   " + s)
-		fmt.Println(confMsgModFiles2)
+		fmt.Print(confMsgModFiles2)
 		var response string
 		fmt.Scanln(&response)
 		if response != pushYes {
