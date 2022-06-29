@@ -67,7 +67,7 @@ const (
 	devParamDesc     = "Create developer branch"
 	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
 	devNeedToFork    = "You are in $org/$repo repo\nExecute 'qs fork' first"
-	errMsgModFiles   = "You have modified files. Please first commit & push them?"
+	errMsgModFiles   = "You have modified files. Please first commit & push them."
 
 	confMsgModFiles1      = "You have modified files: "
 	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
@@ -241,8 +241,9 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					notes = append(notes, prnotes)
 				}
 				var response string
-				if len(notes) > 0 {
-					prMsg := strings.ReplaceAll(prConfirm, "$prname", notes[0])
+				strnotes, _ := git.GetNoteAndURL(notes)
+				if len(strnotes) > 0 {
+					prMsg := strings.ReplaceAll(prConfirm, "$prname", strnotes)
 					fmt.Print(prMsg)
 					fmt.Scanln(&response)
 					switch response {

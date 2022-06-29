@@ -597,6 +597,24 @@ func DeleteBranchesLocal(strs *[]string) {
 	}
 }
 
+func GetNoteAndURL(notes []string) (note string, url string) {
+	for _, s := range notes {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			if strings.Contains(s, "https") {
+				url = s
+			} else {
+				if len(note) == 0 {
+					note = s
+				} else {
+					note = note + " " + s
+				}
+			}
+		}
+	}
+	return note, url
+}
+
 // MakePR s.e.
 func MakePR(notes []string) (err error) {
 	if len(notes) == 0 {
@@ -604,20 +622,7 @@ func MakePR(notes []string) (err error) {
 	}
 	var strnotes string
 	var url string
-	for _, s := range notes {
-		s = strings.TrimSpace(s)
-		if len(s) > 0 {
-			if strings.Contains(s, "https") {
-				url = s
-			} else {
-				if len(strnotes) == 0 {
-					strnotes = s
-				} else {
-					strnotes = strnotes + " " + s
-				}
-			}
-		}
-	}
+	strnotes, url = GetNoteAndURL(notes)
 
 	body := strnotes
 	if len(url) > 0 {
