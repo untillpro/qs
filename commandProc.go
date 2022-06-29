@@ -230,7 +230,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			var err error
 			if bDirectPR {
 				notes, ok := git.GetNotes()
-				if ok {
+				if !ok {
 					fmt.Println(errMsgPRNotesNotFound)
 					var response string
 					fmt.Scanln(&response)
