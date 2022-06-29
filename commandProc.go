@@ -201,7 +201,6 @@ func notCommitedRefused() bool {
 }
 
 func (cp *commandProcessor) addPr() *commandProcessor {
-	fmt.Println("Enter addPr")
 	var cmd = &cobra.Command{
 		Use:   prParam,
 		Short: prParamDesc,
@@ -229,9 +228,9 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 			*/
 			var err error
-			fmt.Println("bDirectPR")
 			if bDirectPR {
 				notes := git.GetNotes()
+				fmt.Println("notes:", len(notes))
 				if len(notes) == 0 {
 					fmt.Println(errMsgPRNotesNotFound)
 					var response string
