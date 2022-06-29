@@ -69,7 +69,7 @@ const (
 
 	confMsgModFiles1      = "You have modified files: "
 	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
-	errMsgPRNotesNotFound = "Comments for Pull request not found. Please add comments manually."
+	errMsgPRNotesNotFound = "Comments for Pull request not found. Please add comments manually:"
 )
 
 var verbose bool
