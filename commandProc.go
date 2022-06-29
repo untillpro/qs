@@ -327,10 +327,12 @@ func getTaskIDFromURL(url string) string {
 }
 
 func getBranchName(args ...string) (branch string, comments []string) {
-
 	if len(args) == 0 {
-		args = append(args, getArgStringFromClipboard())
+		clipargs := strings.TrimSpace(getArgStringFromClipboard())
+		args = append(args, clipargs)
 	}
+
+	args = clearEmptyArgs(args)
 	if len(args) == 0 {
 		fmt.Println("Need branch name for dev")
 		os.Exit(1)
@@ -357,10 +359,18 @@ func getBranchName(args ...string) (branch string, comments []string) {
 		}
 		branch = branch + "-" + arg
 	}
-
 	branch = cleanArgfromSpecSymbols(branch)
-
 	return branch, comments
+}
+
+func clearEmptyArgs(args []string) (newargs []string) {
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if len(arg) > 0 {
+			newargs = append(newargs, arg)
+		}
+	}
+	return
 }
 
 func splitQuotedArgs(args ...string) []string {
