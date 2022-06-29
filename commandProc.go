@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -232,8 +233,9 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				notes, ok := git.GetNotes()
 				if !ok {
 					fmt.Println(errMsgPRNotesNotFound)
-					var response string
-					fmt.Scanln(&response)
+					scanner := bufio.NewScanner(os.Stdin)
+					scanner.Scan()
+					response := scanner.Text()
 					fmt.Println("response:  --------------- ", response)
 					response = strings.TrimSpace(response)
 					notes = append(notes, response)
