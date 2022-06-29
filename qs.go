@@ -8,6 +8,7 @@ func main() {
 		addReleaseCmd().
 		addGUICmd().
 		addForkBranch().
-		addDevBranch()
+		addDevBranch().
+		addPr()
 	cmdproc.Execute()
 }

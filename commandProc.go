@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -55,12 +56,21 @@ const (
 	devDelParam     = "d"
 	devDelParamFull = "delete"
 
+	prParam        = "pr"
+	prParamDesc    = "Make pull request"
+	prMergeParam   = "merge"
+	errMsgPRMerge  = "URL of PR is needed"
+	errMsgPRUnkown = "Unkown pr arguments"
+
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
 	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
 	devNeedToFork    = "You are in $org/$repo repo\nExecute 'qs fork' first"
+	errMsgModFiles   = "You have modified files. Please first commit & push them?"
 
-	errMsgModFiles = "You have modified files. Please commit all changes first!"
+	confMsgModFiles1      = "You have modified files: "
+	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
+	errMsgPRNotesNotFound = "Comments for Pull request not found. Please add comments manually:"
 )
 
 var verbose bool
@@ -174,6 +184,77 @@ func (cp *commandProcessor) Execute() {
 	cp.rootcmd.Execute()
 }
 
+func notCommitedRefused() bool {
+	var s string
+	var fileExists = false
+	s, fileExists = git.ChangedFilesExist()
+	if fileExists {
+		fmt.Println(confMsgModFiles1)
+		fmt.Println("------   " + s)
+		fmt.Print(confMsgModFiles2)
+		var response string
+		fmt.Scanln(&response)
+		if response != pushYes {
+			return true
+		}
+	}
+	return false
+}
+
+func (cp *commandProcessor) addPr() *commandProcessor {
+	var cmd = &cobra.Command{
+		Use:   prParam,
+		Short: prParamDesc,
+		Run: func(cmd *cobra.Command, args []string) {
+			globalConfig()
+
+			if _, ok := git.ChangedFilesExist(); ok {
+				fmt.Println(errMsgModFiles)
+				return
+			}
+
+			var prurl string
+			bDirectPR := true
+			/*
+				if len(args) > 0 {
+					if args[0] == prMergeParam {
+						if len(args) > 1 {
+							prurl = args[1]
+						}
+						bDirectPR = false
+					} else {
+						fmt.Println(errMsgPRUnkown)
+						return
+					}
+				}
+			*/
+			var err error
+			if bDirectPR {
+				notes, ok := git.GetNotes()
+				if !ok {
+					fmt.Println(errMsgPRNotesNotFound)
+					scanner := bufio.NewScanner(os.Stdin)
+					scanner.Scan()
+					response := scanner.Text()
+					fmt.Println("response:  --------------- ", response)
+					response = strings.TrimSpace(response)
+					notes = append(notes, response)
+				}
+				fmt.Println("notes:  ", len(notes))
+				err = git.MakePR(notes)
+			} else {
+				err = git.MakePRMerge(prurl)
+			}
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		},
+	}
+	cp.rootcmd.AddCommand(cmd)
+	return cp
+}
+
 func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	var cmd = &cobra.Command{
 		Use:   devParam,
@@ -185,7 +266,11 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 
-			branch := getBranchName(args...)
+			if notCommitedRefused() {
+				return
+			}
+
+			branch, notes := getBranchName(args...)
 			fmt.Println("branch:", branch)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 			fmt.Print(devMsg)
@@ -195,9 +280,9 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			switch response {
 			case pushYes:
 				if len(remoteURL) == 0 {
-					git.DevShort(branch)
+					git.DevShort(branch, notes)
 				} else {
-					git.Dev(branch)
+					git.Dev(branch, notes)
 				}
 			default:
 				fmt.Print(pushFail)
@@ -215,6 +300,11 @@ func (cp *commandProcessor) addForkBranch() *commandProcessor {
 		Short: forkParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+
+			if notCommitedRefused() {
+				return
+			}
+
 			repo, err := git.Fork()
 			if err != nil {
 				fmt.Println(err)
@@ -239,18 +329,20 @@ func getTaskIDFromURL(url string) string {
 	return strings.TrimSpace(entry)
 }
 
-func getBranchName(args ...string) string {
-
+func getBranchName(args ...string) (branch string, comments []string) {
 	if len(args) == 0 {
-		args = append(args, getArgStringFromClipboard())
+		clipargs := strings.TrimSpace(getArgStringFromClipboard())
+		args = append(args, clipargs)
 	}
+
+	args = clearEmptyArgs(args)
 	if len(args) == 0 {
 		fmt.Println("Need branch name for dev")
 		os.Exit(1)
 	}
 
 	newargs := splitQuotedArgs(args...)
-	var branch string
+	comments = newargs
 	for i, arg := range newargs {
 		arg = strings.TrimSpace(arg)
 		if i == 0 {
@@ -270,9 +362,18 @@ func getBranchName(args ...string) string {
 		}
 		branch = branch + "-" + arg
 	}
-
 	branch = cleanArgfromSpecSymbols(branch)
-	return branch
+	return branch, comments
+}
+
+func clearEmptyArgs(args []string) (newargs []string) {
+	for _, arg := range args {
+		arg = strings.TrimSpace(arg)
+		if len(arg) > 0 {
+			newargs = append(newargs, arg)
+		}
+	}
+	return
 }
 
 func splitQuotedArgs(args ...string) []string {

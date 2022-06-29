@@ -13,27 +13,34 @@ import (
 )
 
 const (
-	mimm                = "-m"
-	slash               = "/"
-	git                 = "git"
-	push                = "push"
-	fetch               = "fetch"
-	branch              = "branch"
-	checkout            = "checkout"
-	origin              = "origin"
-	repoNotFound        = "git repo name not found"
-	stashedfiles        = "Stashed files"
-	userNotFound        = "git user name not found"
-	errAlreadyForkedMsg = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
-	strLen              = 1024
+	mimm                       = "-m"
+	slash                      = "/"
+	git                        = "git"
+	push                       = "push"
+	fetch                      = "fetch"
+	branch                     = "branch"
+	checkout                   = "checkout"
+	origin                     = "origin"
+	repoNotFound               = "git repo name not found"
+	stashedfiles               = "Stashed files"
+	userNotFound               = "git user name not found"
+	errAlreadyForkedMsg        = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
+	errMsgPRNotesImpossible    = "Pull request without comments is impossible."
+	errMsgPRMerge              = "URL of PR is needed"
+	errMsgPRBadFormat          = "Pull request URL has bad format"
+	errMsgPRBad                = "Pull request URL is incorrect"
+	errMsgPRParent             = "Can not find parent repo for PR"
+	errMsgCanNotFindBranchName = "Can not find branch name"
+	strLen                     = 1024
 )
 
-func changedFilesExist() bool {
+func ChangedFilesExist() (string, bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("git", "status", "-s").
 		RunToStrings()
 	gochips.ExitIfError(err)
-	return len(strings.TrimSpace(stdouts)) > 0
+	str := strings.TrimSpace(stdouts)
+	return str, len(str) > 0
 }
 
 // Status shows git repo status
@@ -223,7 +230,8 @@ func Fork() (repo string, err error) {
 	if !IsMainOrg() {
 		return repo, errors.New(errAlreadyForkedMsg)
 	}
-	var chExist bool = changedFilesExist()
+	var chExist bool
+	_, chExist = ChangedFilesExist()
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "add", ".").
@@ -311,9 +319,10 @@ func MakeUpstream(repo string) {
 }
 
 // Dev branch
-func Dev(branch string) {
+func Dev(branch string, comments []string) {
 	mainbrach := getMainBranch()
-	var chExist bool = changedFilesExist()
+	var chExist bool
+	_, chExist = ChangedFilesExist()
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "add", ".").
@@ -337,6 +346,9 @@ func Dev(branch string) {
 	new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
+
+	addNotes(comments)
+
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "stash", "pop").
@@ -344,10 +356,81 @@ func Dev(branch string) {
 	}
 }
 
+func addNotes(comments []string) {
+	if len(comments) == 0 {
+		return
+	}
+	// Remove all existing Notes
+	if notesObsj, ok := GetNotesObj(); ok {
+		for _, notesObj := range notesObsj {
+			str := strings.TrimSpace(notesObj)
+			if len(str) > 0 {
+				new(gochips.PipedExec).
+					Command(git, "notes", "remove", str).
+					Run(os.Stdout, os.Stdout)
+			}
+		}
+	}
+	// Add new Notes
+	for _, s := range comments {
+		str := strings.TrimSpace(s)
+		if len(str) > 0 {
+			new(gochips.PipedExec).
+				Command(git, "notes", "append", "-m", s).
+				Run(os.Stdout, os.Stdout)
+		}
+	}
+}
+
+func GetNotes() (notes []string, result bool) {
+	noteobjs, ok := GetNotesObj()
+	if !ok {
+		return nil, false
+	}
+	obj := ""
+	if len(noteobjs) > 0 {
+		obj = noteobjs[len(noteobjs)-1]
+	}
+	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, "notes", "show", obj).
+		RunToStrings()
+	gochips.ExitIfError(err)
+	notes = strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
+	return notes, true
+}
+
+// GetNotesObj s.e.
+func GetNotesObj() (notes []string, result bool) {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, "notes", "list").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	stdouts = strings.TrimSpace(stdouts)
+	fmt.Println("stdouts:", len(stdouts))
+	if len(stdouts) == 0 {
+		return nil, false
+	}
+	noteLines := strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
+	if len(noteLines) == 0 {
+		return nil, false
+	}
+	notes = make([]string, len(noteLines))
+	for _, noteLine := range noteLines {
+		noteLine = strings.TrimSpace(noteLine)
+		ns := strings.Split(noteLine, " ")
+		if len(ns) == 2 {
+			s := strings.TrimSpace(ns[1])
+			notes = append(notes, s)
+		}
+	}
+	return notes, true
+}
+
 // DevShort  - dev branch in trunk
-func DevShort(branch string) {
+func DevShort(branch string, comments []string) {
 	mainbrach := getMainBranch()
-	var chExist bool = changedFilesExist()
+	var chExist bool
+	_, chExist = ChangedFilesExist()
 	if chExist {
 		new(gochips.PipedExec).
 			Command(git, "add", ".").
@@ -362,6 +445,9 @@ func DevShort(branch string) {
 	new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
+
+	addNotes(comments)
+
 	new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
@@ -510,4 +596,85 @@ func DeleteBranchesLocal(strs *[]string) {
 			gochips.ExitIfError(err)
 		}
 	}
+}
+
+// MakePR s.e.
+func MakePR(notes []string) (err error) {
+	if len(notes) == 0 {
+		return errors.New(errMsgPRNotesImpossible)
+	}
+	var strnotes string
+	var url string
+	fmt.Println("notes:  --------------- ", len(notes))
+	for _, s := range notes {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			if strings.Contains(s, "https") {
+				url = s
+			} else {
+				if len(strnotes) == 0 {
+					strnotes = s
+				} else {
+					strnotes = strnotes + " " + s
+				}
+			}
+		}
+	}
+
+	body := strnotes
+	if len(url) > 0 {
+		body = body + "\n" + url
+	}
+	strbody := fmt.Sprintln(body)
+	parentrepo := GetParentRepoName()
+	err = new(gochips.PipedExec).
+		Command("gh", "pr", "create", "-t", strnotes, "-b", strbody, "-R", parentrepo).
+		Run(os.Stdout, os.Stdout)
+	return err
+}
+
+// MakePRMerge s.e.
+func MakePRMerge(prurl string) (err error) {
+	if len(prurl) == 0 {
+		return errors.New(errMsgPRMerge)
+	}
+	if !strings.Contains(prurl, "https") {
+		return errors.New(errMsgPRBadFormat)
+	}
+	parentrepo := GetParentRepoName()
+	var stderr string
+	if len(parentrepo) == 0 {
+		_, stderr, _ = new(gochips.PipedExec).
+			Command("gh", "pr", "checks", prurl).
+			RunToStrings()
+	} else {
+		_, stderr, _ = new(gochips.PipedExec).
+			Command("gh", "pr", "checks", prurl, "-R", parentrepo).
+			RunToStrings()
+	}
+
+	if strings.Contains(stderr, "not resolve") || strings.Contains(stderr, "no pull requests") {
+		return errors.New(errMsgPRBad)
+	}
+
+	if len(parentrepo) == 0 {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "merge", prurl, "--squash").
+			Run(os.Stdout, os.Stdout)
+	} else {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "merge", prurl, "--squash", "-R", parentrepo).
+			Run(os.Stdout, os.Stdout)
+	}
+	if err != nil {
+		return err
+	}
+
+	repo, org := GetRepoAndOrgName()
+	mainbranch := getMainBranch()
+	err = new(gochips.PipedExec).
+		Command("gh", "repo", "sync", repo+"/"+org, mainbranch).
+		Run(os.Stdout, os.Stdout)
+
+	return err
 }
