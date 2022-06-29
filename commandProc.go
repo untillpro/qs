@@ -229,8 +229,8 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			*/
 			var err error
 			if bDirectPR {
-				notes := git.GetNotes()
-				if (notes == nil) || len(notes) == 0 {
+				notes, ok := git.GetNotes()
+				if ok {
 					fmt.Println(errMsgPRNotesNotFound)
 					var response string
 					fmt.Scanln(&response)

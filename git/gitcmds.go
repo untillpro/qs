@@ -361,13 +361,14 @@ func addNotes(comments []string) {
 		return
 	}
 	// Remove all existing Notes
-	notesObsj := GetNotesObj()
-	for _, notesObj := range notesObsj {
-		str := strings.TrimSpace(notesObj)
-		if len(str) > 0 {
-			new(gochips.PipedExec).
-				Command(git, "notes", "remove", str).
-				Run(os.Stdout, os.Stdout)
+	if notesObsj, ok := GetNotesObj(); ok {
+		for _, notesObj := range notesObsj {
+			str := strings.TrimSpace(notesObj)
+			if len(str) > 0 {
+				new(gochips.PipedExec).
+					Command(git, "notes", "remove", str).
+					Run(os.Stdout, os.Stdout)
+			}
 		}
 	}
 	// Add new Notes
@@ -381,8 +382,11 @@ func addNotes(comments []string) {
 	}
 }
 
-func GetNotes() []string {
-	noteobjs := GetNotesObj()
+func GetNotes() (notes []string, result bool) {
+	noteobjs, ok := GetNotesObj()
+	if !ok {
+		return nil, false
+	}
 	obj := ""
 	if len(noteobjs) > 0 {
 		obj = noteobjs[len(noteobjs)-1]
@@ -391,11 +395,12 @@ func GetNotes() []string {
 		Command(git, "notes", "show", obj).
 		RunToStrings()
 	gochips.ExitIfError(err)
-	return strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
+	notes = strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
+	return notes, true
 }
 
 // GetNotesObj s.e.
-func GetNotesObj() []string {
+func GetNotesObj() (notes []string, result bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "notes", "list").
 		RunToStrings()
@@ -403,22 +408,22 @@ func GetNotesObj() []string {
 	stdouts = strings.TrimSpace(stdouts)
 	fmt.Println("stdouts:", len(stdouts))
 	if len(stdouts) == 0 {
-		return nil
+		return nil, false
 	}
 	noteLines := strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
 	if len(noteLines) == 0 {
-		return nil
+		return nil, false
 	}
-	res := make([]string, len(noteLines))
+	notes = make([]string, len(noteLines))
 	for _, noteLine := range noteLines {
 		noteLine = strings.TrimSpace(noteLine)
-		notes := strings.Split(noteLine, " ")
-		if len(notes) == 2 {
-			s := strings.TrimSpace(notes[1])
-			res = append(res, s)
+		ns := strings.Split(noteLine, " ")
+		if len(ns) == 2 {
+			s := strings.TrimSpace(ns[1])
+			notes = append(notes, s)
 		}
 	}
-	return res
+	return notes, true
 }
 
 // DevShort  - dev branch in trunk
