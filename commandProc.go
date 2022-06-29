@@ -234,9 +234,11 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					fmt.Println(errMsgPRNotesNotFound)
 					var response string
 					fmt.Scanln(&response)
+					fmt.Println("response:  --------------- ", response)
 					response = strings.TrimSpace(response)
 					notes = append(notes, response)
 				}
+				fmt.Println("notes:  ", len(notes))
 				err = git.MakePR(notes)
 			} else {
 				err = git.MakePRMerge(prurl)

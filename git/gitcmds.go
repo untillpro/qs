@@ -605,8 +605,8 @@ func MakePR(notes []string) (err error) {
 	}
 	var strnotes string
 	var url string
+	fmt.Println("notes:  --------------- ", len(notes))
 	for _, s := range notes {
-		fmt.Println("s:  --------------- ", s)
 		s = strings.TrimSpace(s)
 		if len(s) > 0 {
 			if strings.Contains(s, "https") {
