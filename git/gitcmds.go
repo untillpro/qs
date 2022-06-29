@@ -396,14 +396,14 @@ func GetNotes() []string {
 
 // GetNotesObj s.e.
 func GetNotesObj() []string {
-	stdouts, stderr, err := new(gochips.PipedExec).
+	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "notes", "list").
 		RunToStrings()
-	fmt.Println("stdouts:", stdouts)
-	fmt.Println("stderr:", stderr)
-	fmt.Println("err:", err.Error())
-
 	gochips.ExitIfError(err)
+	stdouts = strings.TrimSpace(stdouts)
+	if len(stdouts) == 0 {
+		return nil
+	}
 	noteLines := strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
 	if len(noteLines) == 0 {
 		return nil
