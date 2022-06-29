@@ -13,21 +13,25 @@ import (
 )
 
 const (
-	mimm                    = "-m"
-	slash                   = "/"
-	git                     = "git"
-	push                    = "push"
-	fetch                   = "fetch"
-	branch                  = "branch"
-	checkout                = "checkout"
-	origin                  = "origin"
-	repoNotFound            = "git repo name not found"
-	stashedfiles            = "Stashed files"
-	userNotFound            = "git user name not found"
-	errAlreadyForkedMsg     = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
-	errMsgPRNotesImpossible = "Pull request without comments is impossible."
-	errMsgPRMerge           = "URL of PR is needed"
-	strLen                  = 1024
+	mimm                       = "-m"
+	slash                      = "/"
+	git                        = "git"
+	push                       = "push"
+	fetch                      = "fetch"
+	branch                     = "branch"
+	checkout                   = "checkout"
+	origin                     = "origin"
+	repoNotFound               = "git repo name not found"
+	stashedfiles               = "Stashed files"
+	userNotFound               = "git user name not found"
+	errAlreadyForkedMsg        = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
+	errMsgPRNotesImpossible    = "Pull request without comments is impossible."
+	errMsgPRMerge              = "URL of PR is needed"
+	errMsgPRBadFormat          = "Pull request URL has bad format"
+	errMsgPRBad                = "Pull request URL is incorrect"
+	errMsgPRParent             = "Can not find parent repo for PR"
+	errMsgCanNotFindBranchName = "Can not find branch name"
+	strLen                     = 1024
 )
 
 func ChangedFilesExist() (string, bool) {
@@ -616,32 +620,47 @@ func MakePR(notes []string) (err error) {
 }
 
 // MakePRMerge s.e.
-func MakePRMerge(prurl string, notes []string) (err error) {
+func MakePRMerge(prurl string) (err error) {
 	if len(prurl) == 0 {
 		return errors.New(errMsgPRMerge)
 	}
-	if len(notes) == 0 {
-		return errors.New(errMsgPRNotesImpossible)
+	if !strings.Contains(prurl, "https") {
+		return errors.New(errMsgPRBadFormat)
 	}
-	var strnotes string
-	var url string
-	for _, s := range notes {
-		s = strings.TrimSpace(s)
-		if len(s) > 0 {
-			if strings.Contains(s, "https") {
-				url = s
-			} else {
-				if len(strnotes) == 0 {
-					strnotes = s
-				} else {
-					strnotes = strnotes + " " + s
-				}
-			}
-		}
+	parentrepo := GetParentRepoName()
+	var stderr string
+	if len(parentrepo) == 0 {
+		_, stderr, _ = new(gochips.PipedExec).
+			Command("gh", "pr", "checks", prurl).
+			RunToStrings()
+	} else {
+		_, stderr, _ = new(gochips.PipedExec).
+			Command("gh", "pr", "checks", prurl, "-R", parentrepo).
+			RunToStrings()
 	}
 
+	if strings.Contains(stderr, "not resolve") || strings.Contains(stderr, "no pull requests") {
+		return errors.New(errMsgPRBad)
+	}
+
+	if len(parentrepo) == 0 {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "merge", prurl, "--squash").
+			Run(os.Stdout, os.Stdout)
+	} else {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "merge", prurl, "--squash", "-R", parentrepo).
+			Run(os.Stdout, os.Stdout)
+	}
+	if err != nil {
+		return err
+	}
+
+	repo, org := GetRepoAndOrgName()
+	mainbranch := getMainBranch()
 	err = new(gochips.PipedExec).
-		Command("gh", "pr", "merge", url, "-s", "-t", strnotes, "-m").
+		Command("gh", "repo", "sync", repo+"/"+org, mainbranch).
 		Run(os.Stdout, os.Stdout)
+
 	return err
 }

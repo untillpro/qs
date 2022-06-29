@@ -55,10 +55,11 @@ const (
 	devDelParam     = "d"
 	devDelParamFull = "delete"
 
-	prParam       = "pr"
-	prParamDesc   = "Make pull request"
-	prMakeParam   = "make"
-	errMsgPRMerge = "URL of PR is needed"
+	prParam        = "pr"
+	prParamDesc    = "Make pull request"
+	prMergeParam   = "merge"
+	errMsgPRMerge  = "URL of PR is needed"
+	errMsgPRUnkown = "Unkown pr arguments"
 
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
@@ -211,36 +212,34 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				return
 			}
 
-			notes := git.GetNotes()
-			if len(notes) == 0 {
-				fmt.Println(errMsgPRNotesNotFound)
-				var response string
-				fmt.Scanln(&response)
-				response = strings.TrimSpace(response)
-				notes = append(notes, response)
-			}
-
-			bDirectPR := true
 			var prurl string
-			for _, arg := range args {
-				if bDirectPR {
-					prurl = arg
-				} else {
-					if arg == prMakeParam {
+			bDirectPR := true
+			/*
+				if len(args) > 0 {
+					if args[0] == prMergeParam {
+						if len(args) > 1 {
+							prurl = args[1]
+						}
 						bDirectPR = false
+					} else {
+						fmt.Println(errMsgPRUnkown)
+						return
 					}
 				}
-			}
-
+			*/
 			var err error
 			if bDirectPR {
+				notes := git.GetNotes()
+				if len(notes) == 0 {
+					fmt.Println(errMsgPRNotesNotFound)
+					var response string
+					fmt.Scanln(&response)
+					response = strings.TrimSpace(response)
+					notes = append(notes, response)
+				}
 				err = git.MakePR(notes)
 			} else {
-				if len(prurl) == 0 {
-					fmt.Println(errMsgPRMerge)
-					return
-				}
-				err = git.MakePRMerge(prurl, notes)
+				err = git.MakePRMerge(prurl)
 			}
 			if err != nil {
 				fmt.Println(err)
