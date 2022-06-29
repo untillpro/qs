@@ -406,7 +406,6 @@ func GetNotesObj() (notes []string, result bool) {
 		RunToStrings()
 	gochips.ExitIfError(err)
 	stdouts = strings.TrimSpace(stdouts)
-	fmt.Println("stdouts:", len(stdouts))
 	if len(stdouts) == 0 {
 		return nil, false
 	}
@@ -605,7 +604,6 @@ func MakePR(notes []string) (err error) {
 	}
 	var strnotes string
 	var url string
-	fmt.Println("notes:  --------------- ", len(notes))
 	for _, s := range notes {
 		s = strings.TrimSpace(s)
 		if len(s) > 0 {

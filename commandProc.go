@@ -61,6 +61,7 @@ const (
 	prMergeParam   = "merge"
 	errMsgPRMerge  = "URL of PR is needed"
 	errMsgPRUnkown = "Unkown pr arguments"
+	prConfirm      = "Pull request with title '$prname' will be created :Continue(y/n)?"
 
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
@@ -235,13 +236,22 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					fmt.Println(errMsgPRNotesNotFound)
 					scanner := bufio.NewScanner(os.Stdin)
 					scanner.Scan()
-					response := scanner.Text()
-					fmt.Println("response:  --------------- ", response)
-					response = strings.TrimSpace(response)
-					notes = append(notes, response)
+					prnotes := scanner.Text()
+					prnotes = strings.TrimSpace(prnotes)
+					notes = append(notes, prnotes)
 				}
-				fmt.Println("notes:  ", len(notes))
-				err = git.MakePR(notes)
+				var response string
+				if len(notes) > 0 {
+					prMsg := strings.ReplaceAll(prConfirm, "$prname", notes[0])
+					fmt.Print(prMsg)
+					fmt.Scanln(&response)
+					switch response {
+					case pushYes:
+						err = git.MakePR(notes)
+					default:
+						fmt.Print(pushFail)
+					}
+				}
 			} else {
 				err = git.MakePRMerge(prurl)
 			}
