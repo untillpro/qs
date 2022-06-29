@@ -606,6 +606,7 @@ func MakePR(notes []string) (err error) {
 	var strnotes string
 	var url string
 	for _, s := range notes {
+		fmt.Println("s:  --------------- ", s)
 		s = strings.TrimSpace(s)
 		if len(s) > 0 {
 			if strings.Contains(s, "https") {
@@ -620,7 +621,10 @@ func MakePR(notes []string) (err error) {
 		}
 	}
 
-	body := strnotes + "\n" + url
+	body := strnotes
+	if len(url) > 0 {
+		body = body + "\n" + url
+	}
 	strbody := fmt.Sprintln(body)
 	parentrepo := GetParentRepoName()
 	err = new(gochips.PipedExec).
