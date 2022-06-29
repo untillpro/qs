@@ -401,6 +401,7 @@ func GetNotesObj() []string {
 		RunToStrings()
 	gochips.ExitIfError(err)
 	stdouts = strings.TrimSpace(stdouts)
+	fmt.Println("stdouts:", len(stdouts))
 	if len(stdouts) == 0 {
 		return nil
 	}
