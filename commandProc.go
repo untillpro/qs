@@ -180,7 +180,10 @@ func (cp *commandProcessor) Execute() {
 	if len(cp.rootcmd.Commands()) == 0 {
 		return
 	}
-	cp.rootcmd.Execute()
+	err := cp.rootcmd.Execute()
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func notCommitedRefused() bool {

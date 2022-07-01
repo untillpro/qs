@@ -244,8 +244,7 @@ func Fork() (repo string, err error) {
 	if !IsMainOrg() {
 		return repo, errors.New(errAlreadyForkedMsg)
 	}
-	var chExist bool
-	_, chExist = ChangedFilesExist()
+	_, chExist := ChangedFilesExist()
 	if chExist {
 		err = new(gochips.PipedExec).
 			Command(git, "add", ".").
@@ -342,8 +341,7 @@ func MakeUpstream(repo string) {
 // Dev branch
 func Dev(branch string, comments []string) {
 	mainbrach := getMainBranch()
-	var chExist bool
-	_, chExist = ChangedFilesExist()
+	_, chExist := ChangedFilesExist()
 	var err error
 	if chExist {
 		err = new(gochips.PipedExec).
@@ -460,8 +458,7 @@ func GetNotesObj() (notes []string, result bool) {
 // DevShort  - dev branch in trunk
 func DevShort(branch string, comments []string) {
 	mainbrach := getMainBranch()
-	var chExist bool
-	_, chExist = ChangedFilesExist()
+	_, chExist := ChangedFilesExist()
 	var err error
 	if chExist {
 		err = new(gochips.PipedExec).
@@ -750,8 +747,9 @@ func prCheckSuccess(val *gchResponse) bool {
 }
 
 func waitPRChecks(parentrepo string, prurl string) *gchResponse {
-
 	c := make(chan *gchResponse)
+
+	// Run checking status of PR Checks
 	go runPRChecksChecks(parentrepo, prurl, c)
 
 	strw := msgWaitingPR
@@ -790,5 +788,4 @@ func runPRChecksChecks(parentrepo string, prurl string, c chan *gchResponse) {
 			RunToStrings()
 	}
 	c <- &gchResponse{stdout, stderr, err}
-	close(c)
 }
