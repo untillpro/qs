@@ -653,46 +653,67 @@ func MakePRMerge(prurl string) (err error) {
 
 	parentrepo := GetParentRepoName()
 
-	val := waitPRChecks(parentrepo, prurl)
-
-	if val._err != nil {
-		return val._err
+	var val *gchResponse
+	for idx := 0; idx < 5; idx++ {
+		val = waitPRChecks(parentrepo, prurl)
+		// The checks can be not found yet, need to wait for 1..10 seconds
+		if prCheckAbsent(val) {
+			time.Sleep(2 * time.Second)
+			fmt.Println("Still waiting for PR checks, because it's not found yet...")
+			continue
+		}
+		break
 	}
 
-	if len(val._stderr) > 0 {
-		return errors.New(val._stderr)
-	}
+	// If after 10 seconds  we still have no checks - then thery don't exists at all, so we can merge
+	if prCheckAbsent(val) {
+		fmt.Println(" ")
+		fmt.Println("No checks for PR found, merge without checks")
+		fmt.Println(" ")
+	} else {
+		if len(val._stderr) > 0 {
+			return errors.New(val._stderr)
+		}
 
-	checkspassed := false
-	ss := strings.Split(val._stdout, "\n")
-	for _, s := range ss {
-		if strings.Contains(s, "build") && strings.Contains(s, "pass") {
-			checkspassed = true
-			break
+		if val._err != nil {
+			return val._err
+		}
+
+		checkspassed := false
+		ss := strings.Split(val._stdout, "\n")
+		for _, s := range ss {
+			if strings.Contains(s, "build") && strings.Contains(s, "pass") {
+				checkspassed = true
+				break
+			}
+		}
+		if !checkspassed {
+			return errors.New("Unkown response from gh: " + val._stdout)
 		}
 	}
 
-	if checkspassed {
-		if len(parentrepo) == 0 {
-			err = new(gochips.PipedExec).
-				Command("gh", "pr", "merge", prurl, "--squash").
-				Run(os.Stdout, os.Stdout)
-		} else {
-			err = new(gochips.PipedExec).
-				Command("gh", "pr", "merge", prurl, "--squash", "-R", parentrepo).
-				Run(os.Stdout, os.Stdout)
+	if len(parentrepo) == 0 {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "merge", prurl, "--squash").
+			Run(os.Stdout, os.Stdout)
+	} else {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "merge", prurl, "--squash", "-R", parentrepo).
+			Run(os.Stdout, os.Stdout)
+		if err != nil {
+			return err
 		}
+		repo, org := GetRepoAndOrgName()
+		err = new(gochips.PipedExec).
+			Command("gh", "repo", "sync", org+"/"+repo).
+			Run(os.Stdout, os.Stdout)
 	}
-	if err != nil {
-		return err
-	}
-
-	repo, org := GetRepoAndOrgName()
-	err = new(gochips.PipedExec).
-		Command("gh", "repo", "sync", org+"/"+repo).
-		Run(os.Stdout, os.Stdout)
 
 	return err
+}
+
+func prCheckAbsent(val *gchResponse) bool {
+	return strings.Contains(val._stderr, "no checks reported")
 }
 
 func waitPRChecks(parentrepo string, prurl string) *gchResponse {
@@ -708,15 +729,17 @@ func waitPRChecks(parentrepo string, prurl string) *gchResponse {
 	for {
 		select {
 		case val, ok = <-c:
+			fmt.Println("")
 			if ok {
 				return val
 			}
 			return &gchResponse{_err: errors.New("Something went wrong")}
 		case <-waitTimer.C:
+			fmt.Println("")
 			return &gchResponse{_err: errors.New("Time out 30 seconds")}
 		default:
-			fmt.Print(".")
 			time.Sleep(time.Second)
+			fmt.Print(".")
 		}
 	}
 }
