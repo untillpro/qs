@@ -13,25 +13,29 @@ import (
 )
 
 const (
-	mimm                       = "-m"
-	slash                      = "/"
-	git                        = "git"
-	push                       = "push"
-	fetch                      = "fetch"
-	branch                     = "branch"
-	checkout                   = "checkout"
-	origin                     = "origin"
-	repoNotFound               = "git repo name not found"
-	stashedfiles               = "Stashed files"
-	userNotFound               = "git user name not found"
-	errAlreadyForkedMsg        = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
-	errMsgPRNotesImpossible    = "Pull request without comments is impossible."
-	errMsgPRMerge              = "URL of PR is needed"
-	errMsgPRBadFormat          = "Pull request URL has bad format"
-	errMsgPRBad                = "Pull request URL is incorrect"
-	errMsgPRParent             = "Can not find parent repo for PR"
-	errMsgCanNotFindBranchName = "Can not find branch name"
-	strLen                     = 1024
+	mimm                  = "-m"
+	slash                 = "/"
+	git                   = "git"
+	push                  = "push"
+	fetch                 = "fetch"
+	branch                = "branch"
+	checkout              = "checkout"
+	origin                = "origin"
+	httppref              = "https"
+	nochecksmsg           = "no checks reported"
+	msgWaitingPR          = "Waiting PR checks.."
+	msgPRCheckNotFoundYet = "..not found yet"
+	msgPRCheckNotFound    = "No checks for PR found, merge without checks"
+
+	repoNotFound            = "git repo name not found"
+	userNotFound            = "git user name not found"
+	errAlreadyForkedMsg     = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
+	errMsgPRNotesImpossible = "Pull request without comments is impossible."
+	errMsgPRMerge           = "URL of PR is needed"
+	errMsgPRBadFormat       = "Pull request URL has bad format"
+	errTimer40Sec           = "Time out 40 seconds"
+	errSomethigWrong        = "Something went wrong"
+	errUnknowGHResponse     = "Unkown response from gh"
 )
 
 type gchResponse struct {
@@ -56,12 +60,11 @@ func Status(cfg vcs.CfgStatus) {
 		Command("grep", fetch).
 		Command("sed", "s/(fetch)//").
 		Run(os.Stdout, os.Stdout)
-	if nil != err {
-		return
-	}
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 /*
@@ -165,36 +168,41 @@ func Release() {
 
 // Upload upload sources to git repo
 func Upload(cfg vcs.CfgUpload) {
-	new(gochips.PipedExec).
+	err := new(gochips.PipedExec).
 		Command(git, "add", ".").
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 
 	params := []string{"commit", "-a"}
 	for _, m := range cfg.Message {
 		params = append(params, mimm, m)
 	}
 
-	new(gochips.PipedExec).
+	err = new(gochips.PipedExec).
 		Command(git, params...).
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 
-	new(gochips.PipedExec).
+	err = new(gochips.PipedExec).
 		Command(git, push).
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 // Download sources from git repo
 func Download(cfg vcs.CfgDownload) {
-	new(gochips.PipedExec).
+	err := new(gochips.PipedExec).
 		Command(git, "pull").
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 // Gui shows gui
 func Gui() {
-	new(gochips.PipedExec).
+	err := new(gochips.PipedExec).
 		Command(git, "gui").
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 // GetRepoAndOrgName - from .git/config
@@ -239,12 +247,14 @@ func Fork() (repo string, err error) {
 	var chExist bool
 	_, chExist = ChangedFilesExist()
 	if chExist {
-		new(gochips.PipedExec).
+		err = new(gochips.PipedExec).
 			Command(git, "add", ".").
 			Run(os.Stdout, os.Stdout)
-		new(gochips.PipedExec).
+		gochips.ExitIfError(err)
+		err = new(gochips.PipedExec).
 			Command(git, "stash").
 			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
 	}
 	err = new(gochips.PipedExec).
 		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
@@ -266,9 +276,10 @@ func GetRemoteUpstreamURL() string {
 }
 
 func PopStashedFiles() {
-	new(gochips.PipedExec).
+	err := new(gochips.PipedExec).
 		Command(git, "stash", "pop").
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 func getMainBranch() string {
@@ -310,18 +321,22 @@ func MakeUpstream(repo string) {
 	}
 
 	mainbranch := getMainBranch()
-	new(gochips.PipedExec).
+	err := new(gochips.PipedExec).
 		Command(git, "remote", "rename", "origin", "upstream").
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, "remote", "add", "origin", "https://github.com/"+user+slash+repo).
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, fetch, "origin").
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, branch, "--set-upstream-to", "origin/"+mainbranch, mainbranch).
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 // Dev branch
@@ -329,36 +344,45 @@ func Dev(branch string, comments []string) {
 	mainbrach := getMainBranch()
 	var chExist bool
 	_, chExist = ChangedFilesExist()
+	var err error
 	if chExist {
-		new(gochips.PipedExec).
+		err = new(gochips.PipedExec).
 			Command(git, "add", ".").
 			Run(os.Stdout, os.Stdout)
-		new(gochips.PipedExec).
+		gochips.ExitIfError(err)
+		err = new(gochips.PipedExec).
 			Command(git, "stash").
 			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
 	}
-	new(gochips.PipedExec).
+	err = new(gochips.PipedExec).
 		Command(git, "checkout", mainbrach).
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, "pull", "-p", "upstream", mainbrach).
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, push).
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 
 	addNotes(comments)
 
 	if chExist {
-		new(gochips.PipedExec).
+		err = new(gochips.PipedExec).
 			Command(git, "stash", "pop").
 			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
 	}
 }
 
@@ -371,9 +395,10 @@ func addNotes(comments []string) {
 		for _, notesObj := range notesObsj {
 			str := strings.TrimSpace(notesObj)
 			if len(str) > 0 {
-				new(gochips.PipedExec).
+				err := new(gochips.PipedExec).
 					Command(git, "notes", "remove", str).
 					Run(os.Stdout, os.Stdout)
+				gochips.ExitIfError(err)
 			}
 		}
 	}
@@ -381,9 +406,10 @@ func addNotes(comments []string) {
 	for _, s := range comments {
 		str := strings.TrimSpace(s)
 		if len(str) > 0 {
-			new(gochips.PipedExec).
+			err := new(gochips.PipedExec).
 				Command(git, "notes", "append", "-m", s).
 				Run(os.Stdout, os.Stdout)
+			gochips.ExitIfError(err)
 		}
 	}
 }
@@ -436,30 +462,37 @@ func DevShort(branch string, comments []string) {
 	mainbrach := getMainBranch()
 	var chExist bool
 	_, chExist = ChangedFilesExist()
+	var err error
 	if chExist {
-		new(gochips.PipedExec).
+		err = new(gochips.PipedExec).
 			Command(git, "add", ".").
 			Run(os.Stdout, os.Stdout)
-		new(gochips.PipedExec).
+		gochips.ExitIfError(err)
+		err = new(gochips.PipedExec).
 			Command(git, "stash").
 			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
 	}
-	new(gochips.PipedExec).
+	err = new(gochips.PipedExec).
 		Command(git, "checkout", mainbrach).
 		Run(os.Stdout, os.Stdout)
-	new(gochips.PipedExec).
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 
 	addNotes(comments)
 
-	new(gochips.PipedExec).
+	err = new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 	if chExist {
-		new(gochips.PipedExec).
+		err = new(gochips.PipedExec).
 			Command(git, "stash", "pop").
 			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
 	}
 }
 
@@ -511,10 +544,12 @@ func GetMergedBranchList() (brlist []string, err error) {
 	_, _, err = new(gochips.PipedExec).
 		Command(git, "remote", "prune", origin).
 		RunToStrings()
+	gochips.ExitIfError(err)
 
 	stdouts, _, err = new(gochips.PipedExec).
 		Command(git, branch, "-r").
 		RunToStrings()
+	gochips.ExitIfError(err)
 	mybrlist := strings.Split(stdouts, "\n")
 
 	for _, mybranch := range mybrlist {
@@ -607,7 +642,7 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 	for _, s := range notes {
 		s = strings.TrimSpace(s)
 		if len(s) > 0 {
-			if strings.Contains(s, "https") {
+			if strings.Contains(s, httppref) {
 				url = s
 			} else {
 				if len(note) == 0 {
@@ -642,7 +677,7 @@ func MakePR(notes []string) (err error) {
 	return err
 }
 
-// MakePRMerge s.e.
+// MakePRMerge merges Pull Request by URL
 func MakePRMerge(prurl string) (err error) {
 	if len(prurl) == 0 {
 		return errors.New(errMsgPRMerge)
@@ -652,14 +687,13 @@ func MakePRMerge(prurl string) (err error) {
 	}
 
 	parentrepo := GetParentRepoName()
-
 	var val *gchResponse
+	// The checks can be not found yet, need to wait for 1..10 seconds
 	for idx := 0; idx < 5; idx++ {
 		val = waitPRChecks(parentrepo, prurl)
-		// The checks can be not found yet, need to wait for 1..10 seconds
 		if prCheckAbsent(val) {
 			time.Sleep(2 * time.Second)
-			fmt.Println("Still waiting for PR checks, because it's not found yet...")
+			fmt.Println(msgPRCheckNotFoundYet)
 			continue
 		}
 		break
@@ -668,27 +702,17 @@ func MakePRMerge(prurl string) (err error) {
 	// If after 10 seconds  we still have no checks - then thery don't exists at all, so we can merge
 	if prCheckAbsent(val) {
 		fmt.Println(" ")
-		fmt.Println("No checks for PR found, merge without checks")
+		fmt.Println(msgPRCheckNotFound)
 		fmt.Println(" ")
 	} else {
 		if len(val._stderr) > 0 {
 			return errors.New(val._stderr)
 		}
-
 		if val._err != nil {
 			return val._err
 		}
-
-		checkspassed := false
-		ss := strings.Split(val._stdout, "\n")
-		for _, s := range ss {
-			if strings.Contains(s, "build") && strings.Contains(s, "pass") {
-				checkspassed = true
-				break
-			}
-		}
-		if !checkspassed {
-			return errors.New("Unkown response from gh: " + val._stdout)
+		if !prCheckSuccess(val) {
+			return errors.New(errUnknowGHResponse + ": " + val._stdout)
 		}
 	}
 
@@ -708,12 +732,21 @@ func MakePRMerge(prurl string) (err error) {
 			Command("gh", "repo", "sync", org+"/"+repo).
 			Run(os.Stdout, os.Stdout)
 	}
-
 	return err
 }
 
 func prCheckAbsent(val *gchResponse) bool {
-	return strings.Contains(val._stderr, "no checks reported")
+	return strings.Contains(val._stderr, nochecksmsg)
+}
+
+func prCheckSuccess(val *gchResponse) bool {
+	ss := strings.Split(val._stdout, "\n")
+	for _, s := range ss {
+		if strings.Contains(s, "build") && strings.Contains(s, "pass") {
+			return true
+		}
+	}
+	return false
 }
 
 func waitPRChecks(parentrepo string, prurl string) *gchResponse {
@@ -721,10 +754,10 @@ func waitPRChecks(parentrepo string, prurl string) *gchResponse {
 	c := make(chan *gchResponse)
 	go runPRChecksChecks(parentrepo, prurl, c)
 
-	strw := "Waiting PR checks.."
+	strw := msgWaitingPR
 	var val *gchResponse
 	var ok bool
-	waitTimer := time.NewTimer(30 * time.Second)
+	waitTimer := time.NewTimer(40 * time.Second)
 	fmt.Print(strw)
 	for {
 		select {
@@ -733,10 +766,10 @@ func waitPRChecks(parentrepo string, prurl string) *gchResponse {
 			if ok {
 				return val
 			}
-			return &gchResponse{_err: errors.New("Something went wrong")}
+			return &gchResponse{_err: errors.New(errSomethigWrong)}
 		case <-waitTimer.C:
 			fmt.Println("")
-			return &gchResponse{_err: errors.New("Time out 30 seconds")}
+			return &gchResponse{_err: errors.New(errTimer40Sec)}
 		default:
 			time.Sleep(time.Second)
 			fmt.Print(".")

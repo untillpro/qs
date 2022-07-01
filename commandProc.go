@@ -59,14 +59,12 @@ const (
 	prParam        = "pr"
 	prParamDesc    = "Make pull request"
 	prMergeParam   = "merge"
-	errMsgPRMerge  = "URL of PR is needed"
 	errMsgPRUnkown = "Unkown pr arguments"
 	prConfirm      = "Pull request with title '$prname' will be created :Continue(y/n)?"
 
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
 	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
-	devNeedToFork    = "You are in $org/$repo repo\nExecute 'qs fork' first"
 	errMsgModFiles   = "You have modified files. Please first commit & push them."
 
 	confMsgModFiles1      = "You have modified files: "
@@ -186,9 +184,7 @@ func (cp *commandProcessor) Execute() {
 }
 
 func notCommitedRefused() bool {
-	var s string
-	var fileExists = false
-	s, fileExists = git.ChangedFilesExist()
+	s, fileExists := git.ChangedFilesExist()
 	if fileExists {
 		fmt.Println(confMsgModFiles1)
 		fmt.Println("------   " + s)
@@ -480,8 +476,7 @@ func (cp *commandProcessor) deleteBranches() {
 		}
 	}
 	fmt.Print("\nChecking if unused local branches exist...")
-	var strs *[]string
-	strs = git.GetGoneBranchesLocal()
+	var strs *[]string = git.GetGoneBranchesLocal()
 	if len(*strs) == 0 {
 		fmt.Print("\n***There no unused local branches.")
 		return
