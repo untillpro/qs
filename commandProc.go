@@ -216,19 +216,18 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 
 			var prurl string
 			bDirectPR := true
-			/*
-				if len(args) > 0 {
-					if args[0] == prMergeParam {
-						if len(args) > 1 {
-							prurl = args[1]
-						}
-						bDirectPR = false
-					} else {
-						fmt.Println(errMsgPRUnkown)
-						return
+			if len(args) > 0 {
+				if args[0] == prMergeParam {
+					if len(args) > 1 {
+						prurl = args[1]
 					}
+					bDirectPR = false
+				} else {
+					fmt.Println(errMsgPRUnkown)
+					return
 				}
-			*/
+			}
+
 			var err error
 			if bDirectPR {
 				notes, ok := git.GetNotes()

@@ -34,6 +34,12 @@ const (
 	strLen                     = 1024
 )
 
+type gchResponse struct {
+	_stdout string
+	_stderr string
+	_err    error
+}
+
 func ChangedFilesExist() (string, bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("git", "status", "-s").
@@ -644,40 +650,89 @@ func MakePRMerge(prurl string) (err error) {
 	if !strings.Contains(prurl, "https") {
 		return errors.New(errMsgPRBadFormat)
 	}
+
 	parentrepo := GetParentRepoName()
-	var stderr string
-	if len(parentrepo) == 0 {
-		_, stderr, _ = new(gochips.PipedExec).
-			Command("gh", "pr", "checks", prurl).
-			RunToStrings()
-	} else {
-		_, stderr, _ = new(gochips.PipedExec).
-			Command("gh", "pr", "checks", prurl, "-R", parentrepo).
-			RunToStrings()
+
+	val := waitPRChecks(parentrepo, prurl)
+
+	if val._err != nil {
+		return val._err
 	}
 
-	if strings.Contains(stderr, "not resolve") || strings.Contains(stderr, "no pull requests") {
-		return errors.New(errMsgPRBad)
+	if len(val._stderr) > 0 {
+		return errors.New(val._stderr)
 	}
 
-	if len(parentrepo) == 0 {
-		err = new(gochips.PipedExec).
-			Command("gh", "pr", "merge", prurl, "--squash").
-			Run(os.Stdout, os.Stdout)
-	} else {
-		err = new(gochips.PipedExec).
-			Command("gh", "pr", "merge", prurl, "--squash", "-R", parentrepo).
-			Run(os.Stdout, os.Stdout)
+	checkspassed := false
+	ss := strings.Split(val._stdout, "\n")
+	for _, s := range ss {
+		if strings.Contains(s, "build") && strings.Contains(s, "pass") {
+			checkspassed = true
+			break
+		}
+	}
+
+	if checkspassed {
+		if len(parentrepo) == 0 {
+			err = new(gochips.PipedExec).
+				Command("gh", "pr", "merge", prurl, "--squash").
+				Run(os.Stdout, os.Stdout)
+		} else {
+			err = new(gochips.PipedExec).
+				Command("gh", "pr", "merge", prurl, "--squash", "-R", parentrepo).
+				Run(os.Stdout, os.Stdout)
+		}
 	}
 	if err != nil {
 		return err
 	}
 
 	repo, org := GetRepoAndOrgName()
-	mainbranch := getMainBranch()
 	err = new(gochips.PipedExec).
-		Command("gh", "repo", "sync", repo+"/"+org, mainbranch).
+		Command("gh", "repo", "sync", org+"/"+repo).
 		Run(os.Stdout, os.Stdout)
 
 	return err
+}
+
+func waitPRChecks(parentrepo string, prurl string) *gchResponse {
+
+	c := make(chan *gchResponse)
+	go runPRChecksChecks(parentrepo, prurl, c)
+
+	strw := "Waiting PR checks.."
+	var val *gchResponse
+	var ok bool
+	waitTimer := time.NewTimer(30 * time.Second)
+	fmt.Print(strw)
+	for {
+		select {
+		case val, ok = <-c:
+			if ok {
+				return val
+			}
+			return &gchResponse{_err: errors.New("Something went wrong")}
+		case <-waitTimer.C:
+			return &gchResponse{_err: errors.New("Time out 30 seconds")}
+		default:
+			fmt.Print(".")
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+func runPRChecksChecks(parentrepo string, prurl string, c chan *gchResponse) {
+	var stdout, stderr string
+	var err error
+	if len(parentrepo) == 0 {
+		stdout, stderr, err = new(gochips.PipedExec).
+			Command("gh", "pr", "checks", prurl, "--watch").
+			RunToStrings()
+	} else {
+		stdout, stderr, err = new(gochips.PipedExec).
+			Command("gh", "pr", "checks", prurl, "--watch", "-R", parentrepo).
+			RunToStrings()
+	}
+	c <- &gchResponse{stdout, stderr, err}
+	close(c)
 }
