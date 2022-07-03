@@ -44,13 +44,15 @@ type gchResponse struct {
 	_err    error
 }
 
-func ChangedFilesExist() (string, bool) {
+// ChangedFilesExist s.e.
+func ChangedFilesExist() (uncommitedFiles string, exist bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("git", "status", "-s").
 		RunToStrings()
 	gochips.ExitIfError(err)
-	str := strings.TrimSpace(stdouts)
-	return str, len(str) > 0
+	uncommitedFiles = strings.TrimSpace(stdouts)
+	exist = len(uncommitedFiles) > 0
+	return uncommitedFiles, exist
 }
 
 // Status shows git repo status
@@ -685,7 +687,7 @@ func MakePRMerge(prurl string) (err error) {
 
 	parentrepo := GetParentRepoName()
 	var val *gchResponse
-	// The checks can be not found yet, need to wait for 1..10 seconds
+	// The checks could not found yet, need to wait for 1..10 seconds
 	for idx := 0; idx < 5; idx++ {
 		val = waitPRChecks(parentrepo, prurl)
 		if prCheckAbsent(val) {

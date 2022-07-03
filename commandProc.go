@@ -188,15 +188,16 @@ func (cp *commandProcessor) Execute() {
 
 func notCommitedRefused() bool {
 	s, fileExists := git.ChangedFilesExist()
-	if fileExists {
-		fmt.Println(confMsgModFiles1)
-		fmt.Println("------   " + s)
-		fmt.Print(confMsgModFiles2)
-		var response string
-		fmt.Scanln(&response)
-		if response != pushYes {
-			return true
-		}
+	if !fileExists {
+		return false
+	}
+	fmt.Println(confMsgModFiles1)
+	fmt.Println("------   " + s)
+	fmt.Print(confMsgModFiles2)
+	var response string
+	fmt.Scanln(&response)
+	if response != pushYes {
+		return true
 	}
 	return false
 }
@@ -216,21 +217,21 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			var prurl string
 			bDirectPR := true
 			if len(args) > 0 {
-				if args[0] == prMergeParam {
-					if len(args) > 1 {
-						prurl = args[1]
-					}
-					bDirectPR = false
-				} else {
+				if args[0] != prMergeParam {
 					fmt.Println(errMsgPRUnkown)
 					return
 				}
+				if len(args) > 1 {
+					prurl = args[1]
+				}
+				bDirectPR = false
 			}
 
 			var err error
 			if bDirectPR {
 				notes, ok := git.GetNotes()
 				if !ok {
+					// Ask PR title
 					fmt.Println(errMsgPRNotesNotFound)
 					scanner := bufio.NewScanner(os.Stdin)
 					scanner.Scan()
