@@ -59,14 +59,12 @@ const (
 	prParam        = "pr"
 	prParamDesc    = "Make pull request"
 	prMergeParam   = "merge"
-	errMsgPRMerge  = "URL of PR is needed"
 	errMsgPRUnkown = "Unkown pr arguments"
 	prConfirm      = "Pull request with title '$prname' will be created :Continue(y/n)?"
 
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
 	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
-	devNeedToFork    = "You are in $org/$repo repo\nExecute 'qs fork' first"
 	errMsgModFiles   = "You have modified files. Please first commit & push them."
 
 	confMsgModFiles1      = "You have modified files: "
@@ -182,22 +180,24 @@ func (cp *commandProcessor) Execute() {
 	if len(cp.rootcmd.Commands()) == 0 {
 		return
 	}
-	cp.rootcmd.Execute()
+	err := cp.rootcmd.Execute()
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func notCommitedRefused() bool {
-	var s string
-	var fileExists = false
-	s, fileExists = git.ChangedFilesExist()
-	if fileExists {
-		fmt.Println(confMsgModFiles1)
-		fmt.Println("------   " + s)
-		fmt.Print(confMsgModFiles2)
-		var response string
-		fmt.Scanln(&response)
-		if response != pushYes {
-			return true
-		}
+	s, fileExists := git.ChangedFilesExist()
+	if !fileExists {
+		return false
+	}
+	fmt.Println(confMsgModFiles1)
+	fmt.Println("------   " + s)
+	fmt.Print(confMsgModFiles2)
+	var response string
+	fmt.Scanln(&response)
+	if response != pushYes {
+		return true
 	}
 	return false
 }
@@ -216,23 +216,22 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 
 			var prurl string
 			bDirectPR := true
-			/*
-				if len(args) > 0 {
-					if args[0] == prMergeParam {
-						if len(args) > 1 {
-							prurl = args[1]
-						}
-						bDirectPR = false
-					} else {
-						fmt.Println(errMsgPRUnkown)
-						return
-					}
+			if len(args) > 0 {
+				if args[0] != prMergeParam {
+					fmt.Println(errMsgPRUnkown)
+					return
 				}
-			*/
+				if len(args) > 1 {
+					prurl = args[1]
+				}
+				bDirectPR = false
+			}
+
 			var err error
 			if bDirectPR {
 				notes, ok := git.GetNotes()
 				if !ok {
+					// Ask PR title
 					fmt.Println(errMsgPRNotesNotFound)
 					scanner := bufio.NewScanner(os.Stdin)
 					scanner.Scan()
@@ -481,8 +480,7 @@ func (cp *commandProcessor) deleteBranches() {
 		}
 	}
 	fmt.Print("\nChecking if unused local branches exist...")
-	var strs *[]string
-	strs = git.GetGoneBranchesLocal()
+	var strs *[]string = git.GetGoneBranchesLocal()
 	if len(*strs) == 0 {
 		fmt.Print("\n***There no unused local branches.")
 		return
