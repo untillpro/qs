@@ -209,11 +209,6 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 
-			if _, ok := git.ChangedFilesExist(); ok {
-				fmt.Println(errMsgModFiles)
-				return
-			}
-
 			var prurl string
 			bDirectPR := true
 			if len(args) > 0 {
@@ -229,6 +224,12 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 
 			var err error
 			if bDirectPR {
+
+				if _, ok := git.ChangedFilesExist(); ok {
+					fmt.Println(errMsgModFiles)
+					return
+				}
+
 				notes, ok := git.GetNotes()
 				if !ok {
 					// Ask PR title

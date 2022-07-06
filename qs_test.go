@@ -12,13 +12,9 @@ func TestDeleteDup(t *testing.T) {
 	str = deleteDupMinus("----Show--must----")
 	assert.Equal(t, str, "-Show-must-")
 }
-func TestGetTaskIDFromUrl(t *testing.T) {
+func TestGeRepoNameFromURL(t *testing.T) {
 	topicid := getTaskIDFromURL("https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, topicid, "13427")
-	topicid = getTaskIDFromURL("https://dev.heeus.io/launchpad/13428")
-	assert.Equal(t, topicid, "13428")
-	topicid = getTaskIDFromURL("13429")
-	assert.Equal(t, topicid, "13429")
 }
 
 func TestGetBranchName(t *testing.T) {

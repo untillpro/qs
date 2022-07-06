@@ -212,9 +212,10 @@ func GetRepoAndOrgName() (repo string, org string) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "config", "--local", "remote.origin.url").
 		RunToStrings()
-	gochips.ExitIfError(err)
+	if err != nil {
+		return "", ""
+	}
 	repourl := strings.TrimSpace(stdouts)
-
 	arr := strings.Split(repourl, slash)
 	if len(arr) > 0 {
 		repo = arr[len(arr)-1]
@@ -685,7 +686,7 @@ func MakePRMerge(prurl string) (err error) {
 		return errors.New(errMsgPRBadFormat)
 	}
 
-	parentrepo := GetParentRepoName()
+	parentrepo := retrieveRepoNameFromUPL(prurl)
 	var val *gchResponse
 	// The checks could not found yet, need to wait for 1..10 seconds
 	for idx := 0; idx < 5; idx++ {
@@ -726,12 +727,34 @@ func MakePRMerge(prurl string) (err error) {
 		if err != nil {
 			return err
 		}
+
 		repo, org := GetRepoAndOrgName()
-		err = new(gochips.PipedExec).
-			Command("gh", "repo", "sync", org+"/"+repo).
-			Run(os.Stdout, os.Stdout)
+		if len(repo) > 0 {
+			fmt.Println("repo:", repo)
+			err = new(gochips.PipedExec).
+				Command("gh", "repo", "sync", org+"/"+repo).
+				Run(os.Stdout, os.Stdout)
+		}
+
 	}
 	return err
+}
+
+func retrieveRepoNameFromUPL(prurl string) string {
+	var strs []string = strings.Split(prurl, "/")
+	if len(strs) < 4 {
+		return ""
+	}
+	res := ""
+	lenstr := len(strs)
+	for i := lenstr - 4; i < lenstr-2; i++ {
+		if res == "" {
+			res = strs[i]
+		} else {
+			res = res + "/" + strs[i]
+		}
+	}
+	return res
 }
 
 func prCheckAbsent(val *gchResponse) bool {
