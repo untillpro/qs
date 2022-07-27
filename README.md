@@ -40,7 +40,7 @@ Path qs.exe should be added to system PATH env variable.
 Repo-name can be copied as [Name and Permanent link] from Project Kaiser task. 
 - `qs dev -d`         	 : Deletes branches in user's repository, which were accepted & mergred to parent repo
 - `qs pr`                : Create pull request. Title is taken from name of topic in "qs dev" command
-- `qs pr make [PR URL]`  : Squash & merge pull request. 
+- `qs pr merge [PR URL]`  : Squash & merge pull request. 
 
 
 # Read version from go file
