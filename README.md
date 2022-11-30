@@ -20,6 +20,8 @@ Quick source management tool
 # Installation
 
 go install github.com/untillpro/qs@v1.19.0
+For linux additionally:
+  sudo apt install xclip
 
 
 # Usage
