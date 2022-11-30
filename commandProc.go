@@ -131,6 +131,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, []string{pushDefaultMsg}, pushMsgComment)
 	cp.rootcmd.AddCommand(uploadCmd)
 	return cp
+
 }
 
 func (cp *commandProcessor) addDownloadCmd() *commandProcessor {

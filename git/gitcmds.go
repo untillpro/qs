@@ -177,6 +177,7 @@ func Upload(cfg vcs.CfgUpload) {
 
 	params := []string{"commit", "-a"}
 	for _, m := range cfg.Message {
+		fmt.Println("M:", m)
 		params = append(params, mimm, m)
 	}
 
@@ -507,7 +508,7 @@ func GetParentRepoName() (name string) {
 	return
 }
 
-//IsBranchInMain Is my branch in main org?
+// IsBranchInMain Is my branch in main org?
 func IsBranchInMain() bool {
 	repo, org := GetRepoAndOrgName()
 	parent := GetParentRepoName()
