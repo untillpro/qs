@@ -28,7 +28,6 @@ const (
 	pushYes          = "y"
 	pushMessageWord  = "message"
 	pushMessageParam = "m"
-	pushDefaultMsg   = "misc"
 	pushMsgComment   = `Use the given string as the commit message. If multiple -m options are given
  their values are concatenated as separate paragraphs`
 
@@ -111,6 +110,20 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			globalConfig()
 			git.Status(cp.cfgStatus)
 			if len(args) > 0 && args[0] == "i" {
+				params := []string{}
+				for _, m := range cfgUpload.Message {
+					params = append(params, m)
+				}
+				fmt.Println("addUpdateCmd - len(params)", len(params))
+				if len(params) == 1 {
+					if strings.Compare(git.PushDefaultMsg, params[0]) == 0 {
+						branch, _ := getBranchName(args...)
+						fmt.Println("addUpdateCmd - branch name from clipboard", branch)
+						if len(branch) > 3 {
+							cfgUpload.Message = []string{branch}
+						}
+					}
+				}
 				git.Upload(cfgUpload)
 				return
 			}
@@ -128,10 +141,9 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 		},
 	}
 
-	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, []string{pushDefaultMsg}, pushMsgComment)
+	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, []string{git.PushDefaultMsg}, pushMsgComment)
 	cp.rootcmd.AddCommand(uploadCmd)
 	return cp
-
 }
 
 func (cp *commandProcessor) addDownloadCmd() *commandProcessor {

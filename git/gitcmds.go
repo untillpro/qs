@@ -36,6 +36,7 @@ const (
 	errTimer40Sec           = "Time out 40 seconds"
 	errSomethigWrong        = "Something went wrong"
 	errUnknowGHResponse     = "Unkown response from gh"
+	PushDefaultMsg          = "misc"
 )
 
 type gchResponse struct {
@@ -177,7 +178,6 @@ func Upload(cfg vcs.CfgUpload) {
 
 	params := []string{"commit", "-a"}
 	for _, m := range cfg.Message {
-		fmt.Println("M:", m)
 		params = append(params, mimm, m)
 	}
 
