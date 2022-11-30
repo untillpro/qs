@@ -1,8 +1,10 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,4 +44,18 @@ func TestGetBranchName(t *testing.T) {
 	//Logn name
 	str, _ = getBranchName("Show", "me this  very long string more than fifty symbols in lenth with long task number 11111111111111", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-me-this-very-long-string-more-than-fift")
+}
+
+func TestClipBoard(t *testing.T) {
+	clipboard.WriteAll("1,2,3,5")
+
+	arg, _ := clipboard.ReadAll()
+
+	args := strings.Split(arg, "\n")
+	var newarg string
+	for _, str := range args {
+		newarg += str
+		newarg += " "
+	}
+	assert.NotEmpty(t, newarg)
 }

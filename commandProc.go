@@ -23,7 +23,7 @@ const (
 
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
-	pushConfirm      = "\n*** Changes shown above will be uploaded to repository, 'y': agree, 'g': show GUI >"
+	pushConfirm      = "\n*** Changes shown above will be uploaded to repository"
 	pushFail         = "Ok, see you"
 	pushYes          = "y"
 	pushMessageWord  = "message"
@@ -109,24 +109,23 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 			git.Status(cp.cfgStatus)
-			if len(args) > 0 && args[0] == "i" {
-				params := []string{}
-				for _, m := range cfgUpload.Message {
-					params = append(params, m)
-				}
-				fmt.Println("addUpdateCmd - len(params)", len(params))
-				if len(params) == 1 {
-					if strings.Compare(git.PushDefaultMsg, params[0]) == 0 {
-						branch, _ := getBranchName(args...)
-						fmt.Println("addUpdateCmd - branch name from clipboard", branch)
-						if len(branch) > 3 {
-							cfgUpload.Message = []string{branch}
-						}
+			params := []string{}
+			for _, m := range cfgUpload.Message {
+				params = append(params, m)
+			}
+			if len(params) == 1 {
+				if strings.Compare(git.PushDefaultMsg, params[0]) == 0 {
+					branch := getArgStringFromClipboard()
+					if len(branch) > 3 {
+						cfgUpload.Message = []string{branch}
 					}
 				}
+			}
+			if len(args) > 0 && args[0] == "i" {
 				git.Upload(cfgUpload)
 				return
 			}
+			pushConfirm := pushConfirm + " with comment: \n\n'" + cfgUpload.Message[0] + "'\n\n'y': agree, 'g': show GUI >"
 			fmt.Print(pushConfirm)
 			var response string
 			fmt.Scanln(&response)
@@ -295,7 +294,6 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			}
 
 			branch, notes := getBranchName(args...)
-			fmt.Println("branch:", branch)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 			fmt.Print(devMsg)
 			var response string
