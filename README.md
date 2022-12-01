@@ -19,7 +19,7 @@ Quick source management tool
 
 # Installation
 
-go install github.com/untillpro/qs@v1.19.0
+go install github.com/untillpro/qs@v1.20.0
 For linux additionally:
   sudo apt install xclip
 
@@ -43,7 +43,10 @@ Repo-name can be copied as [Name and Permanent link] from Project Kaiser task.
 - `qs dev -d`         	 : Deletes branches in user's repository, which were accepted & mergred to parent repo
 - `qs pr`                : Create pull request. Title is taken from name of topic in "qs dev" command
 - `qs pr merge [PR URL]`  : Merge pull request. 
-
+Note:
+  - `qs u` takes comment from clipboard. If current branch is "main/master", 
+           and messageis empty or very short (<3 symbols), qs will not allow to make commit and will show message:
+                  ----  Empty commit comment in main repo/branch not allowed! --- 
 
 # Read version from go file
 Create file `version.go` in src folder with body
