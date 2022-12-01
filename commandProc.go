@@ -109,15 +109,28 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 			git.Status(cp.cfgStatus)
+
 			params := []string{}
 			for _, m := range cfgUpload.Message {
 				params = append(params, m)
 			}
+
 			if len(params) == 1 {
 				if strings.Compare(git.PushDefaultMsg, params[0]) == 0 {
-					branch := getArgStringFromClipboard()
+					branch, _ := getBranchName(args...)
 					if len(branch) > 3 {
 						cfgUpload.Message = []string{branch}
+					}
+
+					ismainOrg := git.IsMainOrg()
+					curBranch := git.GetCurrentBranchName()
+					ismainBr := (curBranch == "main") || (curBranch == "master")
+					if ismainOrg || ismainBr {
+						cmtmsg := strings.TrimSpace(cfgUpload.Message[0])
+						if strings.Compare(git.PushDefaultMsg, cmtmsg) == 0 {
+							fmt.Println("----  Empty commit comment in main repo/branch not allowed! ---")
+							return
+						}
 					}
 				}
 			}
@@ -126,6 +139,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 				return
 			}
 			pushConfirm := pushConfirm + " with comment: \n\n'" + cfgUpload.Message[0] + "'\n\n'y': agree, 'g': show GUI >"
+
 			fmt.Print(pushConfirm)
 			var response string
 			fmt.Scanln(&response)
