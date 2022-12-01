@@ -47,7 +47,7 @@ Repo-name can be copied as [Name and Permanent link] from Project Kaiser task.
 
 Note:
   - `qs u` takes comment from clipboard. If current branch is "main/master", 
-           and messageis empty or very short (<3 symbols), qs will not allow to make commit and will show message:
+           and message is empty or very short (<3 symbols), qs will not allow to make commit and will show message:
                   ----  Empty commit comment in main repo/branch not allowed! --- 
 
 # Read version from go file
