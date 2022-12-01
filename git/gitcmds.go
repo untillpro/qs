@@ -815,3 +815,11 @@ func runPRChecksChecks(parentrepo string, prurl string, c chan *gchResponse) {
 	}
 	c <- &gchResponse{stdout, stderr, err}
 }
+
+func GetCurrentBranchName() string {
+	stdout, _, _ := new(gochips.PipedExec).
+		Command(git, branch).
+		Command("sed", "-n", "/\\* /s///p").
+		RunToStrings()
+	return stdout
+}
