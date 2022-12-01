@@ -285,7 +285,7 @@ func PopStashedFiles() {
 	gochips.ExitIfError(err)
 }
 
-func getMainBranch() string {
+func GetMainBranch() string {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, branch, "-r").
 		RunToStrings()
@@ -323,7 +323,7 @@ func MakeUpstream(repo string) {
 		os.Exit(1)
 	}
 
-	mainbranch := getMainBranch()
+	mainbranch := GetMainBranch()
 	err := new(gochips.PipedExec).
 		Command(git, "remote", "rename", "origin", "upstream").
 		Run(os.Stdout, os.Stdout)
@@ -344,7 +344,7 @@ func MakeUpstream(repo string) {
 
 // Dev branch
 func Dev(branch string, comments []string) {
-	mainbrach := getMainBranch()
+	mainbrach := GetMainBranch()
 	_, chExist := ChangedFilesExist()
 	var err error
 	if chExist {
@@ -461,7 +461,7 @@ func GetNotesObj() (notes []string, result bool) {
 
 // DevShort  - dev branch in trunk
 func DevShort(branch string, comments []string) {
-	mainbrach := getMainBranch()
+	mainbrach := GetMainBranch()
 	_, chExist := ChangedFilesExist()
 	var err error
 	if chExist {
@@ -608,7 +608,7 @@ func GetGoneBranchesLocal() *[]string {
 		RunToStrings()
 	gochips.ExitIfError(err)
 	// 2. Step
-	mainbranch := getMainBranch()
+	mainbranch := GetMainBranch()
 	_, _, err = new(gochips.PipedExec).
 		Command(git, checkout, mainbranch).
 		RunToStrings()
