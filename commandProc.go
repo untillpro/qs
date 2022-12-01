@@ -124,15 +124,8 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 
 					ismainOrg := git.IsMainOrg()
 					curBranch := git.GetCurrentBranchName()
-					fmt.Println("curBranch:", curBranch)
 					ismainBr := (curBranch == "main") || (curBranch == "master")
 					if ismainOrg || ismainBr {
-						if ismainOrg {
-							fmt.Println("ismainOrg!")
-						}
-						if ismainBr {
-							fmt.Println("ismainBr!:", branch)
-						}
 						cmtmsg := strings.TrimSpace(cfgUpload.Message[0])
 						if strings.Compare(git.PushDefaultMsg, cmtmsg) == 0 {
 							fmt.Println("----  Empty commit comment in main repo/branch not allowed! ---")
