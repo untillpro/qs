@@ -821,5 +821,5 @@ func GetCurrentBranchName() string {
 		Command(git, branch).
 		Command("sed", "-n", "/\\* /s///p").
 		RunToStrings()
-	return stdout
+	return strings.TrimSpace(stdout)
 }
