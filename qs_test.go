@@ -20,29 +20,29 @@ func TestGeRepoNameFromURL(t *testing.T) {
 }
 
 func TestGetBranchName(t *testing.T) {
-	str, _ := getBranchName("Show", "must", "go", "on", "https://dev.heeus.io/launchpad/#!13427")
+	str, _ := getBranchName(false, "Show", "must", "go", "on", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-must-go-on")
-	str, _ = getBranchName("Show   ivv?", "must    ", "go", "on---", "https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "Show   ivv?", "must    ", "go", "on---", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
-	str, _ = getBranchName("Show", "must", "go", "on")
+	str, _ = getBranchName(false, "Show", "must", "go", "on")
 	assert.Equal(t, str, "Show-must-go-on")
-	str, _ = getBranchName("Show")
+	str, _ = getBranchName(false, "Show")
 	assert.Equal(t, str, "Show")
-	str, _ = getBranchName("Show   ivv? must $   go on---  https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "Show   ivv? must $   go on---  https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
-	str, _ = getBranchName("Show   ivv? must $   ", "go on---  https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "Show   ivv? must $   ", "go on---  https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
-	str, _ = getBranchName("Show   ivv? must $   go  on---", "https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "Show   ivv? must $   go  on---", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
-	str, _ = getBranchName("Show", "ivv? must $   go  on--- https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "Show", "ivv? must $   go  on--- https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
-	str, _ = getBranchName("Show", "ivv? must $   go  on---", "https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "Show", "ivv? must $   go  on---", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
-	str, _ = getBranchName("q", "dev", "https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "q", "dev", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-q-dev")
 
 	//Logn name
-	str, _ = getBranchName("Show", "me this  very long string more than fifty symbols in lenth with long task number 11111111111111", "https://dev.heeus.io/launchpad/#!13427")
+	str, _ = getBranchName(false, "Show", "me this  very long string more than fifty symbols in lenth with long task number 11111111111111", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-me-this-very-long-string-more-than-fift")
 }
 
