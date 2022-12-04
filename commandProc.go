@@ -117,17 +117,22 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 
 			if len(params) == 1 {
 				if strings.Compare(git.PushDefaultMsg, params[0]) == 0 {
-					branch, _ := getBranchName(args...)
+					branch, _ := getBranchName(true, args...)
 					if len(branch) > 3 {
 						cfgUpload.Message = []string{branch}
 					}
-
-					ismainOrg := git.IsMainOrg()
+					ismainOrg := git.IsBranchInMain()
 					curBranch := git.GetCurrentBranchName()
+					fmt.Println("curBranch:", curBranch)
 					ismainBr := (curBranch == "main") || (curBranch == "master")
 					if ismainOrg || ismainBr {
 						cmtmsg := strings.TrimSpace(cfgUpload.Message[0])
 						if strings.Compare(git.PushDefaultMsg, cmtmsg) == 0 {
+							if ismainBr {
+								fmt.Println("You are in branch:", curBranch)
+							} else {
+								fmt.Println("You are not in Fork")
+							}
 							fmt.Println("----  Empty commit comment in main repo/branch not allowed! ---")
 							return
 						}
@@ -307,7 +312,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 
-			branch, notes := getBranchName(args...)
+			branch, notes := getBranchName(false, args...)
 			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 			fmt.Print(devMsg)
 			var response string
@@ -365,7 +370,7 @@ func getTaskIDFromURL(url string) string {
 	return strings.TrimSpace(entry)
 }
 
-func getBranchName(args ...string) (branch string, comments []string) {
+func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string) {
 	if len(args) == 0 {
 		clipargs := strings.TrimSpace(getArgStringFromClipboard())
 		args = append(args, clipargs)
@@ -373,6 +378,9 @@ func getBranchName(args ...string) (branch string, comments []string) {
 
 	args = clearEmptyArgs(args)
 	if len(args) == 0 {
+		if ignoreEmptyArg {
+			return "", []string{}
+		}
 		fmt.Println("Need branch name for dev")
 		os.Exit(1)
 	}
