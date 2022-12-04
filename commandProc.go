@@ -123,6 +123,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 					}
 					ismainOrg := git.IsBranchInMain()
 					curBranch := git.GetCurrentBranchName()
+					fmt.Println("curBranch:", curBranch)
 					ismainBr := (curBranch == "main") || (curBranch == "master")
 					if ismainOrg || ismainBr {
 						cmtmsg := strings.TrimSpace(cfgUpload.Message[0])
