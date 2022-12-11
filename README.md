@@ -19,7 +19,7 @@ Quick source management tool
 
 # Installation
 
-go install github.com/untillpro/qs@v1.20.0
+go install github.com/untillpro/qs@latest
 
 For linux additionally:
   sudo apt install xclip
@@ -47,8 +47,9 @@ Repo-name can be copied as [Name and Permanent link] from Project Kaiser task.
 
 Note:
   - `qs u` takes comment from clipboard. If current branch is "main/master", 
-           and message is empty or very short (<3 symbols), qs will not allow to make commit and will show message:
-                  ----  Empty commit comment in main repo/branch not allowed! --- 
+           and message is empty or very short (<3 symbols), qs willask to enter message.
+           If the message is too short, it shows error:   
+                  ----  Too short comment not allowed! --- 
 
 # Read version from go file
 Create file `version.go` in src folder with body
