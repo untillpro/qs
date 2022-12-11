@@ -121,11 +121,14 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 					if len(branch) > 3 {
 						cfgUpload.Message = []string{branch}
 					}
-					ismainOrg := git.IsBranchInMain()
+					isMainOrg := git.IsBranchInMain()
+					if isMainOrg {
+						fmt.Println("This is not user fork")
+					}
 					curBranch := git.GetCurrentBranchName()
-					fmt.Println("curBranch:", curBranch)
+					fmt.Println("Current branch:", curBranch)
 					ismainBr := (curBranch == "main") || (curBranch == "master")
-					if ismainOrg || ismainBr {
+					if isMainOrg || ismainBr {
 						cmtmsg := strings.TrimSpace(cfgUpload.Message[0])
 						if strings.Compare(git.PushDefaultMsg, cmtmsg) == 0 {
 							if ismainBr {
