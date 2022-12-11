@@ -61,6 +61,3 @@ var Patch = 0
 ````
 Now you can get version from `go` file
 
-
-
-
