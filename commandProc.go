@@ -133,8 +133,17 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 							} else {
 								fmt.Println("You are not in Fork")
 							}
-							fmt.Println("----  Empty commit comment in main repo/branch not allowed! ---")
-							return
+
+							fmt.Println("Empty commit. Please enter commit manually:")
+							scanner := bufio.NewScanner(os.Stdin)
+							scanner.Scan()
+							prcommit := scanner.Text()
+							prcommit = strings.TrimSpace(prcommit)
+							if len(prcommit) < 5 {
+								fmt.Println("----  Too short comment not allowed! ---")
+								return
+							}
+							cfgUpload.Message[0] = prcommit
 						}
 					}
 				}
