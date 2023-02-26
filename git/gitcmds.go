@@ -22,6 +22,7 @@ const (
 	checkout              = "checkout"
 	origin                = "origin"
 	httppref              = "https"
+	pushYes               = "y"
 	nochecksmsg           = "no checks reported"
 	msgWaitingPR          = "Waiting PR checks.."
 	msgPRCheckNotFoundYet = "..not found yet"
@@ -63,6 +64,12 @@ func Status(cfg vcs.CfgStatus) {
 		Command("grep", fetch).
 		Command("sed", "s/(fetch)//").
 		Run(os.Stdout, os.Stdout)
+
+	if err != nil {
+		if strings.Contains(err.Error(), "128") {
+			err = errors.New("This is not a git repository.")
+		}
+	}
 	gochips.ExitIfError(err)
 	err = new(gochips.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
@@ -186,9 +193,28 @@ func Upload(cfg vcs.CfgUpload) {
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
-	err = new(gochips.PipedExec).
-		Command(git, push).
-		Run(os.Stdout, os.Stdout)
+	for i := 0; i < 2; i++ {
+		_, sterr, err := new(gochips.PipedExec).
+			Command(git, push).
+			RunToStrings()
+
+		if err != nil {
+			if strings.Contains(sterr, "has no upstream") {
+				brName := GetCurrentBranchName() // Suggest to execute git push --set-upstream origin <branch-name>
+				fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]?\n ", brName)
+				var response string
+				fmt.Scanln(&response)
+				if response == pushYes {
+					errupstream := new(gochips.PipedExec).
+						Command(git, "push", "--set-upstream", "origin", brName).
+						Run(os.Stdout, os.Stdout)
+					gochips.ExitIfError(errupstream)
+					continue
+				}
+			}
+		}
+		break
+	}
 	gochips.ExitIfError(err)
 }
 

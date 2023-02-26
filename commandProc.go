@@ -63,7 +63,7 @@ const (
 
 	devDelMsgComment = "Deletes all merged branches from forked repository"
 	devParamDesc     = "Create developer branch"
-	devConfirm       = "Dev branch '$reponame' will be created. Yes/No? "
+	devConfirm       = "Dev branch '$reponame' will be created. Continue(y/n)? "
 	errMsgModFiles   = "You have modified files. Please first commit & push them."
 
 	confMsgModFiles1      = "You have modified files: "
@@ -147,6 +147,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 								return
 							}
 							cfgUpload.Message[0] = prcommit
+
 						}
 					}
 				}
@@ -224,6 +225,7 @@ func (cp *commandProcessor) Execute() {
 		return
 	}
 	err := cp.rootcmd.Execute()
+
 	if err != nil {
 		fmt.Println(err)
 	}
