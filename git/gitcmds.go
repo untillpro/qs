@@ -22,6 +22,7 @@ const (
 	checkout              = "checkout"
 	origin                = "origin"
 	httppref              = "https"
+	pushYes               = "y"
 	nochecksmsg           = "no checks reported"
 	msgWaitingPR          = "Waiting PR checks.."
 	msgPRCheckNotFoundYet = "..not found yet"
@@ -176,7 +177,7 @@ func Release() {
 }
 
 // Upload upload sources to git repo
-func Upload(cfg vcs.CfgUpload) error {
+func Upload(cfg vcs.CfgUpload) {
 	err := new(gochips.PipedExec).
 		Command(git, "add", ".").
 		Run(os.Stdout, os.Stdout)
@@ -192,14 +193,29 @@ func Upload(cfg vcs.CfgUpload) error {
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
-	err = new(gochips.PipedExec).
-		Command(git, push).
-		Run(os.Stdout, os.Stdout)
-	if strings.Contains(err.Error(), "has no upstream") {
-		return err
+	for i := 0; i < 2; i++ {
+		_, sterr, err := new(gochips.PipedExec).
+			Command(git, push).
+			RunToStrings()
+
+		if err != nil {
+			if strings.Contains(sterr, "has no upstream") {
+				brName := GetCurrentBranchName() // Suggest to execute git push --set-upstream origin <branch-name>
+				fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]?\n ", brName)
+				var response string
+				fmt.Scanln(&response)
+				if response == pushYes {
+					errupstream := new(gochips.PipedExec).
+						Command(git, "push", "--set-upstream", "origin", brName).
+						Run(os.Stdout, os.Stdout)
+					gochips.ExitIfError(errupstream)
+					continue
+				}
+			}
+		}
+		break
 	}
 	gochips.ExitIfError(err)
-	return nil
 }
 
 // Download sources from git repo

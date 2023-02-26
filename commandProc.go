@@ -150,10 +150,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			fmt.Scanln(&response)
 			switch response {
 			case pushYes:
-				err := git.Upload(cfgUpload)
-				if err != nil {
-					fmt.Println("ivv:", err.Error())
-				}
+				git.Upload(cfgUpload)
 			case guiParam:
 				git.Gui()
 			default:
