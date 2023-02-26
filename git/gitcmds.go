@@ -63,6 +63,12 @@ func Status(cfg vcs.CfgStatus) {
 		Command("grep", fetch).
 		Command("sed", "s/(fetch)//").
 		Run(os.Stdout, os.Stdout)
+
+	if err != nil {
+		if strings.Contains(err.Error(), "128") {
+			err = errors.New("This is not a git repository.")
+		}
+	}
 	gochips.ExitIfError(err)
 	err = new(gochips.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
@@ -170,7 +176,7 @@ func Release() {
 }
 
 // Upload upload sources to git repo
-func Upload(cfg vcs.CfgUpload) {
+func Upload(cfg vcs.CfgUpload) error {
 	err := new(gochips.PipedExec).
 		Command(git, "add", ".").
 		Run(os.Stdout, os.Stdout)
@@ -189,7 +195,11 @@ func Upload(cfg vcs.CfgUpload) {
 	err = new(gochips.PipedExec).
 		Command(git, push).
 		Run(os.Stdout, os.Stdout)
+	if strings.Contains(err.Error(), "has no upstream") {
+		return err
+	}
 	gochips.ExitIfError(err)
+	return nil
 }
 
 // Download sources from git repo

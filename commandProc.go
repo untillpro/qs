@@ -133,7 +133,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 							} else {
 								fmt.Println("You are not in Fork")
 							}
-							fmt.Println("----  Empty commit comment in main repo/branch not allowed! ---")
+							fmt.Println("---- Empty commit comment in main repo/branch not allowed! ---")
 							return
 						}
 					}
@@ -150,7 +150,10 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			fmt.Scanln(&response)
 			switch response {
 			case pushYes:
-				git.Upload(cfgUpload)
+				err := git.Upload(cfgUpload)
+				if err != nil {
+					fmt.Println("ivv:", err.Error())
+				}
 			case guiParam:
 				git.Gui()
 			default:
@@ -212,6 +215,7 @@ func (cp *commandProcessor) Execute() {
 		return
 	}
 	err := cp.rootcmd.Execute()
+
 	if err != nil {
 		fmt.Println(err)
 	}
