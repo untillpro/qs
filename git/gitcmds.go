@@ -238,6 +238,7 @@ func Gui() {
 func GetRepoAndOrgName() (repo string, org string) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "config", "--local", "remote.origin.url").
+		Command("sed", "s/\\.git$//").
 		RunToStrings()
 	if err != nil {
 		return "", ""
