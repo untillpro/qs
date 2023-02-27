@@ -306,10 +306,9 @@ func GetRemoteUpstreamURL() string {
 }
 
 func PopStashedFiles() {
-	err := new(gochips.PipedExec).
+	new(gochips.PipedExec).
 		Command(git, "stash", "pop").
 		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(err)
 }
 
 func GetMainBranch() string {
@@ -321,7 +320,7 @@ func GetMainBranch() string {
 		for _, branchstr := range brlistraw {
 			arr := strings.Split(branchstr, "->")
 			if len(arr) > 1 {
-				if strings.Contains(arr[1], "/") {
+				if strings.Contains(arr[1], "/") && (strings.Contains(arr[1], "main") || strings.Contains(arr[1], "master")) {
 					str := strings.Split(arr[1], slash)
 					if len(str) > 0 {
 						return strings.TrimSpace(str[len(str)-1])
@@ -360,7 +359,7 @@ func MakeUpstream(repo string) {
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 	err = new(gochips.PipedExec).
-		Command(git, fetch, "origin").
+		Command(git, "fetch", "origin").
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 	err = new(gochips.PipedExec).
