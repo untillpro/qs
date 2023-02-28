@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nexidian/gocliselect"
 	"github.com/untillpro/gochips"
 	"github.com/untillpro/qs/utils"
 	"github.com/untillpro/qs/vcs"
@@ -197,16 +198,43 @@ func Upload(cfg vcs.CfgUpload) {
 		_, sterr, err := new(gochips.PipedExec).
 			Command(git, push).
 			RunToStrings()
-
-		if err != nil {
+		if i == 0 && err != nil {
 			if strings.Contains(sterr, "has no upstream") {
+				remotelist := GetRemotes()
+				if len(remotelist) == 0 {
+					fmt.Printf("\nRemote not found. It's somethig wrong with your repository\n ")
+					return
+				}
 				brName := GetCurrentBranchName() // Suggest to execute git push --set-upstream origin <branch-name>
-				fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]?\n ", brName)
 				var response string
+				fmt.Println("len(remotelist):", len(remotelist))
+				for _, str := range remotelist {
+					fmt.Println("str:", str)
+				}
+
+				if len(remotelist) == 1 {
+					fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]? ", brName)
+					fmt.Scanln(&response)
+					if response == pushYes {
+						errupstream := new(gochips.PipedExec).
+							Command(git, "push", "--set-upstream", "origin", brName).
+							Run(os.Stdout, os.Stdout)
+						gochips.ExitIfError(errupstream)
+						continue
+					}
+				}
+				fmt.Printf("\nCurrent branch has no upstream branch.\nChose a remote for your branch\n ", brName)
+				menu := gocliselect.NewMenu("Chose a remote for your branch")
+				for _, str := range remotelist {
+					menu.AddItem(str, str)
+				}
+				//Show a lost and  waiting for choice por ESC
+				choice := menu.Display()
+				fmt.Printf("\nYour choice is %s.\nI am going to execute 'git push --set-upstream %s %s'.\nAgree[y/n]? ", choice, choice, brName)
 				fmt.Scanln(&response)
 				if response == pushYes {
 					errupstream := new(gochips.PipedExec).
-						Command(git, "push", "--set-upstream", "origin", brName).
+						Command(git, "push", "--set-upstream", choice, brName).
 						Run(os.Stdout, os.Stdout)
 					gochips.ExitIfError(errupstream)
 					continue
@@ -538,7 +566,7 @@ func GetParentRepoName() (name string) {
 func IsBranchInMain() bool {
 	repo, org := GetRepoAndOrgName()
 	parent := GetParentRepoName()
-	return parent == org+"/"+repo
+	return (parent == org+"/"+repo) || (strings.TrimSpace(parent) == "")
 }
 
 // GetMergedBranchList returns merged user's branch list
@@ -848,4 +876,18 @@ func GetCurrentBranchName() string {
 		Command("sed", "-n", "/\\* /s///p").
 		RunToStrings()
 	return strings.TrimSpace(stdout)
+}
+
+// GetRemotes shows list of names of all remotes
+func GetRemotes() []string {
+	stdout, _, _ := new(gochips.PipedExec).
+		Command(git, "remote").
+		RunToStrings()
+	strs := strings.Split(stdout, "\n")
+	for i, str := range strs {
+		if len(strings.TrimSpace(str)) == 0 {
+			strs = append(strs[:i], strs[i+1:]...)
+		}
+	}
+	return strs
 }

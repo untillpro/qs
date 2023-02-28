@@ -115,6 +115,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 				params = append(params, m)
 			}
 
+			bNeedConfirmCommitComment := false
 			if len(params) == 1 {
 				if strings.Compare(git.PushDefaultMsg, params[0]) == 0 {
 					branch, _ := getBranchName(true, args...)
@@ -129,6 +130,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 					fmt.Println("Current branch:", curBranch)
 					ismainBr := (curBranch == "main") || (curBranch == "master")
 					if isMainOrg || ismainBr {
+						bNeedConfirmCommitComment = true
 						cmtmsg := strings.TrimSpace(cfgUpload.Message[0])
 						if strings.Compare(git.PushDefaultMsg, cmtmsg) == 0 {
 							if ismainBr {
@@ -147,7 +149,6 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 								return
 							}
 							cfgUpload.Message[0] = prcommit
-
 						}
 					}
 				}
@@ -156,8 +157,11 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 				git.Upload(cfgUpload)
 				return
 			}
+			if !bNeedConfirmCommitComment {
+				git.Upload(cfgUpload)
+				return
+			}
 			pushConfirm := pushConfirm + " with comment: \n\n'" + cfgUpload.Message[0] + "'\n\n'y': agree, 'g': show GUI >"
-
 			fmt.Print(pushConfirm)
 			var response string
 			fmt.Scanln(&response)
@@ -169,6 +173,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			default:
 				fmt.Print(pushFail)
 			}
+
 		},
 	}
 
