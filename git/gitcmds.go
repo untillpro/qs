@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nexidian/gocliselect"
+	survey "github.com/AlecAivazis/survey/v2"
 	"github.com/untillpro/gochips"
 	"github.com/untillpro/qs/utils"
 	"github.com/untillpro/qs/vcs"
@@ -223,13 +223,15 @@ func Upload(cfg vcs.CfgUpload) {
 						continue
 					}
 				}
-				fmt.Printf("\nCurrent branch has no upstream branch.\nChose a remote for your branch\n ", brName)
-				menu := gocliselect.NewMenu("Chose a remote for your branch")
-				for _, str := range remotelist {
-					menu.AddItem(str, str)
+				fmt.Printf("\nCurrent branch has no upstream branch.")
+
+				choice := ""
+				prompt := &survey.Select{
+					Message: "Choose a remote for your branch:",
+					Options: remotelist,
 				}
-				//Show a lost and  waiting for choice por ESC
-				choice := menu.Display()
+				survey.AskOne(prompt, &choice)
+
 				fmt.Printf("\nYour choice is %s.\nI am going to execute 'git push --set-upstream %s %s'.\nAgree[y/n]? ", choice, choice, brName)
 				fmt.Scanln(&response)
 				if response == pushYes {
