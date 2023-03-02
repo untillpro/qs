@@ -110,6 +110,12 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			globalConfig()
 			git.Status(cp.cfgStatus)
 
+			files := git.GetFilesForCommit()
+			if len(files) == 0 {
+				fmt.Println("There is nothing to commit")
+				return
+			}
+
 			params := []string{}
 			for _, m := range cfgUpload.Message {
 				params = append(params, m)

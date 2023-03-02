@@ -893,3 +893,12 @@ func GetRemotes() []string {
 	}
 	return strs
 }
+
+// GetFilesForCommit shows list of file names, ready for commit
+func GetFilesForCommit() []string {
+	stdout, _, _ := new(gochips.PipedExec).
+		Command(git, "status", "-s").
+		RunToStrings()
+	strs := strings.Split(stdout, "\n")
+	return strs
+}
