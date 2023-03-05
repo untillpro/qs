@@ -674,7 +674,7 @@ func GetGoneBranchesLocal() *[]string {
 	// 3. Step
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, branch, "-vv").
-		Command("grep", ": gone]").
+		Command("grep", ": ").
 		Command("gawk", "{print $1}").
 		RunToStrings()
 	if nil != err {
