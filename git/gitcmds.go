@@ -200,7 +200,7 @@ func Upload(cfg vcs.CfgUpload) {
 			RunToStrings()
 		if i == 0 && err != nil {
 			if strings.Contains(sterr, "has no upstream") {
-				remotelist := GetRemotes()
+				remotelist := getRemotes()
 				if len(remotelist) == 0 {
 					fmt.Printf("\nRemote not found. It's somethig wrong with your repository\n ")
 					return
@@ -216,8 +216,13 @@ func Upload(cfg vcs.CfgUpload) {
 					fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]? ", brName)
 					fmt.Scanln(&response)
 					if response == pushYes {
+						setUpstreamBranch("origin", brName)
 						errupstream := new(gochips.PipedExec).
 							Command(git, "push", "--set-upstream", "origin", brName).
+							Run(os.Stdout, os.Stdout)
+						gochips.ExitIfError(errupstream)
+						errupstream = new(gochips.PipedExec).
+							Command(git, "branch", "--track", brName).
 							Run(os.Stdout, os.Stdout)
 						gochips.ExitIfError(errupstream)
 						continue
@@ -235,10 +240,7 @@ func Upload(cfg vcs.CfgUpload) {
 				fmt.Printf("\nYour choice is %s.\nI am going to execute 'git push --set-upstream %s %s'.\nAgree[y/n]? ", choice, choice, brName)
 				fmt.Scanln(&response)
 				if response == pushYes {
-					errupstream := new(gochips.PipedExec).
-						Command(git, "push", "--set-upstream", choice, brName).
-						Run(os.Stdout, os.Stdout)
-					gochips.ExitIfError(errupstream)
+					setUpstreamBranch(choice, brName)
 					continue
 				}
 			}
@@ -880,8 +882,8 @@ func GetCurrentBranchName() string {
 	return strings.TrimSpace(stdout)
 }
 
-// GetRemotes shows list of names of all remotes
-func GetRemotes() []string {
+// getRemotes shows list of names of all remotes
+func getRemotes() []string {
 	stdout, _, _ := new(gochips.PipedExec).
 		Command(git, "remote").
 		RunToStrings()
@@ -892,4 +894,34 @@ func GetRemotes() []string {
 		}
 	}
 	return strs
+}
+
+// GetFilesForCommit shows list of file names, ready for commit
+func GetFilesForCommit() []string {
+	stdout, _, _ := new(gochips.PipedExec).
+		Command(git, "status", "-s").
+		RunToStrings()
+	ss := strings.Split(stdout, "\n")
+	var strs []string
+	for _, s := range ss {
+		if strings.TrimSpace(s) != "" {
+			strs = append(strs, s)
+		}
+	}
+	return strs
+}
+
+func setUpstreamBranch(repo string, branch string) {
+	if branch == "" {
+		branch = "main"
+	}
+	errupstream := new(gochips.PipedExec).
+		Command(git, "push", "--set-upstream", repo, branch).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(errupstream)
+
+	errupstream = new(gochips.PipedExec).
+		Command(git, "branch", "--set-upstream-to", repo+"/"+branch, branch).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(errupstream)
 }
