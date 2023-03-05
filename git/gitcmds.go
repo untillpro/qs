@@ -217,14 +217,6 @@ func Upload(cfg vcs.CfgUpload) {
 					fmt.Scanln(&response)
 					if response == pushYes {
 						setUpstreamBranch("origin", brName)
-						errupstream := new(gochips.PipedExec).
-							Command(git, "push", "--set-upstream", "origin", brName).
-							Run(os.Stdout, os.Stdout)
-						gochips.ExitIfError(errupstream)
-						errupstream = new(gochips.PipedExec).
-							Command(git, "branch", "--track", brName).
-							Run(os.Stdout, os.Stdout)
-						gochips.ExitIfError(errupstream)
 						continue
 					}
 				}
@@ -917,11 +909,6 @@ func setUpstreamBranch(repo string, branch string) {
 	}
 	errupstream := new(gochips.PipedExec).
 		Command(git, "push", "--set-upstream", repo, branch).
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(errupstream)
-
-	errupstream = new(gochips.PipedExec).
-		Command(git, "branch", "--set-upstream-to", repo+"/"+branch, branch).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(errupstream)
 }
