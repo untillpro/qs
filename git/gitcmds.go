@@ -207,10 +207,6 @@ func Upload(cfg vcs.CfgUpload) {
 				}
 				brName := GetCurrentBranchName() // Suggest to execute git push --set-upstream origin <branch-name>
 				var response string
-				fmt.Println("len(remotelist):", len(remotelist))
-				for _, str := range remotelist {
-					fmt.Println("str:", str)
-				}
 
 				if len(remotelist) == 1 {
 					fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]? ", brName)
@@ -781,7 +777,6 @@ func MakePRMerge(prurl string) (err error) {
 
 		repo, org := GetRepoAndOrgName()
 		if len(repo) > 0 {
-			fmt.Println("repo:", repo)
 			err = new(gochips.PipedExec).
 				Command("gh", "repo", "sync", org+"/"+repo).
 				Run(os.Stdout, os.Stdout)
