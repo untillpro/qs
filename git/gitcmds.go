@@ -207,24 +207,12 @@ func Upload(cfg vcs.CfgUpload) {
 				}
 				brName := GetCurrentBranchName() // Suggest to execute git push --set-upstream origin <branch-name>
 				var response string
-				fmt.Println("len(remotelist):", len(remotelist))
-				for _, str := range remotelist {
-					fmt.Println("str:", str)
-				}
 
 				if len(remotelist) == 1 {
 					fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]? ", brName)
 					fmt.Scanln(&response)
 					if response == pushYes {
 						setUpstreamBranch("origin", brName)
-						errupstream := new(gochips.PipedExec).
-							Command(git, "push", "--set-upstream", "origin", brName).
-							Run(os.Stdout, os.Stdout)
-						gochips.ExitIfError(errupstream)
-						errupstream = new(gochips.PipedExec).
-							Command(git, "branch", "--track", brName).
-							Run(os.Stdout, os.Stdout)
-						gochips.ExitIfError(errupstream)
 						continue
 					}
 				}
@@ -674,7 +662,7 @@ func GetGoneBranchesLocal() *[]string {
 	// 3. Step
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, branch, "-vv").
-		Command("grep", ": gone]").
+		Command("grep", ": ").
 		Command("gawk", "{print $1}").
 		RunToStrings()
 	if nil != err {
@@ -789,7 +777,6 @@ func MakePRMerge(prurl string) (err error) {
 
 		repo, org := GetRepoAndOrgName()
 		if len(repo) > 0 {
-			fmt.Println("repo:", repo)
 			err = new(gochips.PipedExec).
 				Command("gh", "repo", "sync", org+"/"+repo).
 				Run(os.Stdout, os.Stdout)
@@ -917,11 +904,6 @@ func setUpstreamBranch(repo string, branch string) {
 	}
 	errupstream := new(gochips.PipedExec).
 		Command(git, "push", "--set-upstream", repo, branch).
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(errupstream)
-
-	errupstream = new(gochips.PipedExec).
-		Command(git, "branch", "--set-upstream-to", repo+"/"+branch, branch).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(errupstream)
 }

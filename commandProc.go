@@ -164,6 +164,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 				return
 			}
 			if !bNeedConfirmCommitComment {
+				cfgUpload.Message = []string{"misc"}
 				git.Upload(cfgUpload)
 				return
 			}
