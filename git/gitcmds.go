@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -922,4 +923,36 @@ func setUpstreamBranch(repo string, branch string) {
 		Command(git, "push", "--set-upstream", repo, branch).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(errupstream)
+}
+
+// GetCommitFileSizes returns quantity of cmmited files and their total sizes
+func GetCommitFileSizes() (totalSize int, quantity int) {
+	totalSize = 0
+	quantity = 0
+	stdout, _, err := new(gochips.PipedExec).
+		Command(git, "status", "-s").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	files := strings.Split(stdout, "\n")
+
+	quantity = len(files)
+	if quantity == 0 {
+		return
+	}
+
+	for _, file := range files {
+		stdout, _, err = new(gochips.PipedExec).
+			Command("wc", "-c", file).
+			Command("awk", "'{print $1}'").
+			RunToStrings()
+		gochips.ExitIfError(err)
+		if strings.TrimSpace(stdout) != "" {
+			size, err := strconv.Atoi(stdout)
+			if err != nil {
+				fmt.Println("Error during conversion of value: ", stdout)
+				return
+			}
+			totalSize = totalSize + size
+		}
+	}
 }
