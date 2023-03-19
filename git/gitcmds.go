@@ -417,7 +417,6 @@ func DevShort(branch string, comments []string) {
 		Command(git, "commit", "--allow-empty", "-m", "Commit for keeping notes in branch").
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
-
 	addNotes(comments)
 
 	err = new(gochips.PipedExec).
@@ -465,11 +464,6 @@ func Dev(branch string, comments []string) {
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
-	err = new(gochips.PipedExec).
-		Command(git, push, "-u", origin, branch).
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(err)
-
 	// Add empty commit to create commit object and link notes to it
 	err = new(gochips.PipedExec).
 		Command(git, "commit", "--allow-empty", "-m", "Commit for keeping notes in branch").
@@ -477,9 +471,8 @@ func Dev(branch string, comments []string) {
 	gochips.ExitIfError(err)
 
 	addNotes(comments)
-
 	err = new(gochips.PipedExec).
-		Command(git, push, origin, branch).
+		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
@@ -540,8 +533,9 @@ func GetNotes() (notes []string, result bool) {
 
 // GetNotesObj s.e.
 func GetNotesObj() (obj string, result bool) {
+	main := GetMainBranch()
 	stdouts, _, err := new(gochips.PipedExec).
-		Command(git, "log", "--pretty=format:'%cd'", "--date=iso", "HEAD", "^origin").
+		Command(git, "log", "--pretty=format:'%cd'", "--date=iso", "HEAD", "^origin/"+main).
 		Command("tail", "-1").
 		RunToStrings()
 	gochips.ExitIfError(err)
