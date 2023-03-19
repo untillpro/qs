@@ -91,8 +91,6 @@ func Status(cfg vcs.CfgStatus) {
 	- Bump current version
 	- Commit
 	- Push commits and tags
-
-
 */
 
 // Release current branch. Remove PreRelease, tag, bump version, push
@@ -931,28 +929,45 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 	quantity = 0
 	stdout, _, err := new(gochips.PipedExec).
 		Command(git, "status", "-s").
+		Command("awk", "{print $2}").
 		RunToStrings()
 	gochips.ExitIfError(err)
+
 	files := strings.Split(stdout, "\n")
 
-	quantity = len(files)
-	if quantity == 0 {
+	if len(files) == 0 {
 		return
 	}
 
 	for _, file := range files {
-		stdout, _, err = new(gochips.PipedExec).
-			Command("wc", "-c", file).
-			Command("awk", "'{print $1}'").
-			RunToStrings()
-		gochips.ExitIfError(err)
-		if strings.TrimSpace(stdout) != "" {
-			size, err := strconv.Atoi(stdout)
-			if err != nil {
-				fmt.Println("Error during conversion of value: ", stdout)
-				return
+		if len(file) > 0 {
+			stdout, _, err = new(gochips.PipedExec).
+				Command("wc", "-c", file).
+				Command("awk", "{print $1}").
+				RunToStrings()
+			gochips.ExitIfError(err)
+			strval := strings.TrimSpace(stdout)
+
+			/*
+				stdout, _, err = new(gochips.PipedExec).
+					Command(git, "diff", "--word-diff", file).
+					Command("grep", "-E", "(\\[-)|(\\{+)").
+					Command("tr", "-d", "\n").
+					Command("wc", "-c").
+					RunToStrings()
+				gochips.ExitIfError(err)
+				strval := strings.TrimSpace(stdout)
+			*/
+			if strval != "" {
+				sz, err := strconv.Atoi(strval)
+				if err != nil {
+					fmt.Println("Error during conversion of value: ", err.Error())
+					return
+				}
+				totalSize = totalSize + sz
+				quantity = quantity + 1
 			}
-			totalSize = totalSize + size
 		}
 	}
+	return totalSize, quantity
 }

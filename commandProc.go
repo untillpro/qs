@@ -16,8 +16,8 @@ import (
 
 const (
 	maxDevBranchName = 50
-	maxFileSize      = 100
-	maxFileQty       = 2
+	maxFileSize      = 10000
+	maxFileQty       = 200
 
 	utilityName = "qs"                //root command name
 	utilityDesc = "Quick git wrapper" //root command description
