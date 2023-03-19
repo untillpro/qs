@@ -133,18 +133,16 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 						fmt.Println("This is not user fork")
 					}
 					curBranch := git.GetCurrentBranchName()
-					fmt.Println("Current branch:", curBranch)
-					ismainBr := (curBranch == "main") || (curBranch == "master")
-					if isMainOrg || ismainBr {
+					isMainBranch := (curBranch == "main") || (curBranch == "master")
+					if isMainOrg || isMainBranch {
 						bNeedConfirmCommitComment = true
 						cmtmsg := strings.TrimSpace(cfgUpload.Message[0])
 						if strings.Compare(git.PushDefaultMsg, cmtmsg) == 0 {
-							if ismainBr {
+							if isMainBranch {
 								fmt.Println("You are in branch:", curBranch)
 							} else {
 								fmt.Println("You are not in Fork")
 							}
-
 							fmt.Println("Empty commit. Please enter commit manually:")
 							scanner := bufio.NewScanner(os.Stdin)
 							scanner.Scan()
@@ -156,15 +154,18 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 							}
 							cfgUpload.Message[0] = prcommit
 						}
+					} else {
+						cfgUpload.Message = []string{"misc"}
 					}
 				}
 			}
-			if len(args) > 0 && args[0] == "i" {
-				git.Upload(cfgUpload)
-				return
+			if len(args) > 0 {
+				if args[0] == "i" {
+					git.Upload(cfgUpload)
+					return
+				}
 			}
 			if !bNeedConfirmCommitComment {
-				cfgUpload.Message = []string{"misc"}
 				git.Upload(cfgUpload)
 				return
 			}

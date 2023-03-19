@@ -388,6 +388,51 @@ func MakeUpstream(repo string) {
 	gochips.ExitIfError(err)
 }
 
+// DevShort  - dev branch in trunk
+func DevShort(branch string, comments []string) {
+	mainbrach := GetMainBranch()
+	_, chExist := ChangedFilesExist()
+	var err error
+	if chExist {
+		err = new(gochips.PipedExec).
+			Command(git, "add", ".").
+			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
+		err = new(gochips.PipedExec).
+			Command(git, "stash").
+			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
+	}
+	err = new(gochips.PipedExec).
+		Command(git, "checkout", mainbrach).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+	err = new(gochips.PipedExec).
+		Command(git, "checkout", "-b", branch).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	// Add empty commit to create commit object and link notes to it
+	err = new(gochips.PipedExec).
+		Command(git, "commit", "--allow-empty", "-m", "Commit for keeping notes in branch").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	addNotes(comments)
+
+	err = new(gochips.PipedExec).
+		Command(git, push, "-u", origin, branch).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	if chExist {
+		err = new(gochips.PipedExec).
+			Command(git, "stash", "pop").
+			Run(os.Stdout, os.Stdout)
+		gochips.ExitIfError(err)
+	}
+}
+
 // Dev branch
 func Dev(branch string, comments []string) {
 	mainbrach := GetMainBranch()
@@ -419,12 +464,24 @@ func Dev(branch string, comments []string) {
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
+
 	err = new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
+	// Add empty commit to create commit object and link notes to it
+	err = new(gochips.PipedExec).
+		Command(git, "commit", "--allow-empty", "-m", "Commit for keeping notes in branch").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
 	addNotes(comments)
+
+	err = new(gochips.PipedExec).
+		Command(git, push, origin, branch).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 
 	if chExist {
 		err = new(gochips.PipedExec).
@@ -439,17 +496,19 @@ func addNotes(comments []string) {
 		return
 	}
 	// Remove all existing Notes
-	if notesObsj, ok := GetNotesObj(); ok {
-		for _, notesObj := range notesObsj {
-			str := strings.TrimSpace(notesObj)
-			if len(str) > 0 {
-				err := new(gochips.PipedExec).
-					Command(git, "notes", "remove", str).
-					Run(os.Stdout, os.Stdout)
-				gochips.ExitIfError(err)
+	/*
+		if notesObsj, ok := GetNotesObj(); ok {
+			for _, notesObj := range notesObsj {
+				str := strings.TrimSpace(notesObj)
+				if len(str) > 0 {
+					err := new(gochips.PipedExec).
+						Command(git, "notes", "remove", str).
+						Run(os.Stdout, os.Stdout)
+					gochips.ExitIfError(err)
+				}
 			}
 		}
-	}
+	*/
 	// Add new Notes
 	for _, s := range comments {
 		str := strings.TrimSpace(s)
@@ -469,7 +528,7 @@ func GetNotes() (notes []string, result bool) {
 	}
 	obj := ""
 	if len(noteobjs) > 0 {
-		obj = noteobjs[len(noteobjs)-1]
+		obj = noteobjs
 	}
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "notes", "show", obj).
@@ -480,67 +539,30 @@ func GetNotes() (notes []string, result bool) {
 }
 
 // GetNotesObj s.e.
-func GetNotesObj() (notes []string, result bool) {
+func GetNotesObj() (obj string, result bool) {
 	stdouts, _, err := new(gochips.PipedExec).
-		Command(git, "notes", "list").
+		Command(git, "log", "--pretty=format:'%cd'", "--date=iso", "HEAD", "^origin").
+		Command("tail", "-1").
 		RunToStrings()
 	gochips.ExitIfError(err)
+	if len(stdouts) == 0 {
+		return "", false
+	}
+	firstdt := stdouts
+	stdouts, _, err = new(gochips.PipedExec).
+		Command(git, "rev-list", "HEAD", "--after='"+firstdt+"'").
+		Command("tail", "-1").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	if len(stdouts) == 0 {
+		return "", false
+	}
 	stdouts = strings.TrimSpace(stdouts)
 	if len(stdouts) == 0 {
-		return nil, false
+		return "", false
 	}
-	noteLines := strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
-	if len(noteLines) == 0 {
-		return nil, false
-	}
-	notes = make([]string, len(noteLines))
-	for _, noteLine := range noteLines {
-		noteLine = strings.TrimSpace(noteLine)
-		ns := strings.Split(noteLine, " ")
-		if len(ns) == 2 {
-			s := strings.TrimSpace(ns[1])
-			notes = append(notes, s)
-		}
-	}
-	return notes, true
-}
 
-// DevShort  - dev branch in trunk
-func DevShort(branch string, comments []string) {
-	mainbrach := GetMainBranch()
-	_, chExist := ChangedFilesExist()
-	var err error
-	if chExist {
-		err = new(gochips.PipedExec).
-			Command(git, "add", ".").
-			Run(os.Stdout, os.Stdout)
-		gochips.ExitIfError(err)
-		err = new(gochips.PipedExec).
-			Command(git, "stash").
-			Run(os.Stdout, os.Stdout)
-		gochips.ExitIfError(err)
-	}
-	err = new(gochips.PipedExec).
-		Command(git, "checkout", mainbrach).
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(err)
-	err = new(gochips.PipedExec).
-		Command(git, "checkout", "-b", branch).
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(err)
-
-	addNotes(comments)
-
-	err = new(gochips.PipedExec).
-		Command(git, push, "-u", origin, branch).
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(err)
-	if chExist {
-		err = new(gochips.PipedExec).
-			Command(git, "stash", "pop").
-			Run(os.Stdout, os.Stdout)
-		gochips.ExitIfError(err)
-	}
+	return stdouts, true
 }
 
 // GetParentRepoName - parent repo of forked
