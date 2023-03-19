@@ -16,10 +16,13 @@ import (
 
 const (
 	maxDevBranchName = 50
-	utilityName      = "qs"                //root command name
-	utilityDesc      = "Quick git wrapper" //root command description
-	msymbol          = "-"
-	devider          = "\n------------------------------------------"
+	maxFileSize      = 10000
+	maxFileQty       = 200
+
+	utilityName = "qs"                //root command name
+	utilityDesc = "Quick git wrapper" //root command description
+	msymbol     = "-"
+	devider     = "\n------------------------------------------"
 
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
@@ -103,6 +106,8 @@ func (cp *commandProcessor) setRootCmd() *commandProcessor {
 
 func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 	var cfgUpload vcs.CfgUpload
+	var response string
+
 	var uploadCmd = &cobra.Command{
 		Use:   pushParam,
 		Short: pushParamDesc,
@@ -113,6 +118,10 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			files := git.GetFilesForCommit()
 			if len(files) == 0 {
 				fmt.Println("There is nothing to commit")
+				return
+			}
+
+			if !commitedLimitRespect() {
 				return
 			}
 
@@ -171,7 +180,6 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			}
 			pushConfirm := pushConfirm + " with comment: \n\n'" + cfgUpload.Message[0] + "'\n\n'y': agree, 'g': show GUI >"
 			fmt.Print(pushConfirm)
-			var response string
 			fmt.Scanln(&response)
 			switch response {
 			case pushYes:
@@ -188,6 +196,26 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, []string{git.PushDefaultMsg}, pushMsgComment)
 	cp.rootcmd.AddCommand(uploadCmd)
 	return cp
+}
+
+func commitedLimitRespect() bool {
+	var response string
+	filesSize, fileQty := git.GetCommitFileSizes()
+	if filesSize > maxFileSize {
+		fmt.Printf("Total size %v of commited files exceeds %v. Do you want to continue(y/n)?", filesSize, maxFileSize)
+		fmt.Scanln(&response)
+		if response != "y" {
+			return false
+		}
+	}
+	if fileQty > maxFileQty {
+		fmt.Printf("Total quantity %v of commited files exceeds %v. Do you want to continue(y/n)?", fileQty, maxFileQty)
+		fmt.Scanln(&response)
+		if response != "y" {
+			return false
+		}
+	}
+	return true
 }
 
 func (cp *commandProcessor) addDownloadCmd() *commandProcessor {

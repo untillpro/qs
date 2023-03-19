@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,8 +91,6 @@ func Status(cfg vcs.CfgStatus) {
 	- Bump current version
 	- Commit
 	- Push commits and tags
-
-
 */
 
 // Release current branch. Remove PreRelease, tag, bump version, push
@@ -922,4 +921,53 @@ func setUpstreamBranch(repo string, branch string) {
 		Command(git, "push", "--set-upstream", repo, branch).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(errupstream)
+}
+
+// GetCommitFileSizes returns quantity of cmmited files and their total sizes
+func GetCommitFileSizes() (totalSize int, quantity int) {
+	totalSize = 0
+	quantity = 0
+	stdout, _, err := new(gochips.PipedExec).
+		Command(git, "status", "-s").
+		Command("awk", "{print $2}").
+		RunToStrings()
+	gochips.ExitIfError(err)
+
+	files := strings.Split(stdout, "\n")
+
+	if len(files) == 0 {
+		return
+	}
+
+	for _, file := range files {
+		if len(file) > 0 {
+			stdout, _, err = new(gochips.PipedExec).
+				Command("wc", "-c", file).
+				Command("awk", "{print $1}").
+				RunToStrings()
+			gochips.ExitIfError(err)
+			strval := strings.TrimSpace(stdout)
+
+			/*
+				stdout, _, err = new(gochips.PipedExec).
+					Command(git, "diff", "--word-diff", file).
+					Command("grep", "-E", "(\\[-)|(\\{+)").
+					Command("tr", "-d", "\n").
+					Command("wc", "-c").
+					RunToStrings()
+				gochips.ExitIfError(err)
+				strval := strings.TrimSpace(stdout)
+			*/
+			if strval != "" {
+				sz, err := strconv.Atoi(strval)
+				if err != nil {
+					fmt.Println("Error during conversion of value: ", err.Error())
+					return
+				}
+				totalSize = totalSize + sz
+				quantity = quantity + 1
+			}
+		}
+	}
+	return totalSize, quantity
 }
