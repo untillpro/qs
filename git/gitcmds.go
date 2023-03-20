@@ -928,11 +928,10 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 	totalSize = 0
 	quantity = 0
 	stdout, _, err := new(gochips.PipedExec).
-		Command(git, "status", "-s").
-		Command("awk", "{print $2}").
+		Command(git, "status", "--porcelain").
+		Command("awk", "{if ($1 == \"??\") print $2}").
 		RunToStrings()
 	gochips.ExitIfError(err)
-
 	files := strings.Split(stdout, "\n")
 
 	if len(files) == 0 {
@@ -941,23 +940,14 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 
 	for _, file := range files {
 		if len(file) > 0 {
+
 			stdout, _, err = new(gochips.PipedExec).
 				Command("wc", "-c", file).
 				Command("awk", "{print $1}").
 				RunToStrings()
 			gochips.ExitIfError(err)
-			strval := strings.TrimSpace(stdout)
 
-			/*
-				stdout, _, err = new(gochips.PipedExec).
-					Command(git, "diff", "--word-diff", file).
-					Command("grep", "-E", "(\\[-)|(\\{+)").
-					Command("tr", "-d", "\n").
-					Command("wc", "-c").
-					RunToStrings()
-				gochips.ExitIfError(err)
-				strval := strings.TrimSpace(stdout)
-			*/
+			strval := strings.TrimSpace(stdout)
 			if strval != "" {
 				sz, err := strconv.Atoi(strval)
 				if err != nil {

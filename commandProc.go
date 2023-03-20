@@ -16,7 +16,7 @@ import (
 
 const (
 	maxDevBranchName = 50
-	maxFileSize      = 10000
+	maxFileSize      = 100000
 	maxFileQty       = 200
 
 	utilityName = "qs"                //root command name
@@ -202,7 +202,7 @@ func commitedLimitRespect() bool {
 	var response string
 	filesSize, fileQty := git.GetCommitFileSizes()
 	if filesSize > maxFileSize {
-		fmt.Printf("Total size %v of commited files exceeds %v. Do you want to continue(y/n)?", filesSize, maxFileSize)
+		fmt.Printf("Total size %v of adding files exceeds %v. Do you want to continue(y/n)?", filesSize, maxFileSize)
 		fmt.Scanln(&response)
 		if response != "y" {
 			return false
