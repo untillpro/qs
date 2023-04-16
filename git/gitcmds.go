@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +32,7 @@ const (
 	msgWaitingPR          = "Waiting PR checks.."
 	msgPRCheckNotFoundYet = "..not found yet"
 	msgPRCheckNotFound    = "No checks for PR found, merge without checks"
+	MsgPreCommitError     = "Attempt to commit too"
 
 	repoNotFound            = "git repo name not found"
 	userNotFound            = "git user name not found"
@@ -187,10 +191,23 @@ func Upload(cfg vcs.CfgUpload) {
 	for _, m := range cfg.Message {
 		params = append(params, mimm, m)
 	}
-
-	err = new(gochips.PipedExec).
+	_, sterr, err := new(gochips.PipedExec).
 		Command(git, params...).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
+	if strings.Contains(sterr, MsgPreCommitError) {
+		var response string
+		fmt.Println("")
+		fmt.Println(strings.TrimSpace(sterr))
+		fmt.Println("Do you want to commit anyway(y/n)?")
+		fmt.Scanln(&response)
+		if response != "y" {
+			return
+		}
+		params = append(params, "-n")
+		err = new(gochips.PipedExec).
+			Command(git, params...).
+			Run(os.Stdout, os.Stdout)
+	}
 	gochips.ExitIfError(err)
 
 	for i := 0; i < 2; i++ {
@@ -234,6 +251,7 @@ func Upload(cfg vcs.CfgUpload) {
 		}
 		break
 	}
+
 	gochips.ExitIfError(err)
 }
 
@@ -431,6 +449,34 @@ func DevShort(branch string, comments []string) {
 	}
 }
 
+// Dev issue branch
+func DevIssue(issueNumber int) (branch string, notes []string) {
+	repo, org := GetRepoAndOrgName()
+	if len(repo) == 0 {
+		fmt.Println(repoNotFound)
+		os.Exit(1)
+	}
+	strissuenum := strconv.Itoa(issueNumber)
+	myrepo := org + "/" + repo
+	parentrepo := GetParentRepoName()
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("gh", "issue", "develop", strissuenum, "--issue-repo="+parentrepo, "--repo", myrepo).
+		RunToStrings()
+	gochips.ExitIfError(err)
+
+	branch = strings.TrimSpace(stdouts)
+	segments := strings.Split(branch, "/")
+	branch = segments[len(segments)-1]
+
+	if len(branch) == 0 {
+		fmt.Println("Can not create branch for issue")
+		os.Exit(1)
+		return
+	}
+	comment := "Fixes " + parentrepo + "#" + strissuenum
+	return branch, []string{comment}
+}
+
 // Dev branch
 func Dev(branch string, comments []string) {
 	mainbrach := GetMainBranch()
@@ -470,6 +516,7 @@ func Dev(branch string, comments []string) {
 	gochips.ExitIfError(err)
 
 	addNotes(comments)
+
 	err = new(gochips.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
@@ -960,4 +1007,139 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 		}
 	}
 	return totalSize, quantity
+}
+
+func getGlobalHookFolder() string {
+	stdout, _, err := new(gochips.PipedExec).
+		Command(git, "config", "--global", "core.hooksPath").
+		RunToStrings()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(stdout)
+}
+
+func getLocalHookFolder() string {
+	dir, _ := os.Getwd()
+	filename := "/.git/hooks/pre-commit"
+	filepath := filepath.Join(dir, filename)
+	return strings.TrimSpace(filepath)
+}
+
+// GlobalPreCommitHookExist - s.e.
+func GlobalPreCommitHookExist() bool {
+	filepath := getGlobalHookFolder()
+	if len(filepath) == 0 {
+		return false // global hook folder not defined
+	}
+	err := os.MkdirAll(filepath, os.ModePerm)
+	gochips.ExitIfError(err)
+
+	filepath = filepath + "/pre-commit"
+	// Check if the file already exists
+	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		return false // File pre-commit does not exist
+	}
+	return largFileHookExist(filepath)
+}
+
+// LocalPreCommitHookExist - s.e.
+func LocalPreCommitHookExist() bool {
+	filepath := getLocalHookFolder()
+	// Check if the file already exists
+	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		return false
+	}
+	return largFileHookExist(filepath)
+}
+
+func largFileHookExist(filepath string) bool {
+	substring := "large-file-hook.sh"
+
+	err := new(gochips.PipedExec).
+		Command("grep", "-q", substring, filepath).
+		Run(os.Stdout, os.Stdout)
+	if err == nil {
+		return true
+	}
+	return false
+}
+
+// SetGlobalPreCommitHook - s.e.
+func SetGlobalPreCommitHook() {
+	var err error
+	path := getGlobalHookFolder()
+
+	if len(path) == 0 {
+		rootUser, err := user.Current()
+		gochips.ExitIfError(err)
+		path = rootUser.HomeDir
+		path = path + "/.git/hooks"
+		err = os.MkdirAll(path, os.ModePerm)
+		gochips.ExitIfError(err)
+	}
+
+	// Set global hooks folder
+	err = new(gochips.PipedExec).
+		Command(git, "config", "--global", "core.hookspath", path).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	filepath := path + "/pre-commit"
+	f := createOrOpenFile(filepath)
+	defer f.Close()
+	if !largFileHookExist(filepath) {
+		fillPreCommitFile(f, filepath)
+	}
+	return
+}
+
+// SetLocalPreCommitHook - s.e.
+func SetLocalPreCommitHook() {
+
+	// Set global hooks folder
+	new(gochips.PipedExec).
+		Command(git, "config", "--global", "--unset", "core.hookspath").
+		Run(os.Stdout, os.Stdout)
+
+	dir, _ := os.Getwd()
+	filename := "/.git/hooks/pre-commit"
+	filepath := filepath.Join(dir, filename)
+
+	// Check if the file already exists
+	f := createOrOpenFile(filepath)
+	defer f.Close()
+
+	if !largFileHookExist(filepath) {
+		fillPreCommitFile(f, filepath)
+	}
+}
+
+func createOrOpenFile(filepath string) *os.File {
+	_, err := os.Stat(filepath)
+	var f *os.File
+	if os.IsNotExist(err) {
+		// Create file pre-commit
+		f, err = os.Create(filepath)
+		gochips.ExitIfError(err)
+		_, err := f.WriteString("#!/bin/bash\n")
+		gochips.ExitIfError(err)
+	} else {
+		f, err = os.OpenFile(filepath, os.O_APPEND|os.O_WRONLY, 0644)
+	}
+	return f
+}
+
+func fillPreCommitFile(f *os.File, filepath string) {
+	if f == nil {
+		return
+	}
+	hookcode := "\n#Here is large files commit prevent is added by [qs]\n"
+	hookcode = hookcode + "curl -sSfL https://raw.githubusercontent.com/ivvist/ci-action/master/scripts/large-file-hook.sh | bash\n"
+	_, err := f.WriteString(hookcode)
+	gochips.ExitIfError(err)
+
+	cmd := exec.Command("bash", "-c", "chmod +x "+filepath)
+	err = cmd.Run()
+	gochips.ExitIfError(err)
 }

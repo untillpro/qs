@@ -1,8 +1,8 @@
-Quick source management tool
+# Quick source management tool
 
-# Installation Prerequisites
+## Installation Prerequisites
 
-## gh
+### gh
 - https://github.com/cli/cli
 - MSI: https://github.com/cli/cli/releases/tag/v2.3.0
 - chocolatey: choco install gh
@@ -12,12 +12,12 @@ Quick source management tool
     - choco install git
     - choco install golang
 
-## git
+### git
 
 - $Git\usr\bin must be in PATH
   - gives `yes`, `grep`, `sed` and other Unix utilities
 
-# Installation
+## Installation
 
 go install github.com/untillpro/qs@latest
 
@@ -25,7 +25,7 @@ For linux additionally:
   sudo apt install xclip
 
 
-# Usage
+## Basic Usage
 Must be run in cloned github repo folder.
 Path qs.exe should be added to system PATH env variable.
 
@@ -51,16 +51,9 @@ Note:
            If the message is too short, it shows error:   
                   ----  Too short comment not allowed! --- 
 
-# Read version from go file
-Create file `version.go` in src folder with body
-````go
-package main
+## Prevent large commits
 
-var Major = 1
-var Minor = 0
-var Patch = 0
-````
-Now you can get version from `go` file
+???
 
 
-sdas
+
