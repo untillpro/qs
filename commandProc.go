@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/atotto/clipboard"
@@ -18,6 +19,7 @@ const (
 	maxDevBranchName = 50
 	maxFileSize      = 100000
 	maxFileQty       = 200
+	fileSizeErrCode  = 94585767
 
 	utilityName = "qs"                //root command name
 	utilityDesc = "Quick git wrapper" //root command description
@@ -121,10 +123,12 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 				return
 			}
 
-			if !commitedLimitRespect() {
-				return
-			}
+			/*
 
+				if !commitedLimitRespect() {
+					return
+				}
+			*/
 			params := []string{}
 			for _, m := range cfgUpload.Message {
 				params = append(params, m)
@@ -202,7 +206,7 @@ func commitedLimitRespect() bool {
 	var response string
 	filesSize, fileQty := git.GetCommitFileSizes()
 	if filesSize > maxFileSize {
-		fmt.Printf("Total size %v of adding files exceeds %v. Do you want to continue(y/n)?", filesSize, maxFileSize)
+		fmt.Printf(" %v of adding files exceeds %v. Do you want to continue(y/n)?", filesSize, maxFileSize)
 		fmt.Scanln(&response)
 		if response != "y" {
 			return false
@@ -363,15 +367,24 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 
-			if notCommitedRefused() {
-				return
-			}
+			//			if notCommitedRefused() {
+			//				return
+			//			}
 
-			branch, notes := getBranchName(false, args...)
-			devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
-			fmt.Print(devMsg)
+			issueNum, ok := argContainsIssueLink(args...)
+			var branch string
+			var notes []string
 			var response string
-			fmt.Scanln(&response)
+			if ok {
+				branch, notes = git.DevIssue(issueNum)
+				response = pushYes
+			} else {
+				branch, notes = getBranchName(false, args...)
+
+				devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
+				fmt.Print(devMsg)
+				fmt.Scanln(&response)
+			}
 			remoteURL := strings.TrimSpace(git.GetRemoteUpstreamURL())
 			switch response {
 			case pushYes:
@@ -383,10 +396,14 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			default:
 				fmt.Print(pushFail)
 			}
+
+			// Create pre-commit hook to control commiting file size
+			setPreCommitHook()
 		},
 	}
 	cmd.Flags().BoolP(devDelParamFull, devDelParam, false, devDelMsgComment)
 	cp.rootcmd.AddCommand(cmd)
+
 	return cp
 }
 
@@ -423,6 +440,25 @@ func getTaskIDFromURL(url string) string {
 	entry = strings.ReplaceAll(entry, "#", "")
 	entry = strings.ReplaceAll(entry, "!", "")
 	return strings.TrimSpace(entry)
+}
+
+func argContainsIssueLink(args ...string) (IssueNum int, ok bool) {
+	ok = false
+	if len(args) != 1 {
+		return
+	}
+	url := args[0]
+	parentrepo := git.GetParentRepoName()
+	if strings.Contains(url, parentrepo+"/issues") {
+		segments := strings.Split(url, "/")
+		strIssueNum := segments[len(segments)-1]
+		i, err := strconv.Atoi(strIssueNum)
+		if err != nil {
+			return
+		}
+		return i, true
+	}
+	return
 }
 
 func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string) {
@@ -588,5 +624,21 @@ func (cp *commandProcessor) deleteBranches() {
 		git.DeleteBranchesLocal(strs)
 	default:
 		fmt.Print(pushFail)
+	}
+}
+
+func setPreCommitHook() {
+	var response string
+	if git.GlobalPreCommitHookExist() || git.LocalPreCommitHookExist() {
+		return
+	}
+
+	fmt.Println("\nGit pre-commit hook, preventing commit large files does not exist.\nDo you want to set global hook(y) or local hook(n)?")
+	fmt.Scanln(&response)
+	switch response {
+	case pushYes:
+		git.SetGlobalPreCommitHook()
+	default:
+		git.SetLocalPreCommitHook()
 	}
 }
