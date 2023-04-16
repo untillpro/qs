@@ -581,7 +581,7 @@ func GetNotes() (notes []string, result bool) {
 func GetNotesObj() (obj string, result bool) {
 	main := GetMainBranch()
 	stdouts, _, err := new(gochips.PipedExec).
-		Command(git, "log", "--pretty=format:'%cd'", "--date=iso", "HEAD", "^origin/"+main).
+		Command(git, "log", "--pretty=format:'%cd'", "--date=iso", "HEAD", "^"+main).
 		Command("tail", "-1").
 		RunToStrings()
 	gochips.ExitIfError(err)
