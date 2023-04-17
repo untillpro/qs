@@ -46,8 +46,8 @@ Path qs.exe should be added to system PATH env variable.
 
 - `qs dev -d`         	 : Deletes branches in user's repository, which were accepted & mergred to parent repo
 - `qs pr`                : Create pull request. Title is taken from name of topic in "qs dev" command
-                         : If a branch is linked to github issue, qs pr make  a pullrequest, linked to that issue.
-- `qs pr merge [PR URL]`  : Merge pull request. 
+                         : If a branch is linked to github issue, qs pr makes a pull request, linked to that issue.
+- `qs pr merge [PR URL]` : Merge pull request. 
 
 Note:
   - `qs u` takes comment from clipboard. If current branch is "main/master", 
