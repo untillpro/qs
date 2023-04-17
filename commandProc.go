@@ -371,13 +371,20 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			//				return
 			//			}
 
-			issueNum, ok := argContainsIssueLink(args...)
 			var branch string
 			var notes []string
 			var response string
+			if len(args) == 0 {
+				clipargs := strings.TrimSpace(getArgStringFromClipboard())
+				args = append(args, clipargs)
+			}
+			issueNum, ok := argContainsIssueLink(args...)
 			if ok {
-				branch, notes = git.DevIssue(issueNum)
-				response = pushYes
+				fmt.Println("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
+				fmt.Scanln(&response)
+				if response == pushYes {
+					branch, notes = git.DevIssue(issueNum)
+				}
 			} else {
 				branch, notes = getBranchName(false, args...)
 
@@ -462,10 +469,6 @@ func argContainsIssueLink(args ...string) (IssueNum int, ok bool) {
 }
 
 func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string) {
-	if len(args) == 0 {
-		clipargs := strings.TrimSpace(getArgStringFromClipboard())
-		args = append(args, clipargs)
-	}
 
 	args = clearEmptyArgs(args)
 	if len(args) == 0 {

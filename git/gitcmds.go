@@ -1135,7 +1135,7 @@ func fillPreCommitFile(f *os.File, filepath string) {
 		return
 	}
 	hookcode := "\n#Here is large files commit prevent is added by [qs]\n"
-	hookcode = hookcode + "curl -sSfL https://raw.githubusercontent.com/ivvist/ci-action/master/scripts/large-file-hook.sh | bash\n"
+	hookcode = hookcode + "curl -sSfL https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh | bash\n"
 	_, err := f.WriteString(hookcode)
 	gochips.ExitIfError(err)
 
