@@ -57,7 +57,16 @@ Note:
 
 ## Prevent large commits
 
-???
+Command 'qs dev' creates a developer branch and after success, it shows the following question:
 
+```
+   Git pre-commit hook, preventing commit large files do
+   Do you want to set global hook(y) or local hook(n)?
+```
+
+On 'y', qs creates github global pre-commit hook script for all projects
+On 'n', qs creates github pre-commit hook script for current project.
+
+If global global pre-commit hook found, 'qs dev' does not asks to create the hook.
 
 
