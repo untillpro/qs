@@ -17,13 +17,12 @@
 - $Git\usr\bin must be in PATH
   - gives `yes`, `grep`, `sed` and other Unix utilities
 
+### xclip
+For linux additionally:   sudo apt install xclip
+
 ## Installation
 
 go install github.com/untillpro/qs@latest
-
-For linux additionally:
-  sudo apt install xclip
-
 
 ## Basic Usage
 Must be run in cloned github repo folder.
@@ -41,7 +40,7 @@ Path qs.exe should be added to system PATH env variable.
 - `qs fork`  		         : Forks repo to user's account and creates upstream
 - `qs dev repo-name`     : Make new dev branch with name repo-name
 Repo-name can be copied as [Name and Permanent link] from Project Kaiser task. 
-For ubuntu xclip must be installed.
+
 - `qs dev -d`         	 : Deletes branches in user's repository, which were accepted & mergred to parent repo
 - `qs pr`                : Create pull request. Title is taken from name of topic in "qs dev" command
 - `qs pr merge [PR URL]`  : Merge pull request. 
