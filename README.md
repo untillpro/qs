@@ -39,10 +39,14 @@ Path qs.exe should be added to system PATH env variable.
 
 - `qs fork`  		         : Forks repo to user's account and creates upstream
 - `qs dev repo-name`     : Make new dev branch with name repo-name
-Repo-name can be copied as [Name and Permanent link] from Project Kaiser task. 
+                           Repo-name can be copied as 
+                            - [Name and Permanent link] from Project Kaiser task. 
+                            - URL of github issue with issue number.
+                           If a buffer contains link on issue number, qs dev creates brnach and links it to github issue
 
 - `qs dev -d`         	 : Deletes branches in user's repository, which were accepted & mergred to parent repo
 - `qs pr`                : Create pull request. Title is taken from name of topic in "qs dev" command
+                         : If a branch is linked to github issue, qs pr make  a pullrequest, linked to that issue.
 - `qs pr merge [PR URL]`  : Merge pull request. 
 
 Note:
