@@ -1057,7 +1057,7 @@ func largFileHookExist(filepath string) bool {
 	substring := "large-file-hook.sh"
 
 	err := new(gochips.PipedExec).
-		Command("grep", "-q", substring, filepath).
+		Command("grep", "-l", substring, filepath).
 		Run(os.Stdout, os.Stdout)
 	if err == nil {
 		return true
@@ -1087,11 +1087,10 @@ func SetGlobalPreCommitHook() {
 
 	filepath := path + "/pre-commit"
 	f := createOrOpenFile(filepath)
-	defer f.Close()
+	f.Close()
 	if !largFileHookExist(filepath) {
-		fillPreCommitFile(f, filepath)
+		fillPreCommitFile(filepath)
 	}
-	return
 }
 
 // SetLocalPreCommitHook - s.e.
@@ -1108,10 +1107,10 @@ func SetLocalPreCommitHook() {
 
 	// Check if the file already exists
 	f := createOrOpenFile(filepath)
-	defer f.Close()
+	f.Close()
 
 	if !largFileHookExist(filepath) {
-		fillPreCommitFile(f, filepath)
+		fillPreCommitFile(filepath)
 	}
 }
 
@@ -1130,16 +1129,15 @@ func createOrOpenFile(filepath string) *os.File {
 	return f
 }
 
-func fillPreCommitFile(f *os.File, filepath string) {
-	if f == nil {
-		return
-	}
+func fillPreCommitFile(filepath string) {
+	f := createOrOpenFile(filepath)
+	defer f.Close()
+
 	hookcode := "\n#Here is large files commit prevent is added by [qs]\n"
 	hookcode = hookcode + "curl -sSfL https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh | bash\n"
 	_, err := f.WriteString(hookcode)
 	gochips.ExitIfError(err)
 
 	cmd := exec.Command("bash", "-c", "chmod +x "+filepath)
-	err = cmd.Run()
-	gochips.ExitIfError(err)
+	cmd.Run()
 }
