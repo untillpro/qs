@@ -2,7 +2,7 @@
 
 ## Installation Prerequisites
 
-### gh    version > 2.9
+### gh    version > 2.27
 - https://github.com/cli/cli
 - MSI: https://github.com/cli/cli/releases/tag/v2.3.0
 - chocolatey: choco install gh
