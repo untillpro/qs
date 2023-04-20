@@ -362,15 +362,13 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 		Short: devParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+			// qs dev -d is running
 			if cmd.Flag(devDelParamFull).Value.String() == "true" {
 				cp.deleteBranches()
 				return
 			}
 
-			//			if notCommitedRefused() {
-			//				return
-			//			}
-
+			// qs dev is running
 			var branch string
 			var notes []string
 			var response string
@@ -383,6 +381,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				fmt.Println("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
 				fmt.Scanln(&response)
 				if response == pushYes {
+					// Remote developer branch, linked to issue is created
 					branch, notes = git.DevIssue(issueNum)
 				}
 			} else {
@@ -392,9 +391,10 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				fmt.Print(devMsg)
 				fmt.Scanln(&response)
 			}
-			remoteURL := strings.TrimSpace(git.GetRemoteUpstreamURL())
+			remoteURL := git.GetRemoteUpstreamURL()
 			switch response {
 			case pushYes:
+				// Remote developer branch, linked to issue is created
 				if len(remoteURL) == 0 {
 					git.DevShort(branch, notes)
 				} else {

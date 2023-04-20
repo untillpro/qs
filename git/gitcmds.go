@@ -395,6 +395,7 @@ func MakeUpstream(repo string) {
 		Command(git, "remote", "add", "origin", "https://github.com/"+user+slash+repo).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
+	time.Sleep(1 * time.Second)
 	err = new(gochips.PipedExec).
 		Command(git, "fetch", "origin").
 		Run(os.Stdout, os.Stdout)
@@ -456,9 +457,16 @@ func DevIssue(issueNumber int) (branch string, notes []string) {
 		fmt.Println(repoNotFound)
 		os.Exit(1)
 	}
+
 	strissuenum := strconv.Itoa(issueNumber)
 	myrepo := org + "/" + repo
 	parentrepo := GetParentRepoName()
+
+	err := new(gochips.PipedExec).
+		Command("gh", "repo", "set-default", myrepo).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("gh", "issue", "develop", strissuenum, "--issue-repo="+parentrepo, "--repo", myrepo).
 		RunToStrings()
