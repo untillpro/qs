@@ -485,7 +485,7 @@ func DevIssue(issueNumber int) (branch string, notes []string) {
 		os.Exit(1)
 		return
 	}
-	comment := "Fixes " + parentrepo + "#" + strissuenum
+	comment := "Resolves " + parentrepo + "#" + strissuenum
 	return branch, []string{comment}
 }
 
