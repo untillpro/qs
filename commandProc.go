@@ -28,6 +28,7 @@ const (
 
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
+	ignorehook       = "--ignore-hook"
 	pushConfirm      = "\n*** Changes shown above will be uploaded to repository"
 	pushFail         = "Ok, see you"
 	pushYes          = "y"
@@ -56,9 +57,11 @@ const (
 	forkParam     = "fork"
 	forkParamDesc = "Fork original repo"
 
-	devParam        = "dev"
-	devDelParam     = "d"
-	devDelParamFull = "delete"
+	devParam               = "dev"
+	devDelParam            = "d"
+	devDelParamFull        = "delete"
+	ignorehookDelParam     = "i"
+	ignorehookDelParamFull = "ignore-hook"
 
 	prParam        = "pr"
 	prParamDesc    = "Make pull request"
@@ -66,10 +69,11 @@ const (
 	errMsgPRUnkown = "Unkown pr arguments"
 	prConfirm      = "Pull request with title '$prname' will be created :Continue(y/n)?"
 
-	devDelMsgComment = "Deletes all merged branches from forked repository"
-	devParamDesc     = "Create developer branch"
-	devConfirm       = "Dev branch '$reponame' will be created. Continue(y/n)? "
-	errMsgModFiles   = "You have modified files. Please first commit & push them."
+	devDelMsgComment        = "Deletes all merged branches from forked repository"
+	devIgnoreHookMsgComment = "Ignore creating local hook"
+	devParamDesc            = "Create developer branch"
+	devConfirm              = "Dev branch '$reponame' will be created. Continue(y/n)? "
+	errMsgModFiles          = "You have modified files. Please first commit & push them."
 
 	confMsgModFiles1      = "You have modified files: "
 	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
@@ -123,12 +127,6 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 				return
 			}
 
-			/*
-
-				if !commitedLimitRespect() {
-					return
-				}
-			*/
 			params := []string{}
 			for _, m := range cfgUpload.Message {
 				params = append(params, m)
@@ -367,11 +365,15 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				cp.deleteBranches()
 				return
 			}
-
+			var needAskHook bool = true
+			if cmd.Flag(ignorehookDelParamFull).Value.String() == "true" {
+				needAskHook = false
+			}
 			// qs dev is running
 			var branch string
 			var notes []string
 			var response string
+
 			if len(args) == 0 {
 				clipargs := strings.TrimSpace(getArgStringFromClipboard())
 				args = append(args, clipargs)
@@ -405,10 +407,14 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			}
 
 			// Create pre-commit hook to control commiting file size
-			setPreCommitHook()
+			if needAskHook {
+				setPreCommitHook()
+			}
 		},
 	}
 	cmd.Flags().BoolP(devDelParamFull, devDelParam, false, devDelMsgComment)
+	cp.rootcmd.AddCommand(cmd)
+	cmd.Flags().BoolP(ignorehookDelParamFull, ignorehookDelParam, false, devIgnoreHookMsgComment)
 	cp.rootcmd.AddCommand(cmd)
 
 	return cp
@@ -632,16 +638,16 @@ func (cp *commandProcessor) deleteBranches() {
 
 func setPreCommitHook() {
 	var response string
-	if git.GlobalPreCommitHookExist() || git.LocalPreCommitHookExist() {
+	if git.LocalPreCommitHookExist() {
 		return
 	}
 
-	fmt.Println("\nGit pre-commit hook, preventing commit large files does not exist.\nDo you want to set global hook(y) or local hook(n)?")
+	fmt.Print("\nGit pre-commit hook, preventing commit large files does not exist.\nDo you want to set hook(y/n)?")
 	fmt.Scanln(&response)
 	switch response {
 	case pushYes:
-		git.SetGlobalPreCommitHook()
-	default:
 		git.SetLocalPreCommitHook()
+	default:
+		return
 	}
 }

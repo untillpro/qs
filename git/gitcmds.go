@@ -467,10 +467,14 @@ func DevIssue(issueNumber int) (branch string, notes []string) {
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
-	stdouts, _, err := new(gochips.PipedExec).
+	stdouts, stderr, err := new(gochips.PipedExec).
 		Command("gh", "issue", "develop", strissuenum, "--issue-repo="+parentrepo, "--repo", myrepo).
 		RunToStrings()
-	gochips.ExitIfError(err)
+	if err != nil {
+		fmt.Println(stderr)
+		os.Exit(1)
+		return
+	}
 
 	branch = strings.TrimSpace(stdouts)
 	segments := strings.Split(branch, "/")
@@ -616,10 +620,14 @@ func GetNotesObj() (obj string, result bool) {
 // GetParentRepoName - parent repo of forked
 func GetParentRepoName() (name string) {
 	repo, org := GetRepoAndOrgName()
-	stdouts, _, err := new(gochips.PipedExec).
+	stdouts, strerr, err := new(gochips.PipedExec).
 		Command("gh", "api", "repos/"+org+"/"+repo, "--jq", ".parent.full_name").
 		RunToStrings()
-	gochips.ExitIfError(err)
+	if err != nil {
+		fmt.Println("--------------------------------------------------------------------")
+		fmt.Println(strerr)
+		os.Exit(1)
+	}
 	name = strings.TrimSpace(stdouts)
 	return
 }
@@ -1104,7 +1112,7 @@ func SetGlobalPreCommitHook() {
 // SetLocalPreCommitHook - s.e.
 func SetLocalPreCommitHook() {
 
-	// Set global hooks folder
+	// Turn off globa1 hooks
 	new(gochips.PipedExec).
 		Command(git, "config", "--global", "--unset", "core.hookspath").
 		Run(os.Stdout, os.Stdout)
@@ -1141,9 +1149,17 @@ func fillPreCommitFile(filepath string) {
 	f := createOrOpenFile(filepath)
 	defer f.Close()
 
+	pathLaregFile := "https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh"
+
+	lf := ".git/hooks/large-file-hook.sh"
+	err := new(gochips.PipedExec).
+		Command("curl", "-o", lf, pathLaregFile).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
 	hookcode := "\n#Here is large files commit prevent is added by [qs]\n"
-	hookcode = hookcode + "curl -sSfL https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh | bash\n"
-	_, err := f.WriteString(hookcode)
+	hookcode = hookcode + "bash " + lf + "\n"
+	_, err = f.WriteString(hookcode)
 	gochips.ExitIfError(err)
 
 	cmd := exec.Command("bash", "-c", "chmod +x "+filepath)
