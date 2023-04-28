@@ -19,7 +19,6 @@ const (
 	maxDevBranchName = 50
 	maxFileSize      = 100000
 	maxFileQty       = 200
-	fileSizeErrCode  = 94585767
 
 	utilityName = "qs"                //root command name
 	utilityDesc = "Quick git wrapper" //root command description
