@@ -45,6 +45,7 @@ Path qs.exe should be added to system PATH env variable.
                            If a buffer contains link on issue number, qs dev creates brnach and links it to github issue
 
 - `qs dev -d`         	 : Deletes branches in user's repository, which were accepted & mergred to parent repo
+- `qs dev -i`, 'qs dev --ignore-hook'    : Create developer branch and does not ask to add hook against large files.
 - `qs pr`                : Create pull request. Title is taken from name of topic in "qs dev" command
                          : If a branch is linked to github issue, qs pr makes a pull request, linked to that issue.
 - `qs pr merge [PR URL]` : Merge pull request. 
