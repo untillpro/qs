@@ -349,24 +349,14 @@ func PopStashedFiles() {
 }
 
 func GetMainBranch() string {
-	stdouts, _, err := new(gochips.PipedExec).
+	_, _, err := new(gochips.PipedExec).
 		Command(git, branch, "-r").
+		Command("grep", "/master").
 		RunToStrings()
 	if err == nil {
-		brlistraw := strings.Split(stdouts, "\n")
-		for _, branchstr := range brlistraw {
-			arr := strings.Split(branchstr, "->")
-			if len(arr) > 1 {
-				if strings.Contains(arr[1], "/") && (strings.Contains(arr[1], "main") || strings.Contains(arr[1], "master")) {
-					str := strings.Split(arr[1], slash)
-					if len(str) > 0 {
-						return strings.TrimSpace(str[len(str)-1])
-					}
-				}
-			}
-		}
+		return "master"
 	}
-	return ""
+	return "main"
 }
 
 func getUserName() string {
