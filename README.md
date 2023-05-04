@@ -30,25 +30,26 @@ Path qs.exe should be added to system PATH env variable.
 
 - `qs`: show status of current folder
 
-- `qs d`                 : Download sources (git pull)
-- `qs u -m [message]`    : Upload sources (git add + commit + push)
-- `qs r`                 : Create release
-- `qs g`                 : Shows Git GUI
-- `qs -h`, `qs --help`   : Help for qs
-- `qs -v`, `qs --verbose`: Verbose output
+- `qs d`                    : Download sources (git pull)
+- `qs u -m [message]`       : Upload sources (git add + commit + push)
+- `qs r`                    : Create release
+- `qs g`                    : Shows Git GUI
+- `qs -h`, `qs --help`      : Help for qs
+- `qs -v`, `qs --verbose`   : Verbose output
 
-- `qs fork`  		         : Forks repo to user's account and creates upstream
-- `qs dev repo-name`     : Make new dev branch with name repo-name
-                           Repo-name can be copied as 
-                            - [Name and Permanent link] from Project Kaiser task. 
-                            - URL of github issue with issue number.
-                           If a buffer contains link on issue number, qs dev creates brnach and links it to github issue
+- `qs fork`  		            : Forks repo to user's account and creates upstream
+- `qs dev repo-name`        : Make new dev branch with name repo-name
+                              Repo-name can be copied as 
+                                - [Name and Permanent link] from Project Kaiser task. 
+                                - URL of github issue with issue number.
+                              If a buffer contains link on issue number, qs dev creates brnach and links it to github issue
 
-- `qs dev -d`         	 : Deletes branches in user's repository, which were accepted & mergred to parent repo
+- `qs dev -d`         	    : Deletes branches in user's repository, which were accepted & mergred to parent repo
 - `qs dev -i`, 'qs dev --ignore-hook'    : Create developer branch and does not ask to add hook against large files.
-- `qs pr`                : Create pull request. Title is taken from name of topic in "qs dev" command
-                         : If a branch is linked to github issue, qs pr makes a pull request, linked to that issue.
-- `qs pr merge [PR URL]` : Merge pull request. 
+- `qs pr`                   : Create pull request. Title is taken from name of topic in "qs dev" command
+                            : If a branch is linked to github issue, qs pr makes a pull request, linked to that issue.
+- `qs pr -d`, qs pr --draft : Create pull request draft.
+- `qs pr merge [PR URL]`    : Merge pull request. 
 
 Note:
   - `qs u` takes comment from clipboard. If current branch is "main/master", 
