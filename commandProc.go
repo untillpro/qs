@@ -61,6 +61,8 @@ const (
 	devDelParamFull        = "delete"
 	ignorehookDelParam     = "i"
 	ignorehookDelParamFull = "ignore-hook"
+	prdraftParam           = "d"
+	prdraftParamFull       = "draft"
 
 	prParam        = "pr"
 	prParamDesc    = "Make pull request"
@@ -70,6 +72,7 @@ const (
 
 	devDelMsgComment        = "Deletes all merged branches from forked repository"
 	devIgnoreHookMsgComment = "Ignore creating local hook"
+	prdraftMsgComment       = "Create draft of pull request"
 	devParamDesc            = "Create developer branch"
 	devConfirm              = "Dev branch '$reponame' will be created. Continue(y/n)? "
 	errMsgModFiles          = "You have modified files. Please first commit & push them."
@@ -330,12 +333,17 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				var response string
 				strnotes, _ := git.GetNoteAndURL(notes)
 				if len(strnotes) > 0 {
+					needDraft := false
+					if cmd.Flag(prdraftParamFull).Value.String() == "true" {
+						needDraft = true
+					}
+
 					prMsg := strings.ReplaceAll(prConfirm, "$prname", strnotes)
 					fmt.Print(prMsg)
 					fmt.Scanln(&response)
 					switch response {
 					case pushYes:
-						err = git.MakePR(notes)
+						err = git.MakePR(notes, needDraft)
 					default:
 						fmt.Print(pushFail)
 					}
@@ -349,6 +357,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			}
 		},
 	}
+	cmd.Flags().BoolP(prdraftParamFull, prdraftParam, false, prdraftMsgComment)
 	cp.rootcmd.AddCommand(cmd)
 	return cp
 }
