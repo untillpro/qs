@@ -772,7 +772,7 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 }
 
 // MakePR s.e.
-func MakePR(notes []string) (err error) {
+func MakePR(notes []string, asDraft bool) (err error) {
 	if len(notes) == 0 {
 		return errors.New(errMsgPRNotesImpossible)
 	}
@@ -786,9 +786,15 @@ func MakePR(notes []string) (err error) {
 	}
 	strbody := fmt.Sprintln(body)
 	parentrepo := GetParentRepoName()
-	err = new(gochips.PipedExec).
-		Command("gh", "pr", "create", "-t", strnotes, "-b", strbody, "-R", parentrepo).
-		Run(os.Stdout, os.Stdout)
+	if asDraft {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "create", "--draft", "-t", strnotes, "-b", strbody, "-R", parentrepo).
+			Run(os.Stdout, os.Stdout)
+	} else {
+		err = new(gochips.PipedExec).
+			Command("gh", "pr", "create", "-t", strnotes, "-b", strbody, "-R", parentrepo).
+			Run(os.Stdout, os.Stdout)
+	}
 	return err
 }
 

@@ -61,6 +61,8 @@ const (
 	devDelParamFull        = "delete"
 	ignorehookDelParam     = "i"
 	ignorehookDelParamFull = "ignore-hook"
+	prdraftParam           = "d"
+	prdraftParamFull       = "draft"
 
 	prParam        = "pr"
 	prParamDesc    = "Make pull request"
@@ -330,12 +332,17 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				var response string
 				strnotes, _ := git.GetNoteAndURL(notes)
 				if len(strnotes) > 0 {
+					needDraft := false
+					if cmd.Flag(prdraftParamFull).Value.String() == "true" {
+						needDraft = true
+					}
+
 					prMsg := strings.ReplaceAll(prConfirm, "$prname", strnotes)
 					fmt.Print(prMsg)
 					fmt.Scanln(&response)
 					switch response {
 					case pushYes:
-						err = git.MakePR(notes)
+						err = git.MakePR(notes, needDraft)
 					default:
 						fmt.Print(pushFail)
 					}
@@ -349,6 +356,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			}
 		},
 	}
+	cmd.Flags().BoolP(prdraftParamFull, prdraftParam, false, devDelMsgComment)
 	cp.rootcmd.AddCommand(cmd)
 	return cp
 }
