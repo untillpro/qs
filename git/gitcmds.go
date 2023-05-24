@@ -290,7 +290,7 @@ func GetRepoAndOrgName() (repo string, org string) {
 	if len(arr) > 1 {
 		org = arr[len(arr)-2]
 	}
-	gochips.Info("GetRepoAndOrgName ok", "repourl:", repourl, "arr:", arr, "repo:", repo, "org:", org)
+	gochips.Verbose("GetRepoAndOrgName ok", "repourl:", repourl, "arr:", arr, "repo:", repo, "org:", org)
 	return
 }
 
