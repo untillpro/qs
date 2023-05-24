@@ -63,6 +63,16 @@ func ChangedFilesExist() (uncommitedFiles string, exist bool) {
 	return uncommitedFiles, exist
 }
 
+// Stash entries exist ?
+func stashEntiresExist() bool {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, "stash", "list").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	stashentires := strings.TrimSpace(stdouts)
+	return len(stashentires) > 0
+}
+
 // Status shows git repo status
 func Status(cfg vcs.CfgStatus) {
 	err := new(gochips.PipedExec).
@@ -239,7 +249,10 @@ func Upload(cfg vcs.CfgUpload) {
 					Message: "Choose a remote for your branch:",
 					Options: remotelist,
 				}
-				survey.AskOne(prompt, &choice)
+				err := survey.AskOne(prompt, &choice)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
 
 				fmt.Printf("\nYour choice is %s.\nI am going to execute 'git push --set-upstream %s %s'.\nAgree[y/n]? ", choice, choice, brName)
 				fmt.Scanln(&response)
@@ -329,6 +342,7 @@ func Fork() (repo string, err error) {
 		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
+		gochips.Error("Fork error:", err)
 		return repo, err
 	}
 	return repo, nil
@@ -345,9 +359,15 @@ func GetRemoteUpstreamURL() string {
 }
 
 func PopStashedFiles() {
-	new(gochips.PipedExec).
+	if !stashEntiresExist() {
+		return
+	}
+	_, stderr, err := new(gochips.PipedExec).
 		Command(git, "stash", "pop").
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
+	if err != nil {
+		gochips.Error("PopStashedFiles error:", stderr)
+	}
 }
 
 func GetMainBranch() string {
@@ -1108,9 +1128,12 @@ func SetGlobalPreCommitHook() {
 func SetLocalPreCommitHook() {
 
 	// Turn off globa1 hooks
-	new(gochips.PipedExec).
+	err := new(gochips.PipedExec).
 		Command(git, "config", "--global", "--unset", "core.hookspath").
 		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		gochips.Error("SetLocalPreCommitHook error:", err)
+	}
 
 	dir, _ := os.Getwd()
 	filename := "/.git/hooks/pre-commit"
@@ -1132,11 +1155,11 @@ func createOrOpenFile(filepath string) *os.File {
 		// Create file pre-commit
 		f, err = os.Create(filepath)
 		gochips.ExitIfError(err)
-		_, err := f.WriteString("#!/bin/bash\n")
-		gochips.ExitIfError(err)
+		_, err = f.WriteString("#!/bin/bash\n")
 	} else {
 		f, err = os.OpenFile(filepath, os.O_APPEND|os.O_WRONLY, 0644)
 	}
+	gochips.ExitIfError(err)
 	return f
 }
 
@@ -1158,5 +1181,6 @@ func fillPreCommitFile(filepath string) {
 	gochips.ExitIfError(err)
 
 	cmd := exec.Command("bash", "-c", "chmod +x "+filepath)
-	cmd.Run()
+	err = cmd.Run()
+	gochips.ExitIfError(err)
 }

@@ -130,9 +130,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 			}
 
 			params := []string{}
-			for _, m := range cfgUpload.Message {
-				params = append(params, m)
-			}
+			params = append(params, cfgUpload.Message...)
 
 			bNeedConfirmCommitComment := false
 			if len(params) == 1 {
@@ -202,26 +200,6 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 	return cp
 }
 
-func commitedLimitRespect() bool {
-	var response string
-	filesSize, fileQty := git.GetCommitFileSizes()
-	if filesSize > maxFileSize {
-		fmt.Printf(" %v of adding files exceeds %v. Do you want to continue(y/n)?", filesSize, maxFileSize)
-		fmt.Scanln(&response)
-		if response != "y" {
-			return false
-		}
-	}
-	if fileQty > maxFileQty {
-		fmt.Printf("Total quantity %v of commited files exceeds %v. Do you want to continue(y/n)?", fileQty, maxFileQty)
-		fmt.Scanln(&response)
-		if response != "y" {
-			return false
-		}
-	}
-	return true
-}
-
 func (cp *commandProcessor) addDownloadCmd() *commandProcessor {
 	var cfg vcs.CfgDownload
 	var cmd = &cobra.Command{
@@ -286,10 +264,7 @@ func notCommitedRefused() bool {
 	fmt.Print(confMsgModFiles2)
 	var response string
 	fmt.Scanln(&response)
-	if response != pushYes {
-		return true
-	}
-	return false
+	return response != pushYes
 }
 
 func (cp *commandProcessor) addPr() *commandProcessor {

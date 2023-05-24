@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/ioutil"
+	"os"
 	"strconv"
 
 	coreos "github.com/coreos/go-semver/semver"
@@ -21,7 +21,7 @@ type Version struct {
 }
 
 func ReadVersion() (*Version, error) {
-	bytes, err := ioutil.ReadFile("version")
+	bytes, err := os.ReadFile("version")
 	if err == nil {
 		return &Version{
 			Version:  coreos.New(string(bytes)),
@@ -46,10 +46,10 @@ func ReadVersion() (*Version, error) {
 
 func (v *Version) Save() error {
 	if v.filename == "version" {
-		return ioutil.WriteFile(v.filename, []byte(v.String()), writeFilePermission)
+		return os.WriteFile(v.filename, []byte(v.String()), writeFilePermission)
 	}
 	data := fmt.Sprintf("package main\n\nvar Major = %d\nvar Minor = %d\nvar Patch = %d", v.Major, v.Minor, v.Patch)
-	return ioutil.WriteFile(v.filename, []byte(data), writeFilePermission)
+	return os.WriteFile(v.filename, []byte(data), writeFilePermission)
 
 }
 
