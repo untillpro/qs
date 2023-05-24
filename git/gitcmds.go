@@ -278,9 +278,10 @@ func GetRepoAndOrgName() (repo string, org string) {
 		Command("sed", "s/\\.git$//").
 		RunToStrings()
 	if err != nil {
+		gochips.Error("GetRepoAndOrgName error:", err)
 		return "", ""
 	}
-	repourl := strings.TrimSpace(stdouts)
+	repourl := strings.TrimSuffix(strings.TrimSpace(stdouts), "/")
 	arr := strings.Split(repourl, slash)
 	if len(arr) > 0 {
 		repo = arr[len(arr)-1]
@@ -289,6 +290,7 @@ func GetRepoAndOrgName() (repo string, org string) {
 	if len(arr) > 1 {
 		org = arr[len(arr)-2]
 	}
+	gochips.Info("GetRepoAndOrgName ok", "repourl:", repourl, "arr:", arr, "repo:", repo, "org:", org)
 	return
 }
 
@@ -1071,10 +1073,7 @@ func largFileHookExist(filepath string) bool {
 	err := new(gochips.PipedExec).
 		Command("grep", "-l", substring, filepath).
 		Run(os.Stdout, os.Stdout)
-	if err == nil {
-		return true
-	}
-	return false
+	return err == nil
 }
 
 // SetGlobalPreCommitHook - s.e.
