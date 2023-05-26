@@ -596,7 +596,9 @@ func GetNotes() (notes []string, result bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "notes", "show", obj).
 		RunToStrings()
-	gochips.ExitIfError(err)
+	if err != nil {
+		return notes, true
+	}
 	notes = strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
 	return notes, true
 }
@@ -1183,4 +1185,18 @@ func fillPreCommitFile(filepath string) {
 	cmd := exec.Command("bash", "-c", "chmod +x "+filepath)
 	err = cmd.Run()
 	gochips.ExitIfError(err)
+}
+
+func CheckPRahead() bool {
+	brName := GetCurrentBranchName()
+	fmt.Println("brName: ", brName)
+	mainbr := GetMainBranch()
+	fmt.Println("mainbr: ", mainbr)
+	if mainbr == "" {
+		mainbr = "main"
+	}
+	err := new(gochips.PipedExec).
+		Command(git, "diff", "--quiet", "upstream/"+mainbr+"..."+brName).
+		Run(os.Stdout, os.Stdout)
+	return err == nil
 }

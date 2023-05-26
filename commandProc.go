@@ -287,6 +287,11 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				bDirectPR = false
 			}
 
+			if !git.CheckPRahead() {
+				fmt.Println("\033[0;31mThis branch is not ahead of the upstream.\nPlease update your branch, and test it again before Pull Request.\033[0m")
+				return
+			}
+
 			var err error
 			if bDirectPR {
 
