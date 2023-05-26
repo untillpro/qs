@@ -1189,9 +1189,12 @@ func fillPreCommitFile(filepath string) {
 
 func CheckPRahead() bool {
 	brName := GetCurrentBranchName()
-	fmt.Println("brName: ", brName)
 	mainbr := GetMainBranch()
-	fmt.Println("mainbr: ", mainbr)
+
+	remotelist := getRemotes()
+	if len(remotelist) < 2 {
+		gochips.ExitIfError(errors.New("Upstream is not set, Pull Request can not be done."))
+	}
 	if mainbr == "" {
 		mainbr = "main"
 	}
