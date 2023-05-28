@@ -288,7 +288,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			}
 
 			if !git.CheckPRahead() {
-				fmt.Println("\nThis branch is not ahead of the upstream.\nPlease update your branch, and test it again before Pull Request.")
+				fmt.Println("\nThis branch is ahead of the upstream.\nPlease update your branch, and test it again before Pull Request.")
 				return
 			}
 
