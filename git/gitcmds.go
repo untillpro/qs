@@ -187,7 +187,6 @@ func Release() {
 			Run(os.Stdout, os.Stdout)
 		gochips.ExitIfError(err)
 	}
-
 }
 
 // Upload upload sources to git repo
@@ -1200,6 +1199,22 @@ func CheckPRahead() bool {
 	}
 	err := new(gochips.PipedExec).
 		Command(git, "diff", "--quiet", "upstream/"+mainbr+"..."+brName).
+		Run(os.Stdout, os.Stdout)
+	return err == nil
+}
+
+// GHInstalled returns is gh utility installed
+func GHInstalled() bool {
+	err := new(gochips.PipedExec).
+		Command("gh", "--version").
+		Run(os.Stdout, os.Stdout)
+	return err == nil
+}
+
+// GHLoggedIn returns is gh logged in
+func GHLoggedIn() bool {
+	err := new(gochips.PipedExec).
+		Command("gh", "auth", "status").
 		Run(os.Stdout, os.Stdout)
 	return err == nil
 }

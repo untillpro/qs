@@ -274,6 +274,9 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 
+			if !checkGH() {
+				return
+			}
 			var prurl string
 			bDirectPR := true
 			if len(args) > 0 {
@@ -348,6 +351,10 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 		Short: devParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+
+			if !checkGH() {
+				return
+			}
 			// qs dev -d is running
 			if cmd.Flag(devDelParamFull).Value.String() == "true" {
 				cp.deleteBranches()
@@ -414,6 +421,10 @@ func (cp *commandProcessor) addForkBranch() *commandProcessor {
 		Short: forkParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+
+			if !checkGH() {
+				return
+			}
 
 			if notCommitedRefused() {
 				return
@@ -638,4 +649,15 @@ func setPreCommitHook() {
 	default:
 		return
 	}
+}
+
+func checkGH() bool {
+	if !git.GHInstalled() {
+		fmt.Print("\nGithub cli utility 'gh' is not installed.\nTo install visit page https://cli.github.com/\n")
+		return false
+	}
+	if !git.GHLoggedIn() {
+		return false
+	}
+	return true
 }
