@@ -1198,7 +1198,17 @@ func CheckPRahead() bool {
 		mainbr = "main"
 	}
 	err := new(gochips.PipedExec).
-		Command(git, "diff", "--quiet", "upstream/"+mainbr+"..."+brName).
+		Command("gh", "repo", "sync").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	err = new(gochips.PipedExec).
+		Command(git, "fetch", "upstream").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	err = new(gochips.PipedExec).
+		Command(git, "diff", "--quiet", brName+"...upstream/"+mainbr).
 		Run(os.Stdout, os.Stdout)
 	return err == nil
 }
