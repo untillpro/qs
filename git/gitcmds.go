@@ -1129,12 +1129,9 @@ func SetGlobalPreCommitHook() {
 func SetLocalPreCommitHook() {
 
 	// Turn off globa1 hooks
-	err := new(gochips.PipedExec).
+	new(gochips.PipedExec).
 		Command(git, "config", "--global", "--unset", "core.hookspath").
 		Run(os.Stdout, os.Stdout)
-	if err != nil {
-		gochips.Error("SetLocalPreCommitHook error:", err)
-	}
 
 	dir, _ := os.Getwd()
 	filename := "/.git/hooks/pre-commit"
