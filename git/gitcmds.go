@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -1055,7 +1054,7 @@ func getGlobalHookFolder() string {
 }
 
 func getLocalHookFolder() string {
-	dir, _ := os.Getwd()
+	dir := GetRootFolder()
 	filename := "/.git/hooks/pre-commit"
 	filepath := filepath.Join(dir, filename)
 	return strings.TrimSpace(filepath)
@@ -1091,9 +1090,9 @@ func LocalPreCommitHookExist() bool {
 func largFileHookExist(filepath string) bool {
 	substring := "large-file-hook.sh"
 
-	err := new(gochips.PipedExec).
+	_, _, err := new(gochips.PipedExec).
 		Command("grep", "-l", substring, filepath).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	return err == nil
 }
 
@@ -1125,6 +1124,14 @@ func SetGlobalPreCommitHook() {
 	}
 }
 
+func GetRootFolder() string {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command(git, "rev-parse", "--show-toplevel").
+		RunToStrings()
+	gochips.ExitIfError(err)
+	return strings.TrimSpace(stdouts)
+}
+
 // SetLocalPreCommitHook - s.e.
 func SetLocalPreCommitHook() {
 
@@ -1133,7 +1140,7 @@ func SetLocalPreCommitHook() {
 		Command(git, "config", "--global", "--unset", "core.hookspath").
 		Run(os.Stdout, os.Stdout)
 
-	dir, _ := os.Getwd()
+	dir := GetRootFolder()
 	filename := "/.git/hooks/pre-commit"
 	filepath := filepath.Join(dir, filename)
 
@@ -1161,13 +1168,16 @@ func createOrOpenFile(filepath string) *os.File {
 	return f
 }
 
-func fillPreCommitFile(filepath string) {
-	f := createOrOpenFile(filepath)
+func fillPreCommitFile(myfilepath string) {
+	f := createOrOpenFile(myfilepath)
 	defer f.Close()
 
 	pathLaregFile := "https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh"
 
-	lf := ".git/hooks/large-file-hook.sh"
+	dir := GetRootFolder()
+	fname := "/.git/hooks/large-file-hook.sh"
+	lf := filepath.Join(dir, fname)
+
 	err := new(gochips.PipedExec).
 		Command("curl", "-o", lf, pathLaregFile).
 		Run(os.Stdout, os.Stdout)
@@ -1178,8 +1188,12 @@ func fillPreCommitFile(filepath string) {
 	_, err = f.WriteString(hookcode)
 	gochips.ExitIfError(err)
 
-	cmd := exec.Command("bash", "-c", "chmod +x "+filepath)
-	err = cmd.Run()
+	//cmd := exec.Command("chmod +x " + myfilepath)
+	//err = cmd.Run()
+
+	err = new(gochips.PipedExec).
+		Command("chmod", "+x", myfilepath).
+		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 }
 
