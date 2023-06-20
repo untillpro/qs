@@ -57,12 +57,16 @@ const (
 	forkParamDesc = "Fork original repo"
 
 	devParam               = "dev"
+	upgradeParam           = "upgrade"
+	versionParam           = "version"
 	devDelParam            = "d"
 	devDelParamFull        = "delete"
 	ignorehookDelParam     = "i"
 	ignorehookDelParamFull = "ignore-hook"
 	prdraftParam           = "d"
 	prdraftParamFull       = "draft"
+	noForkParam            = "n"
+	noForkParamFull        = "no-fork"
 
 	prParam        = "pr"
 	prParamDesc    = "Make pull request"
@@ -72,8 +76,11 @@ const (
 
 	devDelMsgComment        = "Deletes all merged branches from forked repository"
 	devIgnoreHookMsgComment = "Ignore creating local hook"
+	devNoForkMsgComment     = "Allows to create branch in main repo"
 	prdraftMsgComment       = "Create draft of pull request"
 	devParamDesc            = "Create developer branch"
+	upgradeParamDesc        = "Print command to upgrade qs"
+	versionParamDesc        = "Print qs version"
 	devConfirm              = "Dev branch '$reponame' will be created. Continue(y/n)? "
 	errMsgModFiles          = "You have modified files. Please first commit & push them."
 
@@ -274,6 +281,9 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 
+			if !CheckQSver() {
+				return
+			}
 			if !checkGH() {
 				return
 			}
@@ -345,6 +355,35 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 	return cp
 }
 
+func (cp *commandProcessor) addVersion() *commandProcessor {
+	var cmd = &cobra.Command{
+		Use:   versionParam,
+		Short: versionParamDesc,
+		Run: func(cmd *cobra.Command, args []string) {
+			globalConfig()
+			ver := git.GetInstalledQSVersion()
+			fmt.Printf("qs has version %s\n", ver)
+			return
+		},
+	}
+	cp.rootcmd.AddCommand(cmd)
+	return cp
+}
+
+func (cp *commandProcessor) addUpgrade() *commandProcessor {
+	var cmd = &cobra.Command{
+		Use:   upgradeParam,
+		Short: upgradeParamDesc,
+		Run: func(cmd *cobra.Command, args []string) {
+			globalConfig()
+			fmt.Println("\ngo install github.com/untillpro/qs@latest")
+			return
+		},
+	}
+	cp.rootcmd.AddCommand(cmd)
+	return cp
+}
+
 func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	var cmd = &cobra.Command{
 		Use:   devParam,
@@ -352,6 +391,9 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 
+			if !CheckQSver() {
+				return
+			}
 			if !checkGH() {
 				return
 			}
@@ -373,6 +415,15 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				clipargs := strings.TrimSpace(getArgStringFromClipboard())
 				args = append(args, clipargs)
 			}
+			remoteURL := git.GetRemoteUpstreamURL()
+			noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == "true")
+			if !noForkAllowed {
+				if len(remoteURL) == 0 {
+					repo, org := git.GetRepoAndOrgName()
+					fmt.Printf("You are in %s/%s repo\nExecute 'qs fork' first\n", org, repo)
+					return
+				}
+			}
 			issueNum, ok := argContainsIssueLink(args...)
 			if ok {
 				fmt.Println("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
@@ -388,7 +439,6 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				fmt.Print(devMsg)
 				fmt.Scanln(&response)
 			}
-			remoteURL := git.GetRemoteUpstreamURL()
 			switch response {
 			case pushYes:
 				// Remote developer branch, linked to issue is created
@@ -410,7 +460,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	cmd.Flags().BoolP(devDelParamFull, devDelParam, false, devDelMsgComment)
 	cp.rootcmd.AddCommand(cmd)
 	cmd.Flags().BoolP(ignorehookDelParamFull, ignorehookDelParam, false, devIgnoreHookMsgComment)
-	cp.rootcmd.AddCommand(cmd)
+	cmd.Flags().BoolP(noForkParamFull, noForkParam, false, devNoForkMsgComment)
 
 	return cp
 }
@@ -657,6 +707,27 @@ func checkGH() bool {
 		return false
 	}
 	if !git.GHLoggedIn() {
+		return false
+	}
+	return true
+}
+
+func CheckQSver() bool {
+	installedver := git.GetInstalledQSVersion()
+	lastver := git.GetLastQSVersion()
+
+	if installedver != lastver {
+		fmt.Printf("Installed qs version %s is too old (last verison is %s)\n", installedver, lastver)
+		fmt.Println("You can install last version with:")
+		fmt.Println("-----------------------------------------")
+		fmt.Println("go install github.com/untillpro/qs@latest")
+		fmt.Println("-----------------------------------------")
+		fmt.Println("Ignore it and continue with current version?(y/n)")
+		var response string
+		fmt.Scanln(&response)
+		if response == pushYes {
+			return true
+		}
 		return false
 	}
 	return true

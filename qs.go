@@ -9,6 +9,8 @@ func main() {
 		addGUICmd().
 		addForkBranch().
 		addDevBranch().
-		addPr()
+		addPr().
+		addUpgrade().
+		addVersion()
 	cmdproc.Execute()
 }

@@ -1239,3 +1239,42 @@ func GHLoggedIn() bool {
 		Run(os.Stdout, os.Stdout)
 	return err == nil
 }
+
+func GetInstalledQSVersion() string {
+	stdouts, stderr, err := new(gochips.PipedExec).
+		Command("go", "env", "GOPATH").
+		RunToStrings()
+	if err != nil {
+		gochips.Error("GetInstalledVersion error:", stderr)
+	}
+
+	gopath := strings.TrimSpace(stdouts)
+	if len(gopath) == 0 {
+		gochips.Error("GetInstalledVersion error:", errors.New("GOPATH is not defined"))
+	}
+	stdouts, stderr, err = new(gochips.PipedExec).
+		Command("go", "version", "-m", gopath+"/bin/qs").
+		Command("grep", "-i", "mod.*github.com/untillpro/qs").
+		Command("awk", "{print $3}").
+		RunToStrings()
+	if err != nil {
+		gochips.Error("GetInstalledQSVersion error:", stderr)
+	}
+	return strings.TrimSpace(stdouts)
+}
+
+func GetLastQSVersion() string {
+	stdouts, stderr, err := new(gochips.PipedExec).
+		Command("go", "list", "-m", "-versions", "github.com/untillpro/qs").
+		RunToStrings()
+	if err != nil {
+		gochips.Error("GetLastQSVersion error:", stderr)
+	}
+
+	arr := strings.Split(strings.TrimSpace(stdouts), " ")
+	if len(arr) == 0 {
+		return ""
+	}
+
+	return arr[len(arr)-1]
+}
