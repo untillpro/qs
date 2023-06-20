@@ -299,12 +299,12 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 				bDirectPR = false
 			}
-
-			if !git.CheckPRahead() {
-				fmt.Println("\nThis branch is out-of-date.\nPlease update branch from upstream, and test it again before Pull Request.")
-				return
-			}
-
+			/*
+				if !git.CheckPRahead() {
+					fmt.Println("\nThis branch is out-of-date.\nPlease update branch from upstream, and test it again before Pull Request.")
+					return
+				}
+			*/
 			var err error
 			if bDirectPR {
 

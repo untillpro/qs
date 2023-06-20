@@ -336,6 +336,11 @@ func Fork() (repo string, err error) {
 			Run(os.Stdout, os.Stdout)
 		gochips.ExitIfError(err)
 	}
+
+	err = new(gochips.PipedExec).
+		Command("gh", "repo", "set-default").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 	err = new(gochips.PipedExec).
 		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
 		Run(os.Stdout, os.Stdout)
@@ -1260,6 +1265,7 @@ func GetInstalledQSVersion() string {
 	if err != nil {
 		gochips.Error("GetInstalledQSVersion error:", stderr)
 	}
+	fmt.Println("curver:", GetLastQSVersion())
 	return strings.TrimSpace(stdouts)
 }
 
