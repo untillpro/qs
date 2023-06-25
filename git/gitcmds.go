@@ -1259,21 +1259,14 @@ func GetInstalledQSVersion() string {
 		qsexe = "qs.exe"
 	}
 
-	gochips.Error("qsexe:", qsexe)
 	stdouts, stderr, err = new(gochips.PipedExec).
 		Command("go", "version", "-m", gopath+"/bin/"+qsexe).
-		RunToStrings()
-	fmt.Println("stdouts:", stdouts)
-
-	stdouts, stderr, err = new(gochips.PipedExec).
-		Command("go", "version", "-m", gopath+"/bin/"+qsexe).
-		Command("grep", "-i", "mod.*github.com/untillpro/qs").
+		Command("grep", "-i", "-h", "mod.*github.com/untillpro/qs").
 		Command("awk", "{print $3}").
 		RunToStrings()
 	if err != nil {
 		gochips.Error("GetInstalledQSVersion error:", stderr)
 	}
-	fmt.Println("Last available version qs:", GetLastQSVersion())
 	return strings.TrimSpace(stdouts)
 }
 
