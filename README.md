@@ -49,8 +49,12 @@ Path qs.exe should be added to system PATH env variable.
 - `qs pr`                   : Create pull request. Title is taken from name of topic in "qs dev" command
                             : If a branch is linked to github issue, qs pr makes a pull request, linked to that issue.
 - `qs pr -d`, qs pr --draft : Create pull request draft.
-- `qs pr merge [PR URL]`    : Merge pull request. 
+- `qs pr merge [PR URL]`    : Merge pull request.
 
+- `qs upgrade`  	          : Shows command to install qs
+- `qs version`  	          : Shows version of currently installed qs
+
+  
 Note:
   - `qs u` takes comment from clipboard. If current branch is "main/master", 
            and message is empty or very short (<3 symbols), qs willask to enter message.
