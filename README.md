@@ -5,7 +5,7 @@
 ### gh    version > 2.27
 - https://github.com/cli/cli
 - MSI: https://github.com/cli/cli/releases/tag/v2.3.0
-- chocolatey: choco install gh
+- chocolatey: choco install ghhttps://github.com/untillpro/qs/blob/main/README.md
   - https://docs.chocolatey.org/en-us/choco/setup#install-with-cmd.exe
   - Also
     - choco install gh
@@ -45,7 +45,8 @@ Path qs.exe should be added to system PATH env variable.
                               If a buffer contains link on issue number, qs dev creates brnach and links it to github issue
 
 - `qs dev -d`         	    : Deletes branches in user's repository, which were accepted & mergred to parent repo
-- `qs dev -i`, 'qs dev --ignore-hook'    : Create developer branch and does not ask to add hook against large files.
+- `qs dev -i`, `qs dev --ignore-hook`    : Create developer branch and does not ask to add hook against large files.
+- `qs dev -n`, `qs dev --no-fork`        : Allows to create developer branch in trunk.
 - `qs pr`                   : Create pull request. Title is taken from name of topic in "qs dev" command
                             : If a branch is linked to github issue, qs pr makes a pull request, linked to that issue.
 - `qs pr -d`, qs pr --draft : Create pull request draft.
