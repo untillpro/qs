@@ -1181,7 +1181,7 @@ func fillPreCommitFile(myfilepath string) {
 	lf := filepath.Join(dir, fname)
 
 	err := new(gochips.PipedExec).
-		Command("curl", "-o", lf, pathLaregFile).
+		Command("curl", "-s", "-o", lf, pathLaregFile).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
