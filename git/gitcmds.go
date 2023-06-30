@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/user"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1058,7 +1057,7 @@ func getGlobalHookFolder() string {
 func getLocalHookFolder() string {
 	dir := GetRootFolder()
 	filename := "/.git/hooks/pre-commit"
-	filepath := filepath.Join(dir, filename)
+	filepath := dir + filename
 	return strings.TrimSpace(filepath)
 }
 
@@ -1144,7 +1143,7 @@ func SetLocalPreCommitHook() {
 
 	dir := GetRootFolder()
 	filename := "/.git/hooks/pre-commit"
-	filepath := filepath.Join(dir, filename)
+	filepath := dir + filename
 
 	// Check if the file already exists
 	f := createOrOpenFile(filepath)
@@ -1178,7 +1177,7 @@ func fillPreCommitFile(myfilepath string) {
 
 	dir := GetRootFolder()
 	fname := "/.git/hooks/large-file-hook.sh"
-	lf := filepath.Join(dir, fname)
+	lf := dir + fname
 
 	err := new(gochips.PipedExec).
 		Command("curl", "-s", "-o", lf, pathLaregFile).
