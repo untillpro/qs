@@ -430,7 +430,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				fmt.Scanln(&response)
 				if response == pushYes {
 					// Remote developer branch, linked to issue is created
-					branch, notes = git.DevIssue(issueNum)
+					branch, notes = git.DevIssue(issueNum, args...)
 				}
 			} else {
 				branch, notes = getBranchName(false, args...)
@@ -510,8 +510,7 @@ func argContainsIssueLink(args ...string) (IssueNum int, ok bool) {
 		return
 	}
 	url := args[0]
-	parentrepo := git.GetParentRepoName()
-	if strings.Contains(url, parentrepo+"/issues") {
+	if strings.Contains(url, "/issues") {
 		segments := strings.Split(url, "/")
 		strIssueNum := segments[len(segments)-1]
 		i, err := strconv.Atoi(strIssueNum)
@@ -601,11 +600,13 @@ func getArgStringFromClipboard() string {
 
 func cleanArgfromSpecSymbols(arg string) string {
 	var symbol string
-	replaceToMinus := []string{" ", ",", ";", ".", ":", "?", "!"}
+
+	arg = strings.ReplaceAll(arg, "https://", "")
+	replaceToMinus := []string{" ", ",", ";", ".", ":", "?", "/", "!"}
 	for _, symbol = range replaceToMinus {
 		arg = strings.ReplaceAll(arg, symbol, "-")
 	}
-	replaceToNone := []string{"&", "$", "@", "%", "/", "\\", "(", ")", "{", "}", "[", "]", "<", ">", "'", "\""}
+	replaceToNone := []string{"&", "$", "@", "%", "\\", "(", ")", "{", "}", "[", "]", "<", ">", "'", "\""}
 	for _, symbol = range replaceToNone {
 		arg = strings.ReplaceAll(arg, symbol, "")
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/assert"
+	"github.com/untillpro/qs/git"
 )
 
 func TestDeleteDup(t *testing.T) {
@@ -40,10 +41,20 @@ func TestGetBranchName(t *testing.T) {
 	assert.Equal(t, str, "13427-Show-ivv-must-go-on")
 	str, _ = getBranchName(false, "q", "dev", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-q-dev")
+	str, _ = getBranchName(false, "q", "dev", "https://dev.heeus.io/launchpad/#!13427")
+	assert.Equal(t, str, "13427-q-dev")
 
 	//Logn name
 	str, _ = getBranchName(false, "Show", "me this  very long string more than fifty symbols in lenth with long task number 11111111111111", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-Show-me-this-very-long-string-more-than-fift")
+
+	//URL name
+	str, _ = getBranchName(false, "https://www.projectkaiser.com/online/#!3206802")
+	assert.Equal(t, str, "www-projectkaiser-com-online-#-3206802")
+
+	str, _ = getBranchName(false, "https://github.com/voedger/voedger/issues/395")
+	assert.Equal(t, str, "github-com-voedger-voedger-issues-395")
+
 }
 
 func TestClipBoard(t *testing.T) {
@@ -59,4 +70,9 @@ func TestClipBoard(t *testing.T) {
 		newarg += " "
 	}
 	assert.NotEmpty(t, newarg)
+}
+
+func TestIssueRepoFromURL(t *testing.T) {
+	repo := git.GetIssuerepoFromUrl("https://github.com/untillpro/qs/issues/24")
+	assert.Equal(t, repo, "untillpro/qs")
 }

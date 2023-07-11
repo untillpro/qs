@@ -372,12 +372,12 @@ func PopStashedFiles() {
 func GetMainBranch() string {
 	_, _, err := new(gochips.PipedExec).
 		Command(git, branch, "-r").
-		Command("grep", "/master").
+		Command("grep", "/main").
 		RunToStrings()
 	if err == nil {
-		return "master"
+		return "main"
 	}
-	return "main"
+	return "master"
 }
 
 func getUserName() string {
@@ -461,8 +461,26 @@ func DevShort(branch string, comments []string) {
 	}
 }
 
+func GetIssuerepoFromUrl(url string) (reponame string) {
+	if len(url) < 2 {
+		return
+	}
+	if strings.HasSuffix(url, "/") {
+		url = url[:len(url)-1]
+	}
+
+	arr := strings.Split(url, slash)
+	if len(arr) > 5 {
+		repo := arr[len(arr)-3]
+		org := arr[len(arr)-4]
+		reponame = org + "/" + repo
+	}
+
+	return
+}
+
 // Dev issue branch
-func DevIssue(issueNumber int) (branch string, notes []string) {
+func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	repo, org := GetRepoAndOrgName()
 	if len(repo) == 0 {
 		fmt.Println(repoNotFound)
@@ -472,6 +490,13 @@ func DevIssue(issueNumber int) (branch string, notes []string) {
 	strissuenum := strconv.Itoa(issueNumber)
 	myrepo := org + "/" + repo
 	parentrepo := GetParentRepoName()
+	if len(args) > 0 {
+		url := args[0]
+		issuerepo := GetIssuerepoFromUrl(url)
+		if len(issuerepo) > 0 {
+			parentrepo = issuerepo
+		}
+	}
 
 	err := new(gochips.PipedExec).
 		Command("gh", "repo", "set-default", myrepo).
@@ -498,6 +523,23 @@ func DevIssue(issueNumber int) (branch string, notes []string) {
 	}
 	comment := "Resolves " + parentrepo + "#" + strissuenum
 	return branch, []string{comment}
+	/*
+		stdouts, stderr, err = new(gochips.PipedExec).
+			Command("gh", "issue", "view", strissuenum, "--repo", parentrepo).
+			Command("grep", "title:").
+			Command("awk", "{ $1=\"\"; print substr($0, 2) }").
+			RunToStrings()
+		if err != nil {
+			fmt.Println(err)
+			fmt.Println(stderr)
+			os.Exit(1)
+			return
+		}
+		issuename := strings.TrimSpace(stdouts)
+
+		comment := "Merge pull request #" + strissuenum
+		return branch, []string{comment}
+	*/
 }
 
 // Dev branch
