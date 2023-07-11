@@ -362,7 +362,7 @@ func (cp *commandProcessor) addVersion() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 			ver := git.GetInstalledQSVersion()
-			fmt.Printf("qs has version %s\n", ver)
+			fmt.Printf("qs version %s\n", ver)
 			return
 		},
 	}
