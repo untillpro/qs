@@ -638,7 +638,7 @@ func GetNotes() (notes []string, result bool) {
 		Command(git, "notes", "show", obj).
 		RunToStrings()
 	if err != nil {
-		return notes, true
+		return notes, false
 	}
 	notes = strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
 	return notes, true
