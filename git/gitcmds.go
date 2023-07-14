@@ -599,20 +599,6 @@ func addNotes(comments []string) {
 	if len(comments) == 0 {
 		return
 	}
-	// Remove all existing Notes
-	/*
-		if notesObsj, ok := GetNotesObj(); ok {
-			for _, notesObj := range notesObsj {
-				str := strings.TrimSpace(notesObj)
-				if len(str) > 0 {
-					err := new(gochips.PipedExec).
-						Command(git, "notes", "remove", str).
-						Run(os.Stdout, os.Stdout)
-					gochips.ExitIfError(err)
-				}
-			}
-		}
-	*/
 	// Add new Notes
 	for _, s := range comments {
 		str := strings.TrimSpace(s)

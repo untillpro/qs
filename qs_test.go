@@ -43,6 +43,8 @@ func TestGetBranchName(t *testing.T) {
 	assert.Equal(t, str, "13427-q-dev")
 	str, _ = getBranchName(false, "q", "dev", "https://dev.heeus.io/launchpad/#!13427")
 	assert.Equal(t, str, "13427-q-dev")
+	str, _ = getBranchName(false, "qs: add Kaiser task link to generated commit message", "https://dev.heeus.io/launchpad/#!25947")
+	assert.Equal(t, str, "25947-qs-add-Kaiser-task-link-to-generated-commit")
 
 	//Logn name
 	str, _ = getBranchName(false, "Show", "me this  very long string more than fifty symbols in lenth with long task number 11111111111111", "https://dev.heeus.io/launchpad/#!13427")

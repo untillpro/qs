@@ -610,9 +610,6 @@ func cleanArgfromSpecSymbols(arg string) string {
 	for _, symbol = range replaceToNone {
 		arg = strings.ReplaceAll(arg, symbol, "")
 	}
-	for string(arg[len(arg)-1]) == msymbol {
-		arg = arg[:len(arg)-1]
-	}
 	for string(arg[0]) == msymbol {
 		arg = arg[1:]
 	}
@@ -620,6 +617,9 @@ func cleanArgfromSpecSymbols(arg string) string {
 	arg = deleteDupMinus(arg)
 	if len(arg) > maxDevBranchName {
 		arg = arg[:maxDevBranchName]
+	}
+	for string(arg[len(arg)-1]) == msymbol {
+		arg = arg[:len(arg)-1]
 	}
 	return arg
 }
