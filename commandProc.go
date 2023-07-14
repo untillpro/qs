@@ -319,6 +319,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					fmt.Println(errMsgPRNotesNotFound)
 					scanner := bufio.NewScanner(os.Stdin)
 					scanner.Scan()
+
 					prnotes := scanner.Text()
 					prnotes = strings.TrimSpace(prnotes)
 					notes = append(notes, prnotes)
