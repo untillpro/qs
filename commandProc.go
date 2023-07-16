@@ -419,7 +419,8 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			remoteURL := git.GetRemoteUpstreamURL()
 			noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == "true")
 			if !noForkAllowed {
-				if len(remoteURL) == 0 {
+				parentrepo := git.GetParentRepoName()
+				if len(parentrepo) == 0 { // main repository, not forked
 					repo, org := git.GetRepoAndOrgName()
 					fmt.Printf("You are in %s/%s repo\nExecute 'qs fork' first\n", org, repo)
 					return

@@ -637,7 +637,9 @@ func GetNotesObj() (obj string, result bool) {
 		Command(git, "log", "--pretty=format:'%cd'", "--date=iso", "HEAD", "^"+main).
 		Command("tail", "-1").
 		RunToStrings()
-	gochips.ExitIfError(err)
+	if err != nil {
+		return "", false
+	}
 	if len(stdouts) == 0 {
 		return "", false
 	}
