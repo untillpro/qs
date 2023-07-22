@@ -56,7 +56,7 @@ Path qs.exe should be added to system PATH env variable.
 - `qs version`  	          : Shows version of currently installed qs
 
   
-**Note**
+> **Note**
   - `qs u` takes comment from clipboard. If current branch is "main/master", 
            and message is empty or very short (<3 symbols), qs willask to enter message.
            If the message is too short, it shows error:   
