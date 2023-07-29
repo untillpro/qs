@@ -315,6 +315,18 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 
 				notes, ok := git.GetNotes()
 				if !ok {
+					// Try to get github issue name by branch name
+					parentrepo := git.GetParentRepoName()
+					issueNum, issueok := git.GetIssueNumFromBranchName(parentrepo)
+					if issueok {
+						name := git.GetIssueNameByNumber(issueNum, parentrepo)
+						s := "resolves issue " + name
+						body := "Resolves #" + issueNum + " " + name
+						notes = []string{s, body}
+						ok = true
+					}
+				}
+				if !ok {
 					// Ask PR title
 					fmt.Println(errMsgPRNotesNotFound)
 					scanner := bufio.NewScanner(os.Stdin)

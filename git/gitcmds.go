@@ -206,7 +206,7 @@ func Upload(cfg vcs.CfgUpload) {
 		var response string
 		fmt.Println("")
 		fmt.Println(strings.TrimSpace(sterr))
-		fmt.Println("Do you want to commit anyway(y/n)?")
+		fmt.Print("Do you want to commit anyway(y/n)?")
 		fmt.Scanln(&response)
 		if response != "y" {
 			return
@@ -282,17 +282,22 @@ func Gui() {
 	gochips.ExitIfError(err)
 }
 
-// GetRepoAndOrgName - from .git/config
-func GetRepoAndOrgName() (repo string, org string) {
+func getFullRepoAndOrgName() string {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "config", "--local", "remote.origin.url").
 		Command("sed", "s/\\.git$//").
 		RunToStrings()
 	if err != nil {
-		gochips.Error("GetRepoAndOrgName error:", err)
-		return "", ""
+		gochips.Error("getFullRepoAndOrgName error:", err)
+		return ""
 	}
-	repourl := strings.TrimSuffix(strings.TrimSpace(stdouts), "/")
+	return strings.TrimSuffix(strings.TrimSpace(stdouts), "/")
+}
+
+// GetRepoAndOrgName - from .git/config
+func GetRepoAndOrgName() (repo string, org string) {
+
+	repourl := getFullRepoAndOrgName()
 	arr := strings.Split(repourl, slash)
 	if len(arr) > 0 {
 		repo = arr[len(arr)-1]
@@ -521,25 +526,26 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 		os.Exit(1)
 		return
 	}
-	comment := "Resolves " + parentrepo + "#" + strissuenum
-	return branch, []string{comment}
-	/*
-		stdouts, stderr, err = new(gochips.PipedExec).
-			Command("gh", "issue", "view", strissuenum, "--repo", parentrepo).
-			Command("grep", "title:").
-			Command("awk", "{ $1=\"\"; print substr($0, 2) }").
-			RunToStrings()
-		if err != nil {
-			fmt.Println(err)
-			fmt.Println(stderr)
-			os.Exit(1)
-			return
-		}
-		issuename := strings.TrimSpace(stdouts)
 
-		comment := "Merge pull request #" + strissuenum
-		return branch, []string{comment}
-	*/
+	issuename := GetIssueNameByNumber(strissuenum, parentrepo)
+	comment := "resolves issue " + issuename
+	body := ""
+	if len(issuename) > 0 {
+		body = "Resolves #" + strissuenum + " " + issuename
+	}
+	return branch, []string{comment, body}
+}
+
+func GetIssueNameByNumber(issueNum string, parentrepo string) string {
+	stdouts, _, err := new(gochips.PipedExec).
+		Command("gh", "issue", "view", issueNum, "--repo", parentrepo).
+		Command("grep", "title:").
+		Command("awk", "{ $1=\"\"; print substr($0, 2) }").
+		RunToStrings()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(stdouts)
 }
 
 // Dev branch
@@ -812,16 +818,30 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 		if len(s) > 0 {
 			if strings.Contains(s, httppref) {
 				url = s
-			} else {
-				if len(note) == 0 {
-					note = s
-				} else {
-					note = note + " " + s
+				if len(note) > 0 {
+					break
 				}
+			} else {
+				note = s
+				break
 			}
 		}
 	}
 	return note, url
+}
+
+func getBodyFromNotes(notes []string) string {
+	b := ""
+	if (len(notes) > 1) && strings.Contains(notes[0], "resolves issue") {
+		for i, note := range notes {
+			note = strings.TrimSpace(note)
+			strings.Split(strings.ReplaceAll(note, "\r\n", "\n"), "")
+			if i > 0 && len(note) > 0 {
+				b = b + note
+			}
+		}
+	}
+	return b
 }
 
 // MakePR s.e.
@@ -832,12 +852,14 @@ func MakePR(notes []string, asDraft bool) (err error) {
 	var strnotes string
 	var url string
 	strnotes, url = GetNoteAndURL(notes)
-
-	body := strnotes
-	if len(url) > 0 {
-		body = body + "\n" + url
+	b := getBodyFromNotes(notes)
+	if len(b) == 0 {
+		b = strnotes
 	}
-	strbody := fmt.Sprintln(body)
+	if len(url) > 0 {
+		b = b + "\n" + url
+	}
+	strbody := fmt.Sprintln(b)
 	parentrepo := GetParentRepoName()
 	if asDraft {
 		err = new(gochips.PipedExec).
@@ -1313,4 +1335,32 @@ func GetLastQSVersion() string {
 	}
 
 	return arr[len(arr)-1]
+}
+
+func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
+	stdouts, stderr, err := new(gochips.PipedExec).
+		Command("gh", "issue", "list", "-R", parentrepo).
+		Command("gawk", "{print $1}").
+		RunToStrings()
+	if err != nil {
+		gochips.Error("GetIssueNumFromBranchName:", stderr)
+		return "", false
+	}
+	issuenums := strings.Split(stdouts, "\n")
+	myfullbranchname := strings.TrimSpace(getFullRepoAndOrgName() + "/tree/" + GetCurrentBranchName())
+	for _, issuenum := range issuenums {
+		stdouts1, _, err1 := new(gochips.PipedExec).
+			Command("gh", "issue", "develop", issuenum, "--list", "-R", parentrepo).
+			Command("gawk", "{print $2}").
+			RunToStrings()
+		if (err1 == nil) && (len(stdouts1) > 10) {
+			linkedbranches := strings.Split(stdouts1, "\n")
+			for _, linkedbranche := range linkedbranches {
+				if strings.EqualFold(myfullbranchname, linkedbranche) {
+					return issuenum, true
+				}
+			}
+		}
+	}
+	return "", false
 }
