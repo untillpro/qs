@@ -319,10 +319,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					parentrepo := git.GetParentRepoName()
 					issueNum, issueok := git.GetIssueNumFromBranchName(parentrepo)
 					if issueok {
-						name := git.GetIssueNameByNumber(issueNum, parentrepo)
-						s := "resolves issue " + name
-						body := "Resolves #" + issueNum + " " + name
-						notes = []string{s, body}
+						notes = git.GetIssuePRTitle(issueNum, parentrepo)
 						ok = true
 					}
 				}
@@ -440,7 +437,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			}
 			issueNum, ok := argContainsIssueLink(args...)
 			if ok {
-				fmt.Println("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
+				fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
 				fmt.Scanln(&response)
 				if response == pushYes {
 					// Remote developer branch, linked to issue is created
