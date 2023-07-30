@@ -43,6 +43,8 @@ const (
 	errSomethigWrong        = "Something went wrong"
 	errUnknowGHResponse     = "Unkown response from gh"
 	PushDefaultMsg          = "misc"
+
+	IssuePRTtilePrefix = "Resolves issue"
 )
 
 type gchResponse struct {
@@ -528,7 +530,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	}
 
 	issuename := GetIssueNameByNumber(strissuenum, parentrepo)
-	comment := "resolves issue " + issuename
+	comment := IssuePRTtilePrefix + " " + issuename
 	body := ""
 	if len(issuename) > 0 {
 		body = "Resolves #" + strissuenum + " " + issuename
@@ -822,8 +824,14 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 					break
 				}
 			} else {
-				note = s
-				break
+				if note == "" {
+					note = s
+				} else {
+					note = note + " " + s
+				}
+				if strings.Contains(s, IssuePRTtilePrefix) {
+					break
+				}
 			}
 		}
 	}
@@ -832,7 +840,7 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 
 func getBodyFromNotes(notes []string) string {
 	b := ""
-	if (len(notes) > 1) && strings.Contains(notes[0], "resolves issue") {
+	if (len(notes) > 1) && strings.Contains(notes[0], IssuePRTtilePrefix) {
 		for i, note := range notes {
 			note = strings.TrimSpace(note)
 			strings.Split(strings.ReplaceAll(note, "\r\n", "\n"), "")
@@ -1363,4 +1371,11 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 		}
 	}
 	return "", false
+}
+
+func GetIssuePRTitle(issueNum string, parentrepo string) []string {
+	name := GetIssueNameByNumber(issueNum, parentrepo)
+	s := IssuePRTtilePrefix + " " + name
+	body := "Resolves #" + issueNum + " " + name
+	return []string{s, body}
 }
