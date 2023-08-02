@@ -1258,23 +1258,22 @@ func fillPreCommitFile(myfilepath string) {
 	gochips.ExitIfError(err)
 }
 
-func CheckPRahead() bool {
+func UpstreamNotExist(repo string) bool {
+	remotelist := getRemotes()
+	return len(remotelist) < 2
+}
+
+func PRAhead() bool {
 	brName := GetCurrentBranchName()
 	mainbr := GetMainBranch()
 
 	remotelist := getRemotes()
 	if len(remotelist) < 2 {
 		gochips.ExitIfError(errors.New("Upstream is not set, Pull Request can not be done."))
-	}
-	if mainbr == "" {
-		mainbr = "main"
-	}
-	err := new(gochips.PipedExec).
-		Command("gh", "repo", "sync").
-		Run(os.Stdout, os.Stdout)
-	gochips.ExitIfError(err)
 
-	err = new(gochips.PipedExec).
+	}
+
+	err := new(gochips.PipedExec).
 		Command(git, "fetch", "upstream").
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
@@ -1282,7 +1281,21 @@ func CheckPRahead() bool {
 	err = new(gochips.PipedExec).
 		Command(git, "diff", "--quiet", brName+"...upstream/"+mainbr).
 		Run(os.Stdout, os.Stdout)
-	return err == nil
+	return err != nil
+}
+
+func MergeFromUpstream() {
+	mainbr := GetMainBranch()
+	err := new(gochips.PipedExec).
+		Command(git, "pull", "upstream", mainbr).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	brName := GetCurrentBranchName()
+	err = new(gochips.PipedExec).
+		Command(git, "push", "origin", brName).
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 // GHInstalled returns is gh utility installed

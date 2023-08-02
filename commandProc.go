@@ -299,12 +299,31 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 				bDirectPR = false
 			}
-			/*
-				if !git.CheckPRahead() {
-					fmt.Println("\nThis branch is out-of-date.\nPlease update branch from upstream, and test it again before Pull Request.")
+
+			parentrepo := git.GetParentRepoName()
+			var response string
+			if git.UpstreamNotExist(parentrepo) {
+				fmt.Print("Upstream not found. Repository " + parentrepo + " will be addeda s upstream. Agree[y/n]?")
+				fmt.Scanln(&response)
+				if response != pushYes {
+					fmt.Print(pushFail)
 					return
 				}
-			*/
+				response = ""
+				git.MakeUpstream(parentrepo)
+			}
+
+			if git.PRAhead() {
+				fmt.Println("This branch is out-of-date.\nMerge automatically[y/n]?")
+				fmt.Scanln(&response)
+				if response != pushYes {
+					fmt.Print(pushFail)
+					return
+				}
+				response = ""
+				git.MergeFromUpstream()
+			}
+
 			var err error
 			if bDirectPR {
 
@@ -316,7 +335,6 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				notes, ok := git.GetNotes()
 				if !ok {
 					// Try to get github issue name by branch name
-					parentrepo := git.GetParentRepoName()
 					issueNum, issueok := git.GetIssueNumFromBranchName(parentrepo)
 					if issueok {
 						notes = git.GetIssuePRTitle(issueNum, parentrepo)
@@ -333,7 +351,6 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					prnotes = strings.TrimSpace(prnotes)
 					notes = append(notes, prnotes)
 				}
-				var response string
 				strnotes, _ := git.GetNoteAndURL(notes)
 				if len(strnotes) > 0 {
 					needDraft := false
@@ -350,6 +367,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					default:
 						fmt.Print(pushFail)
 					}
+					response = ""
 				}
 			} else {
 				err = git.MakePRMerge(prurl)
