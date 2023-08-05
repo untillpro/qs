@@ -860,7 +860,7 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 
 func getBodyFromNotes(notes []string) string {
 	b := ""
-	if (len(notes) > 1) && strings.Contains(notes[0], IssuePRTtilePrefix) {
+	if (len(notes) > 1) && strings.Contains(strings.ToLower(notes[0]), strings.ToLower(IssuePRTtilePrefix)) {
 		for i, note := range notes {
 			note = strings.TrimSpace(note)
 			strings.Split(strings.ReplaceAll(note, "\r\n", "\n"), "")
