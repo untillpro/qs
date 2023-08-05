@@ -53,13 +53,23 @@ type gchResponse struct {
 	_err    error
 }
 
-// ChangedFilesExist s.e.
-func ChangedFilesExist() (uncommitedFiles string, exist bool) {
+func CheckIfGitRepo() string {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("git", "status", "-s").
 		RunToStrings()
+	if err != nil {
+		if strings.Contains(err.Error(), "128") {
+			err = errors.New("This is not a git repository.")
+		}
+	}
 	gochips.ExitIfError(err)
-	uncommitedFiles = strings.TrimSpace(stdouts)
+	return stdouts
+}
+
+// ChangedFilesExist s.e.
+func ChangedFilesExist() (uncommitedFiles string, exist bool) {
+	files := CheckIfGitRepo()
+	uncommitedFiles = strings.TrimSpace(files)
 	exist = len(uncommitedFiles) > 0
 	return uncommitedFiles, exist
 }
@@ -76,18 +86,18 @@ func stashEntiresExist() bool {
 
 // Status shows git repo status
 func Status(cfg vcs.CfgStatus) {
-	err := new(gochips.PipedExec).
+	stdout, _, err := new(gochips.PipedExec).
 		Command("git", "remote", "-v").
 		Command("grep", fetch).
 		Command("sed", "s/(fetch)//").
-		Run(os.Stdout, os.Stdout)
-
+		RunToStrings()
 	if err != nil {
 		if strings.Contains(err.Error(), "128") {
 			err = errors.New("This is not a git repository.")
 		}
 	}
 	gochips.ExitIfError(err)
+	fmt.Print(stdout)
 	err = new(gochips.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
 		Run(os.Stdout, os.Stdout)
@@ -395,6 +405,13 @@ func getUserName() string {
 	return strings.TrimSpace(stdouts)
 }
 
+func MakeUpstreamForBranch(parentrepo string) {
+	_, _, err := new(gochips.PipedExec).
+		Command(git, "remote", "add", "upstream", "https://github.com/"+parentrepo).
+		RunToStrings()
+	gochips.ExitIfError(err)
+}
+
 // MakeUpstream s.e.
 func MakeUpstream(repo string) {
 	user := getUserName()
@@ -439,10 +456,29 @@ func DevShort(branch string, comments []string) {
 			Run(os.Stdout, os.Stdout)
 		gochips.ExitIfError(err)
 	}
+
 	err = new(gochips.PipedExec).
-		Command(git, "checkout", mainbrach).
+		Command(git, "config", "pull.rebase", "false").
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
+
+	err = new(gochips.PipedExec).
+		Command(git, "pull", "upstream", mainbrach, "--no-edit").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	_, stderr, err := new(gochips.PipedExec).
+		Command(git, "checkout", mainbrach).
+		RunToStrings()
+	if err != nil {
+		if strings.Contains(err.Error(), "128") && strings.Contains(stderr, "matched multiple") {
+			err = new(gochips.PipedExec).
+				Command(git, "checkout", "--track", "origin/"+mainbrach).
+				Run(os.Stdout, os.Stdout)
+			gochips.ExitIfError(err)
+		}
+	}
+
 	err = new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
@@ -565,10 +601,30 @@ func Dev(branch string, comments []string) {
 			Run(os.Stdout, os.Stdout)
 		gochips.ExitIfError(err)
 	}
+
 	err = new(gochips.PipedExec).
-		Command(git, "checkout", mainbrach).
+		Command(git, "config", "pull.rebase", "false").
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
+
+	err = new(gochips.PipedExec).
+		Command(git, "pull", "upstream", mainbrach, "--no-edit").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	_, stderr, err := new(gochips.PipedExec).
+		Command(git, "checkout", mainbrach).
+		RunToStrings()
+	if err != nil {
+		if strings.Contains(err.Error(), "128") && strings.Contains(stderr, "matched multiple") {
+			err = new(gochips.PipedExec).
+				Command(git, "checkout", "--track", "origin/"+mainbrach).
+				Run(os.Stdout, os.Stdout)
+			gochips.ExitIfError(err)
+		}
+	}
+	gochips.ExitIfError(err)
+
 	err = new(gochips.PipedExec).
 		Command(git, "pull", "-p", "upstream", mainbrach).
 		Run(os.Stdout, os.Stdout)
@@ -577,6 +633,7 @@ func Dev(branch string, comments []string) {
 		Command(git, push).
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
+
 	err = new(gochips.PipedExec).
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
@@ -620,52 +677,17 @@ func addNotes(comments []string) {
 }
 
 func GetNotes() (notes []string, result bool) {
-	noteobjs, ok := GetNotesObj()
-	if !ok {
-		return nil, false
-	}
-	obj := ""
-	if len(noteobjs) > 0 {
-		obj = noteobjs
-	}
 	stdouts, _, err := new(gochips.PipedExec).
-		Command(git, "notes", "show", obj).
+		Command(git, "log", "--pretty=format:%N", "HEAD", "^main").
+		Command("gawk", "{print $1}").
+		Command("grep", "-v", "^$").
+		Command("head", "-1").
 		RunToStrings()
 	if err != nil {
 		return notes, false
 	}
-	notes = strings.Split(strings.ReplaceAll(stdouts, "\r\n", "\n"), "\n")
+	notes = strings.Split(stdouts, "\n")
 	return notes, true
-}
-
-// GetNotesObj s.e.
-func GetNotesObj() (obj string, result bool) {
-	main := GetMainBranch()
-	stdouts, _, err := new(gochips.PipedExec).
-		Command(git, "log", "--pretty=format:'%cd'", "--date=iso", "HEAD", "^"+main).
-		Command("tail", "-1").
-		RunToStrings()
-	if err != nil {
-		return "", false
-	}
-	if len(stdouts) == 0 {
-		return "", false
-	}
-	firstdt := stdouts
-	stdouts, _, err = new(gochips.PipedExec).
-		Command(git, "rev-list", "HEAD", "--after='"+firstdt+"'").
-		Command("tail", "-1").
-		RunToStrings()
-	gochips.ExitIfError(err)
-	if len(stdouts) == 0 {
-		return "", false
-	}
-	stdouts = strings.TrimSpace(stdouts)
-	if len(stdouts) == 0 {
-		return "", false
-	}
-
-	return stdouts, true
 }
 
 // GetParentRepoName - parent repo of forked
@@ -1270,7 +1292,6 @@ func PRAhead() bool {
 	remotelist := getRemotes()
 	if len(remotelist) < 2 {
 		gochips.ExitIfError(errors.New("Upstream is not set, Pull Request can not be done."))
-
 	}
 
 	err := new(gochips.PipedExec).
@@ -1278,16 +1299,24 @@ func PRAhead() bool {
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
-	err = new(gochips.PipedExec).
+	_, _, err = new(gochips.PipedExec).
 		Command(git, "diff", "--quiet", brName+"...upstream/"+mainbr).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
+
 	return err != nil
+
 }
 
 func MergeFromUpstream() {
 	mainbr := GetMainBranch()
+
 	err := new(gochips.PipedExec).
-		Command(git, "pull", "upstream", mainbr).
+		Command(git, "config", "pull.rebase", "false").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
+
+	err = new(gochips.PipedExec).
+		Command(git, "pull", "upstream", mainbr, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 	gochips.ExitIfError(err)
 
@@ -1300,17 +1329,17 @@ func MergeFromUpstream() {
 
 // GHInstalled returns is gh utility installed
 func GHInstalled() bool {
-	err := new(gochips.PipedExec).
+	_, _, err := new(gochips.PipedExec).
 		Command("gh", "--version").
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	return err == nil
 }
 
 // GHLoggedIn returns is gh logged in
 func GHLoggedIn() bool {
-	err := new(gochips.PipedExec).
+	_, _, err := new(gochips.PipedExec).
 		Command("gh", "auth", "status").
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	return err == nil
 }
 
@@ -1369,16 +1398,20 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 	}
 	issuenums := strings.Split(stdouts, "\n")
 	myfullbranchname := strings.TrimSpace(getFullRepoAndOrgName() + "/tree/" + GetCurrentBranchName())
+	fmt.Println("Searching linked issue ")
 	for _, issuenum := range issuenums {
-		stdouts1, _, err1 := new(gochips.PipedExec).
-			Command("gh", "issue", "develop", issuenum, "--list", "-R", parentrepo).
-			Command("gawk", "{print $2}").
-			RunToStrings()
-		if (err1 == nil) && (len(stdouts1) > 10) {
-			linkedbranches := strings.Split(stdouts1, "\n")
-			for _, linkedbranche := range linkedbranches {
-				if strings.EqualFold(myfullbranchname, linkedbranche) {
-					return issuenum, true
+		if len(issuenum) > 0 {
+			fmt.Println("  Issue number: ", issuenum, "...")
+			stdouts1, _, err1 := new(gochips.PipedExec).
+				Command("gh", "issue", "develop", issuenum, "--list", "-R", parentrepo).
+				Command("gawk", "{print $2}").
+				RunToStrings()
+			if (err1 == nil) && (len(stdouts1) > 10) {
+				linkedbranches := strings.Split(stdouts1, "\n")
+				for _, linkedbranche := range linkedbranches {
+					if strings.EqualFold(myfullbranchname, linkedbranche) {
+						return issuenum, true
+					}
 				}
 			}
 		}

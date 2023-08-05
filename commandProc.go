@@ -72,7 +72,7 @@ const (
 	prParamDesc    = "Make pull request"
 	prMergeParam   = "merge"
 	errMsgPRUnkown = "Unkown pr arguments"
-	prConfirm      = "Pull request with title '$prname' will be created :Continue(y/n)?"
+	prConfirm      = "Pull request with title '$prname' will be created. Continue(y/n)?"
 
 	devDelMsgComment        = "Deletes all merged branches from forked repository"
 	devIgnoreHookMsgComment = "Ignore creating local hook"
@@ -280,6 +280,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 		Short: prParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
+			git.CheckIfGitRepo()
 
 			if !CheckQSver() {
 				return
@@ -301,20 +302,24 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			}
 
 			parentrepo := git.GetParentRepoName()
+			if len(parentrepo) == 0 {
+				fmt.Println("You are in trunk. PR is only allowedfrom forked branch.")
+				os.Exit(0)
+			}
 			var response string
 			if git.UpstreamNotExist(parentrepo) {
-				fmt.Print("Upstream not found. Repository " + parentrepo + " will be addeda s upstream. Agree[y/n]?")
+				fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
 				fmt.Scanln(&response)
 				if response != pushYes {
 					fmt.Print(pushFail)
 					return
 				}
 				response = ""
-				git.MakeUpstream(parentrepo)
+				git.MakeUpstreamForBranch(parentrepo)
 			}
 
 			if git.PRAhead() {
-				fmt.Println("This branch is out-of-date.\nMerge automatically[y/n]?")
+				fmt.Print("This branch is out-of-date. Merge automatically[y/n]?")
 				fmt.Scanln(&response)
 				if response != pushYes {
 					fmt.Print(pushFail)
@@ -418,7 +423,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 		Short: devParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
-
+			git.CheckIfGitRepo()
 			if !CheckQSver() {
 				return
 			}
@@ -752,7 +757,7 @@ func CheckQSver() bool {
 		fmt.Println("-----------------------------------------")
 		fmt.Println("go install github.com/untillpro/qs@latest")
 		fmt.Println("-----------------------------------------")
-		fmt.Println("Ignore it and continue with current version?(y/n)")
+		fmt.Print("Ignore it and continue with current version(y/n)?")
 		var response string
 		fmt.Scanln(&response)
 		if response == pushYes {
