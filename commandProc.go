@@ -338,6 +338,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 
 				notes, ok := git.GetNotes()
+				fmt.Println("notes:", notes)
 				if !ok {
 					// Try to get github issue name by branch name
 					issueNum, issueok := git.GetIssueNumFromBranchName(parentrepo)
@@ -357,6 +358,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					notes = append(notes, prnotes)
 				}
 				strnotes, _ := git.GetNoteAndURL(notes)
+				fmt.Println("strnotes:", strnotes)
 				if len(strnotes) > 0 {
 					needDraft := false
 					if cmd.Flag(prdraftParamFull).Value.String() == "true" {
