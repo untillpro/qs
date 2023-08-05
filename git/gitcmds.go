@@ -566,7 +566,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	}
 
 	issuename := GetIssueNameByNumber(strissuenum, parentrepo)
-	comment := IssuePRTtilePrefix + " " + issuename
+	comment := IssuePRTtilePrefix + " '" + issuename + "' "
 	body := ""
 	if len(issuename) > 0 {
 		body = "Resolves #" + strissuenum + " " + issuename
