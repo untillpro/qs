@@ -680,7 +680,6 @@ func GetNotes() (notes []string, result bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "log", "--pretty=format:%N", "HEAD", "^main").
 		Command("grep", "-v", "^$").
-		Command("head", "-1").
 		RunToStrings()
 	if err != nil {
 		return notes, false

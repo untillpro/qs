@@ -267,7 +267,7 @@ func notCommitedRefused() bool {
 		return false
 	}
 	fmt.Println(confMsgModFiles1)
-	fmt.Println("------   " + s)
+	fmt.Println("----   " + s)
 	fmt.Print(confMsgModFiles2)
 	var response string
 	fmt.Scanln(&response)
@@ -338,8 +338,6 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 
 				notes, ok := git.GetNotes()
-				fmt.Println("notes:", notes)
-				fmt.Println("OK:", ok)
 				if !ok {
 					// Try to get github issue name by branch name
 					issueNum, issueok := git.GetIssueNumFromBranchName(parentrepo)
@@ -370,7 +368,6 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					fmt.Scanln(&response)
 					switch response {
 					case pushYes:
-						fmt.Println("notes2:", notes)
 						err = git.MakePR(notes, needDraft)
 					default:
 						fmt.Print(pushFail)
