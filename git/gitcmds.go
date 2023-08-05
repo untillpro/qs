@@ -679,7 +679,6 @@ func addNotes(comments []string) {
 func GetNotes() (notes []string, result bool) {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command(git, "log", "--pretty=format:%N", "HEAD", "^main").
-		Command("gawk", "{print $1}").
 		Command("grep", "-v", "^$").
 		Command("head", "-1").
 		RunToStrings()
