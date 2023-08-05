@@ -849,7 +849,7 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 				} else {
 					note = note + " " + s
 				}
-				if strings.Contains(s, IssuePRTtilePrefix) {
+				if strings.Contains(strings.ToLower(s), strings.ToLower(IssuePRTtilePrefix)) {
 					break
 				}
 			}
