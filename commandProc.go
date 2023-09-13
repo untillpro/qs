@@ -282,7 +282,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 			globalConfig()
 			git.CheckIfGitRepo()
 
-			if !CheckQSver() {
+			if !checkQSver() {
 				return
 			}
 			if !checkGH() {
@@ -338,13 +338,18 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 
 				notes, ok := git.GetNotes()
-				if !ok {
-					// Try to get github issue name by branch name
-					issueNum, issueok := git.GetIssueNumFromBranchName(parentrepo)
-					if issueok {
-						notes = git.GetIssuePRTitle(issueNum, parentrepo)
-						ok = true
+				issueNum := ""
+				issueok := false
+				if !ok || issueNote(notes) {
+					issueNum, issueok = getIssueNumFromNotes(notes)
+					if !issueok {
+						issueNum, issueok = git.GetIssueNumFromBranchName(parentrepo)
 					}
+				}
+				if !ok && issueok {
+					// Try to get github issue name by branch name
+					notes = git.GetIssuePRTitle(issueNum, parentrepo)
+					ok = true
 				}
 				if !ok {
 					// Ask PR title
@@ -369,6 +374,10 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					switch response {
 					case pushYes:
 						err = git.MakePR(notes, needDraft)
+						if err == nil && issueok {
+							// Link issue to the nearest milestone
+							git.LinkIssueToMileStone(issueNum, parentrepo)
+						}
 					default:
 						fmt.Print(pushFail)
 					}
@@ -386,6 +395,43 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 	cmd.Flags().BoolP(prdraftParamFull, prdraftParam, false, prdraftMsgComment)
 	cp.rootcmd.AddCommand(cmd)
 	return cp
+}
+
+func getIssueNumFromNotes(notes []string) (string, bool) {
+	if len(notes) == 0 {
+		return "", false
+	}
+	for _, s := range notes {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			if strings.Contains(s, git.IssueSign) {
+				arr := strings.Split(s, " ")
+				if len(arr) > 1 {
+					num := arr[1]
+					if strings.Contains(num, "#") {
+						num = strings.ReplaceAll(num, "#", "")
+						return num, true
+					}
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+func issueNote(notes []string) bool {
+	if len(notes) == 0 {
+		return false
+	}
+	for _, s := range notes {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			if strings.Contains(s, git.IssueSign) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (cp *commandProcessor) addVersion() *commandProcessor {
@@ -424,7 +470,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 			git.CheckIfGitRepo()
-			if !CheckQSver() {
+			if !checkQSver() {
 				return
 			}
 			if !checkGH() {
@@ -762,7 +808,7 @@ func checkGH() bool {
 	return true
 }
 
-func CheckQSver() bool {
+func checkQSver() bool {
 	installedver := git.GetInstalledQSVersion()
 	lastver := git.GetLastQSVersion()
 

@@ -45,6 +45,7 @@ const (
 	PushDefaultMsg          = "misc"
 
 	IssuePRTtilePrefix = "Resolves issue"
+	IssueSign          = "Resolves #"
 )
 
 type gchResponse struct {
@@ -569,7 +570,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	comment := IssuePRTtilePrefix + " '" + issuename + "' "
 	body := ""
 	if len(issuename) > 0 {
-		body = "Resolves #" + strissuenum + " " + issuename
+		body = IssueSign + strissuenum + " " + issuename
 	}
 	return branch, []string{comment, body}
 }
@@ -1428,6 +1429,42 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 func GetIssuePRTitle(issueNum string, parentrepo string) []string {
 	name := GetIssueNameByNumber(issueNum, parentrepo)
 	s := IssuePRTtilePrefix + " " + name
-	body := "Resolves #" + issueNum + " " + name
+	body := IssueSign + issueNum + " " + name
 	return []string{s, body}
+}
+
+func LinkIssueToMileStone(issueNum string, parentrepo string) {
+	if issueNum == "" {
+		return
+	}
+	if parentrepo == "" {
+		return
+	}
+	strMilestones, _, err := new(gochips.PipedExec).
+		Command("gh", "api", "repos/"+parentrepo+"/milestones", "--jq", ".[] | .title").
+		RunToStrings()
+	if err != nil {
+		fmt.Println("Link issue to mileStone error: ", err.Error())
+		return
+	}
+	milestones := strings.Split(strMilestones, "\n")
+	// Sample date string in the "yyyy.mm.dd" format.
+	dateString := "2006.01.02"
+	// Get the current date and time.
+	currentTime := time.Now()
+	for _, milestone := range milestones {
+		// Parse the input string into a time.Time value.
+		t, err := time.Parse(dateString, milestone)
+		if err == nil {
+			if currentTime.Before(t) {
+				// Next milestone is found
+				err = new(gochips.PipedExec).
+					Command("gh", "issue", "edit", issueNum, "--milestone", milestone, "--repo", parentrepo).
+					Run(os.Stdout, os.Stdout)
+				gochips.ExitIfError(err)
+				fmt.Println("Issue #" + issueNum + " added to milestone '" + milestone + "'")
+				return
+			}
+		}
+	}
 }
