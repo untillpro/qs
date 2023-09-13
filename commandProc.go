@@ -303,7 +303,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 
 			parentrepo := git.GetParentRepoName()
 			if len(parentrepo) == 0 {
-				fmt.Println("You are in trunk. PR is only allowedfrom forked branch.")
+				fmt.Println("You are in trunk. PR is only allowed from forked branch.")
 				os.Exit(0)
 			}
 			var response string
@@ -476,6 +476,20 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 			switch response {
 			case pushYes:
 				// Remote developer branch, linked to issue is created
+				var response string
+				parentrepo := git.GetParentRepoName()
+				if len(parentrepo) > 0 {
+					if git.UpstreamNotExist(parentrepo) {
+						fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
+						fmt.Scanln(&response)
+						if response != pushYes {
+							fmt.Print(pushFail)
+							return
+						}
+						response = ""
+						git.MakeUpstreamForBranch(parentrepo)
+					}
+				}
 				if len(remoteURL) == 0 {
 					git.DevShort(branch, notes)
 				} else {
@@ -697,6 +711,7 @@ func (cp *commandProcessor) deleteBranches() {
 			fmt.Print(pushFail)
 		}
 	}
+	git.PullUpstream()
 	fmt.Print("\nChecking if unused local branches exist...")
 	var strs *[]string = git.GetGoneBranchesLocal()
 	if len(*strs) == 0 {

@@ -578,7 +578,7 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 	stdouts, _, err := new(gochips.PipedExec).
 		Command("gh", "issue", "view", issueNum, "--repo", parentrepo).
 		Command("grep", "title:").
-		Command("awk", "{ $1=\"\"; print substr($0, 2) }").
+		Command("gawk", "{ $1=\"\"; print substr($0, 2) }").
 		RunToStrings()
 	if err != nil {
 		return ""
@@ -788,6 +788,14 @@ func DeleteBranchesRemote(brs []string) {
 		gochips.ExitIfError(err)
 		fmt.Printf("Branch %s deleted\n", br)
 	}
+}
+
+func PullUpstream() {
+	mainbr := GetMainBranch()
+	err := new(gochips.PipedExec).
+		Command(git, "pull", "upstream", mainbr, "--no-edit").
+		Run(os.Stdout, os.Stdout)
+	gochips.ExitIfError(err)
 }
 
 // GetGoneBranchesLocal returns gone local branches
@@ -1091,7 +1099,7 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 	quantity = 0
 	stdout, _, err := new(gochips.PipedExec).
 		Command(git, "status", "--porcelain").
-		Command("awk", "{if ($1 == \"??\") print $2}").
+		Command("gawk", "{if ($1 == \"??\") print $2}").
 		RunToStrings()
 	gochips.ExitIfError(err)
 	files := strings.Split(stdout, "\n")
@@ -1105,7 +1113,7 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 
 			stdout, _, err = new(gochips.PipedExec).
 				Command("wc", "-c", file).
-				Command("awk", "{print $1}").
+				Command("gawk", "{print $1}").
 				RunToStrings()
 			gochips.ExitIfError(err)
 
@@ -1361,7 +1369,7 @@ func GetInstalledQSVersion() string {
 	stdouts, stderr, err = new(gochips.PipedExec).
 		Command("go", "version", "-m", gopath+"/bin/"+qsexe).
 		Command("grep", "-i", "-h", "mod.*github.com/untillpro/qs").
-		Command("awk", "{print $3}").
+		Command("gawk", "{print $3}").
 		RunToStrings()
 	if err != nil {
 		gochips.Error("GetInstalledQSVersion error:", stderr)
