@@ -374,10 +374,11 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					switch response {
 					case pushYes:
 						err = git.MakePR(notes, needDraft)
-						if err == nil && issueok {
-							// Link issue to the nearest milestone
-							git.LinkIssueToMileStone(issueNum, parentrepo)
-						}
+						/*
+							if err == nil && issueok {
+								git.LinkIssueToMileStone(issueNum, parentrepo)
+							}
+						*/
 					default:
 						fmt.Print(pushFail)
 					}
