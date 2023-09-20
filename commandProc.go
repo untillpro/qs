@@ -10,7 +10,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	cobra "github.com/spf13/cobra"
-	qc "github.com/untillpro/gochips"
+	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/vcs"
 )
@@ -92,7 +92,11 @@ const (
 var verbose bool
 
 func globalConfig() {
-	qc.IsVerbose = verbose
+	if verbose {
+		logger.SetLogLevel(logger.LogLevelVerbose)
+	} else {
+		logger.SetLogLevel(logger.LogLevelInfo)
+	}
 }
 
 type commandProcessor struct {

@@ -6,14 +6,14 @@ require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/atotto/clipboard v0.1.4
 	github.com/coreos/go-semver v0.3.1
-	github.com/spf13/cobra v1.6.1
-	github.com/stretchr/testify v1.8.2
-	github.com/untillpro/gochips v1.12.0
+	github.com/spf13/cobra v1.7.0
+	github.com/stretchr/testify v1.8.4
+	github.com/untillpro/goutils v0.0.0-20230920114550-4ce06724a1da
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/inconshreveable/mousetrap v1.0.1 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-isatty v0.0.8 // indirect
