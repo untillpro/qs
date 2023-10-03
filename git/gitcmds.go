@@ -884,7 +884,7 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 	return note, url
 }
 
-func getBodyFromNotes(notes []string) string {
+func GetBodyFromNotes(notes []string) string {
 	b := ""
 	if (len(notes) > 1) && strings.Contains(strings.ToLower(notes[0]), strings.ToLower(IssuePRTtilePrefix)) {
 		for i, note := range notes {
@@ -906,13 +906,15 @@ func MakePR(notes []string, asDraft bool) (err error) {
 	var strnotes string
 	var url string
 	strnotes, url = GetNoteAndURL(notes)
-	b := getBodyFromNotes(notes)
+	b := GetBodyFromNotes(notes)
 	if len(b) == 0 {
 		b = strnotes
 	}
 	if len(url) > 0 {
 		b = b + "\n" + url
 	}
+
+	strnotes = strings.Replace(b, "Resolves ", "", 1)
 	strbody := fmt.Sprintln(b)
 	parentrepo := GetParentRepoName()
 	if asDraft {

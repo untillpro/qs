@@ -365,24 +365,19 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					prnotes = strings.TrimSpace(prnotes)
 					notes = append(notes, prnotes)
 				}
-				strnotes, _ := git.GetNoteAndURL(notes)
+				strnotes := git.GetBodyFromNotes(notes)
+				strnotes = strings.ReplaceAll(strnotes, "Resolves ", "")
 				if len(strnotes) > 0 {
 					needDraft := false
 					if cmd.Flag(prdraftParamFull).Value.String() == "true" {
 						needDraft = true
 					}
-
 					prMsg := strings.ReplaceAll(prConfirm, "$prname", strnotes)
 					fmt.Print(prMsg)
 					fmt.Scanln(&response)
 					switch response {
 					case pushYes:
 						err = git.MakePR(notes, needDraft)
-						/*
-							if err == nil && issueok {
-								git.LinkIssueToMileStone(issueNum, parentrepo)
-							}
-						*/
 					default:
 						fmt.Print(pushFail)
 					}

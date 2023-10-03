@@ -40,13 +40,13 @@ func TestGetBody(t *testing.T) {
 	s1 := "Permanent support for Peter, Pascal, and customers "
 	s2 := " https://dev.untill.com/projects/#!361164  "
 	notes := []string{s1, s2}
-	body := getBodyFromNotes(notes)
+	body := GetBodyFromNotes(notes)
 	assert.Equal(t, body, "")
 
 	// Test for GH Issue types
 	s1 = "Resolves issue #324 My Best problem ever"
 	s2 = " Resolves #324  "
 	notes = []string{s1, s2}
-	body = getBodyFromNotes(notes)
+	body = GetBodyFromNotes(notes)
 	assert.Equal(t, body, "Resolves #324")
 }
