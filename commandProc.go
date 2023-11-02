@@ -366,7 +366,11 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					notes = append(notes, prnotes)
 				}
 				strnotes := git.GetBodyFromNotes(notes)
-				strnotes = strings.ReplaceAll(strnotes, "Resolves ", "")
+				if len(strings.TrimSpace(strnotes)) > 0 {
+					strnotes = strings.ReplaceAll(strnotes, "Resolves ", "")
+				} else {
+					strnotes = GetCommentForPR(notes)
+				}
 				if len(strnotes) > 0 {
 					needDraft := false
 					if cmd.Flag(prdraftParamFull).Value.String() == "true" {
@@ -395,6 +399,20 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 	cmd.Flags().BoolP(prdraftParamFull, prdraftParam, false, prdraftMsgComment)
 	cp.rootcmd.AddCommand(cmd)
 	return cp
+}
+
+func GetCommentForPR(notes []string) (strnote string) {
+	strnote = ""
+	if len(notes) == 0 {
+		return strnote
+	}
+	for _, note := range notes {
+		note = strings.TrimSpace(note)
+		if len(note) > 0 {
+			strnote = strnote + " " + note
+		}
+	}
+	return strings.TrimSpace(strnote)
 }
 
 func getIssueNumFromNotes(notes []string) (string, bool) {

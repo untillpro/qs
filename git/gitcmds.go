@@ -697,12 +697,17 @@ func addNotes(comments []string) {
 func GetNotes() (notes []string, result bool) {
 	stdouts, _, err := new(exec.PipedExec).
 		Command(git, "log", "--pretty=format:%N", "HEAD", "^main").
-		Command("grep", "-v", "^$").
 		RunToStrings()
 	if err != nil {
 		return notes, false
 	}
-	notes = strings.Split(stdouts, "\n")
+	rawnotes := strings.Split(stdouts, "\n")
+	for _, rawnote := range rawnotes {
+		note := strings.TrimSpace(rawnote)
+		if len(note) > 0 {
+			notes = append(notes, note)
+		}
+	}
 	return notes, true
 }
 
