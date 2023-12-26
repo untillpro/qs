@@ -750,6 +750,7 @@ func deleteDupMinus(str string) string {
 }
 
 func (cp *commandProcessor) deleteBranches() {
+	git.PullUpstream()
 	lst, err := git.GetMergedBranchList()
 	if err != nil {
 		fmt.Println(err)

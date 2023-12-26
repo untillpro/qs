@@ -1,4 +1,4 @@
-module help
+module github.com/untillpro/qs
 
 go 1.21.5
 
