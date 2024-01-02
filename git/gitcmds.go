@@ -33,6 +33,7 @@ const (
 	msgPRCheckNotFoundYet = "..not found yet"
 	msgPRCheckNotFound    = "No checks for PR found, merge without checks"
 	MsgPreCommitError     = "Attempt to commit too"
+	MsgCommitForNotes     = "Commit for keeping notes in branch"
 
 	repoNotFound            = "git repo name not found"
 	userNotFound            = "git user name not found"
@@ -504,7 +505,7 @@ func DevShort(branch string, comments []string) {
 
 	// Add empty commit to create commit object and link notes to it
 	err = new(exec.PipedExec).
-		Command(git, "commit", "--allow-empty", "-m", "Commit for keeping notes in branch").
+		Command(git, "commit", "--allow-empty", "-m", MsgCommitForNotes).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 	addNotes(comments)
@@ -659,7 +660,7 @@ func Dev(branch string, comments []string) {
 
 	// Add empty commit to create commit object and link notes to it
 	err = new(exec.PipedExec).
-		Command(git, "commit", "--allow-empty", "-m", "Commit for keeping notes in branch").
+		Command(git, "commit", "--allow-empty", "-m", MsgCommitForNotes).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 

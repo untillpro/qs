@@ -9,7 +9,6 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.8.4
 	github.com/untillpro/goutils v0.0.0-20231201170327-3c33c6010100
-	github.com/untillpro/qs v1.49.0
 )
 
 require (
