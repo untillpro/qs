@@ -777,17 +777,22 @@ func (cp *commandProcessor) deleteBranches() {
 		}
 	}
 	git.PullUpstream()
+
 	fmt.Print("\nChecking if unused local branches exist...")
 	var strs *[]string = git.GetGoneBranchesLocal()
-	if len(*strs) == 0 {
+	var strFin []string
+	for _, str := range *strs {
+		if (strings.TrimSpace(str) != "") && (strings.TrimSpace(str) != "*") {
+			strFin = append(strFin, str)
+		}
+	}
+	if len(strFin) == 0 {
 		fmt.Print("\n***There no unused local branches.")
 		return
 	}
 	fmt.Print(devider)
-	for _, str := range *strs {
-		if strings.TrimSpace(str) != "" {
-			fmt.Print("\n" + str)
-		}
+	for _, str := range strFin {
+		fmt.Print("\n" + str)
 	}
 	fmt.Print(devider)
 	fmt.Print(delLocalBranchConfirm)
