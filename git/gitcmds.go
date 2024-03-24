@@ -657,6 +657,10 @@ func Dev(branch string, comments []string) {
 		Command(git, "checkout", "-b", branch).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
+	err = new(exec.PipedExec).
+		Command(git, "checkout", "-B", branch).
+		Run(os.Stdout, os.Stdout)
+	ExitIfError(err)
 
 	// Add empty commit to create commit object and link notes to it
 	err = new(exec.PipedExec).
