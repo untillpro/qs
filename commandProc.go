@@ -71,7 +71,7 @@ const (
 	prParam        = "pr"
 	prParamDesc    = "Make pull request"
 	prMergeParam   = "merge"
-	errMsgPRUnkown = "Unkown pr arguments"
+	errMsgPRUnkown = "Unknown pr arguments"
 	prConfirm      = "Pull request with title '$prname' will be created. Continue(y/n)?"
 
 	devDelMsgComment        = "Deletes all merged branches from forked repository"
@@ -87,6 +87,10 @@ const (
 	confMsgModFiles1      = "You have modified files: "
 	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
 	errMsgPRNotesNotFound = "Comments for Pull request not found. Please add comments manually:"
+
+	trueStr  = "true"
+	falseStr = "false"
+	oneSpace = " "
 )
 
 var verbose bool
@@ -373,7 +377,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 				if len(strnotes) > 0 {
 					needDraft := false
-					if cmd.Flag(prdraftParamFull).Value.String() == "true" {
+					if cmd.Flag(prdraftParamFull).Value.String() == trueStr {
 						needDraft = true
 					}
 					prMsg := strings.ReplaceAll(prConfirm, "$prname", strnotes)
@@ -381,7 +385,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					fmt.Scanln(&response)
 					switch response {
 					case pushYes:
-						err = git.MakePR(notes, needDraft)
+						err = git.MakePR(strnotes, notes, needDraft)
 					default:
 						fmt.Print(pushFail)
 					}
@@ -408,8 +412,10 @@ func GetCommentForPR(notes []string) (strnote string) {
 	}
 	for _, note := range notes {
 		note = strings.TrimSpace(note)
-		if len(note) > 0 {
-			strnote = strnote + " " + note
+		if (strings.Contains(note, "https://") && strings.Contains(note, "/issues/")) || !strings.Contains(note, "https://") {
+			if len(note) > 0 {
+				strnote = strnote + oneSpace + note
+			}
 		}
 	}
 	return strings.TrimSpace(strnote)
@@ -423,7 +429,7 @@ func getIssueNumFromNotes(notes []string) (string, bool) {
 		s = strings.TrimSpace(s)
 		if len(s) > 0 {
 			if strings.Contains(s, git.IssueSign) {
-				arr := strings.Split(s, " ")
+				arr := strings.Split(s, oneSpace)
 				if len(arr) > 1 {
 					num := arr[1]
 					if strings.Contains(num, "#") {
@@ -460,7 +466,6 @@ func (cp *commandProcessor) addVersion() *commandProcessor {
 			globalConfig()
 			ver := git.GetInstalledQSVersion()
 			fmt.Printf("qs version %s\n", ver)
-			return
 		},
 	}
 	cp.rootcmd.AddCommand(cmd)
@@ -474,7 +479,6 @@ func (cp *commandProcessor) addUpgrade() *commandProcessor {
 		Run: func(cmd *cobra.Command, args []string) {
 			globalConfig()
 			fmt.Println("\ngo install github.com/untillpro/qs@latest")
-			return
 		},
 	}
 	cp.rootcmd.AddCommand(cmd)
@@ -495,12 +499,12 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 			// qs dev -d is running
-			if cmd.Flag(devDelParamFull).Value.String() == "true" {
+			if cmd.Flag(devDelParamFull).Value.String() == trueStr {
 				cp.deleteBranches()
 				return
 			}
 			var needAskHook bool = true
-			if cmd.Flag(ignorehookDelParamFull).Value.String() == "true" {
+			if cmd.Flag(ignorehookDelParamFull).Value.String() == trueStr {
 				needAskHook = false
 			}
 			// qs dev is running
@@ -513,7 +517,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				args = append(args, clipargs)
 			}
 			remoteURL := git.GetRemoteUpstreamURL()
-			noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == "true")
+			noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == trueStr)
 			if !noForkAllowed {
 				parentrepo := git.GetParentRepoName()
 				if len(parentrepo) == 0 { // main repository, not forked
@@ -563,7 +567,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				fmt.Print(pushFail)
 			}
 
-			// Create pre-commit hook to control commiting file size
+			// Create pre-commit hook to control committing file size
 			if needAskHook {
 				setPreCommitHook()
 			}
@@ -616,7 +620,7 @@ func getTaskIDFromURL(url string) string {
 	return strings.TrimSpace(entry)
 }
 
-func argContainsIssueLink(args ...string) (IssueNum int, ok bool) {
+func argContainsIssueLink(args ...string) (issueNum int, ok bool) {
 	ok = false
 	if len(args) != 1 {
 		return
@@ -683,7 +687,7 @@ func clearEmptyArgs(args []string) (newargs []string) {
 func splitQuotedArgs(args ...string) []string {
 	var newargs []string
 	for _, arg := range args {
-		subargs := strings.Split(arg, " ")
+		subargs := strings.Split(arg, oneSpace)
 		if len(subargs) == 0 {
 			continue
 		}
@@ -705,7 +709,7 @@ func getArgStringFromClipboard() string {
 	var newarg string
 	for _, str := range args {
 		newarg += str
-		newarg += " "
+		newarg += oneSpace
 	}
 	return newarg
 }
@@ -714,7 +718,7 @@ func cleanArgfromSpecSymbols(arg string) string {
 	var symbol string
 
 	arg = strings.ReplaceAll(arg, "https://", "")
-	replaceToMinus := []string{" ", ",", ";", ".", ":", "?", "/", "!"}
+	replaceToMinus := []string{oneSpace, ",", ";", ".", ":", "?", "/", "!"}
 	for _, symbol = range replaceToMinus {
 		arg = strings.ReplaceAll(arg, symbol, "-")
 	}
@@ -837,7 +841,7 @@ func checkQSver() bool {
 	lastver := git.GetLastQSVersion()
 
 	if installedver != lastver {
-		fmt.Printf("Installed qs version %s is too old (last verison is %s)\n", installedver, lastver)
+		fmt.Printf("Installed qs version %s is too old (last version is %s)\n", installedver, lastver)
 		fmt.Println("You can install last version with:")
 		fmt.Println("-----------------------------------------")
 		fmt.Println("go install github.com/untillpro/qs@latest")
@@ -845,10 +849,7 @@ func checkQSver() bool {
 		fmt.Print("Ignore it and continue with current version(y/n)?")
 		var response string
 		fmt.Scanln(&response)
-		if response == pushYes {
-			return true
-		}
-		return false
+		return response == pushYes
 	}
 	return true
 }

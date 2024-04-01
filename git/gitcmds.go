@@ -20,12 +20,14 @@ import (
 const (
 	mimm                  = "-m"
 	slash                 = "/"
+	caret                 = "\n"
 	git                   = "git"
 	push                  = "push"
 	fetch                 = "fetch"
 	branch                = "branch"
 	checkout              = "checkout"
 	origin                = "origin"
+	originSlash           = "origin/"
 	httppref              = "https"
 	pushYes               = "y"
 	nochecksmsg           = "no checks reported"
@@ -34,20 +36,33 @@ const (
 	msgPRCheckNotFound    = "No checks for PR found, merge without checks"
 	MsgPreCommitError     = "Attempt to commit too"
 	MsgCommitForNotes     = "Commit for keeping notes in branch"
+	oneSpace              = " "
+	err128                = "128"
 
 	repoNotFound            = "git repo name not found"
 	userNotFound            = "git user name not found"
-	errAlreadyForkedMsg     = "You are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
-	errMsgPRNotesImpossible = "Pull request without comments is impossible."
-	errMsgPRMerge           = "URL of PR is needed"
-	errMsgPRBadFormat       = "Pull request URL has bad format"
-	errTimer40Sec           = "Time out 40 seconds"
-	errSomethigWrong        = "Something went wrong"
-	errUnknowGHResponse     = "Unkown response from gh"
+	ErrAlreadyForkedMsg     = "you are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
+	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
+	ErrMsgPRMerge           = "URL of PR is needed"
+	ErrMsgPRBadFormat       = "pull request URL has bad format"
+	ErrTimer40Sec           = "time out 40 seconds"
+	ErrSomethigWrong        = "something went wrong"
+	ErrUnknowGHResponse     = "unknown response from gh"
 	PushDefaultMsg          = "misc"
+	mainBrachName           = "main"
 
 	IssuePRTtilePrefix = "Resolves issue"
 	IssueSign          = "Resolves #"
+
+	prTimeWait                     = 40
+	minIssueNoteLength             = 10
+	minRepoNameLength              = 4
+	bashFilePerm       os.FileMode = 0644
+	timeWaitPR                     = 5
+
+	issuelineLength  = 5
+	issuelinePosOrg  = 4
+	issuelinePosRepo = 3
 )
 
 type gchResponse struct {
@@ -78,8 +93,8 @@ func CheckIfGitRepo() string {
 		Command("git", "status", "-s").
 		RunToStrings()
 	if err != nil {
-		if strings.Contains(err.Error(), "128") {
-			err = errors.New("This is not a git repository.")
+		if strings.Contains(err.Error(), err128) {
+			err = errors.New("this is not a git repository")
 		}
 	}
 	ExitIfError(err)
@@ -112,8 +127,8 @@ func Status(cfg vcs.CfgStatus) {
 		Command("sed", "s/(fetch)//").
 		RunToStrings()
 	if err != nil {
-		if strings.Contains(err.Error(), "128") {
-			err = errors.New("This is not a git repository.")
+		if strings.Contains(err.Error(), err128) {
+			err = errors.New("this is not a git repository")
 		}
 	}
 	ExitIfError(err)
@@ -169,7 +184,7 @@ func Release() {
 	ExitIfError(targetVersion.Save())
 
 	// *************************************************
-	logger.Info("Commiting target version")
+	logger.Info("Committing target version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + targetVersion.String()}
 		err = new(exec.PipedExec).
@@ -200,7 +215,7 @@ func Release() {
 	}
 
 	// *************************************************
-	logger.Info("Commiting new version")
+	logger.Info("Committing new version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + newVersion.String()}
 		err = new(exec.PipedExec).
@@ -323,7 +338,7 @@ func getFullRepoAndOrgName() string {
 		logger.Error("getFullRepoAndOrgName error:", err)
 		return ""
 	}
-	return strings.TrimSuffix(strings.TrimSpace(stdouts), "/")
+	return strings.TrimSuffix(strings.TrimSpace(stdouts), slash)
 }
 
 // GetRepoAndOrgName - from .git/config
@@ -355,11 +370,11 @@ func Fork() (repo string, err error) {
 	}
 	remoteurl := GetRemoteUpstreamURL()
 	if len(remoteurl) > 0 {
-		return repo, errors.New(errAlreadyForkedMsg)
+		return repo, errors.New(ErrAlreadyForkedMsg)
 	}
 
 	if !IsMainOrg() {
-		return repo, errors.New(errAlreadyForkedMsg)
+		return repo, errors.New(ErrAlreadyForkedMsg)
 	}
 	_, chExist := ChangedFilesExist()
 	if chExist {
@@ -411,7 +426,7 @@ func GetMainBranch() string {
 		Command("grep", "/main").
 		RunToStrings()
 	if err == nil {
-		return "main"
+		return mainBrachName
 	}
 	return "master"
 }
@@ -455,7 +470,7 @@ func MakeUpstream(repo string) {
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 	err = new(exec.PipedExec).
-		Command(git, branch, "--set-upstream-to", "origin/"+mainbranch, mainbranch).
+		Command(git, branch, "--set-upstream-to", originSlash+mainbranch, mainbranch).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 }
@@ -490,9 +505,9 @@ func DevShort(branch string, comments []string) {
 		Command(git, "checkout", mainbrach).
 		RunToStrings()
 	if err != nil {
-		if strings.Contains(err.Error(), "128") && strings.Contains(stderr, "matched multiple") {
+		if strings.Contains(err.Error(), err128) && strings.Contains(stderr, "matched multiple") {
 			err = new(exec.PipedExec).
-				Command(git, "checkout", "--track", "origin/"+mainbrach).
+				Command(git, "checkout", "--track", originSlash+mainbrach).
 				Run(os.Stdout, os.Stdout)
 			ExitIfError(err)
 		}
@@ -527,15 +542,15 @@ func GetIssuerepoFromUrl(url string) (reponame string) {
 	if len(url) < 2 {
 		return
 	}
-	if strings.HasSuffix(url, "/") {
+	if strings.HasSuffix(url, slash) {
 		url = url[:len(url)-1]
 	}
 
 	arr := strings.Split(url, slash)
-	if len(arr) > 5 {
-		repo := arr[len(arr)-3]
-		org := arr[len(arr)-4]
-		reponame = org + "/" + repo
+	if len(arr) > issuelineLength {
+		repo := arr[len(arr)-issuelinePosRepo]
+		org := arr[len(arr)-issuelinePosOrg]
+		reponame = org + slash + repo
 	}
 
 	return
@@ -550,7 +565,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	}
 
 	strissuenum := strconv.Itoa(issueNumber)
-	myrepo := org + "/" + repo
+	myrepo := org + slash + repo
 	parentrepo := GetParentRepoName()
 	if len(args) > 0 {
 		url := args[0]
@@ -575,7 +590,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	}
 
 	branch = strings.TrimSpace(stdouts)
-	segments := strings.Split(branch, "/")
+	segments := strings.Split(branch, slash)
 	branch = segments[len(segments)-1]
 
 	if len(branch) == 0 {
@@ -588,7 +603,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	comment := IssuePRTtilePrefix + " '" + issuename + "' "
 	body := ""
 	if len(issuename) > 0 {
-		body = IssueSign + strissuenum + " " + issuename
+		body = IssueSign + strissuenum + oneSpace + issuename
 	}
 	return branch, []string{comment, body}
 }
@@ -635,9 +650,9 @@ func Dev(branch string, comments []string) {
 		Command(git, "checkout", mainbrach).
 		RunToStrings()
 	if err != nil {
-		if strings.Contains(err.Error(), "128") && strings.Contains(stderr, "matched multiple") {
+		if strings.Contains(err.Error(), err128) && strings.Contains(stderr, "matched multiple") {
 			err = new(exec.PipedExec).
-				Command(git, "checkout", "--track", "origin/"+mainbrach).
+				Command(git, "checkout", "--track", originSlash+mainbrach).
 				Run(os.Stdout, os.Stdout)
 			ExitIfError(err)
 		}
@@ -706,7 +721,7 @@ func GetNotes() (notes []string, result bool) {
 	if err != nil {
 		return notes, false
 	}
-	rawnotes := strings.Split(stdouts, "\n")
+	rawnotes := strings.Split(stdouts, caret)
 	for _, rawnote := range rawnotes {
 		note := strings.TrimSpace(rawnote)
 		if len(note) > 0 {
@@ -720,7 +735,7 @@ func GetNotes() (notes []string, result bool) {
 func GetParentRepoName() (name string) {
 	repo, org := GetRepoAndOrgName()
 	stdouts, strerr, err := new(exec.PipedExec).
-		Command("gh", "api", "repos/"+org+"/"+repo, "--jq", ".parent.full_name").
+		Command("gh", "api", "repos/"+org+slash+repo, "--jq", ".parent.full_name").
 		RunToStrings()
 	if err != nil {
 		fmt.Println("--------------------------------------------------------------------")
@@ -735,7 +750,7 @@ func GetParentRepoName() (name string) {
 func IsBranchInMain() bool {
 	repo, org := GetRepoAndOrgName()
 	parent := GetParentRepoName()
-	return (parent == org+"/"+repo) || (strings.TrimSpace(parent) == "")
+	return (parent == org+slash+repo) || (strings.TrimSpace(parent) == "")
 }
 
 // GetMergedBranchList returns merged user's branch list
@@ -752,14 +767,14 @@ func GetMergedBranchList() (brlist []string, err error) {
 		return []string{}, err
 	}
 
-	mbrlistraw := strings.Split(stdouts, "\n")
+	mbrlistraw := strings.Split(stdouts, caret)
 	for _, mbranchstr := range mbrlistraw {
 		arr := strings.Split(mbranchstr, ":")
 		if len(arr) > 1 {
 			if strings.Contains(arr[1], "MERGED") {
 				arrstr := strings.ReplaceAll(strings.TrimSpace(arr[1]), "MERGED", "")
 				arrstr = strings.TrimSpace(arrstr)
-				if !strings.Contains(arrstr, "master") && !strings.Contains(arrstr, "main") {
+				if !strings.Contains(arrstr, "master") && !strings.Contains(arrstr, mainBrachName) {
 					mbrlist = append(mbrlist, arrstr)
 				}
 			}
@@ -774,14 +789,14 @@ func GetMergedBranchList() (brlist []string, err error) {
 		Command(git, branch, "-r").
 		RunToStrings()
 	ExitIfError(err)
-	mybrlist := strings.Split(stdouts, "\n")
+	mybrlist := strings.Split(stdouts, caret)
 
 	for _, mybranch := range mybrlist {
-		mybranch := strings.TrimSpace(string(mybranch))
-		mybranch = strings.ReplaceAll(strings.TrimSpace(mybranch), "origin/", "")
+		mybranch := strings.TrimSpace(mybranch)
+		mybranch = strings.ReplaceAll(strings.TrimSpace(mybranch), originSlash, "")
 		mybranch = strings.TrimSpace(mybranch)
 		bfound := false
-		if strings.Contains(mybranch, "master") || strings.Contains(mybranch, "main") || strings.Contains(mybranch, "HEAD") {
+		if strings.Contains(mybranch, "master") || strings.Contains(mybranch, mainBrachName) || strings.Contains(mybranch, "HEAD") {
 			bfound = false
 		} else {
 			for _, mbranch := range mbrlist {
@@ -853,7 +868,7 @@ func GetGoneBranchesLocal() *[]string {
 	if nil != err {
 		return &[]string{}
 	}
-	strs := strings.Split(stdouts, "\n")
+	strs := strings.Split(stdouts, caret)
 	return &strs
 }
 
@@ -883,7 +898,7 @@ func GetNoteAndURL(notes []string) (note string, url string) {
 				if note == "" {
 					note = s
 				} else {
-					note = note + " " + s
+					note = note + oneSpace + s
 				}
 				if strings.Contains(strings.ToLower(s), strings.ToLower(IssuePRTtilePrefix)) {
 					break
@@ -899,9 +914,11 @@ func GetBodyFromNotes(notes []string) string {
 	if (len(notes) > 1) && strings.Contains(strings.ToLower(notes[0]), strings.ToLower(IssuePRTtilePrefix)) {
 		for i, note := range notes {
 			note = strings.TrimSpace(note)
-			strings.Split(strings.ReplaceAll(note, "\r\n", "\n"), "")
-			if i > 0 && len(note) > 0 {
-				b = b + note
+			if (strings.Contains(note, "https://") && !strings.Contains(note, "/issues/")) || !strings.Contains(note, "https://") {
+				strings.Split(strings.ReplaceAll(note, "\r\n", caret), "")
+				if i > 0 && len(note) > 0 {
+					b += note
+				}
 			}
 		}
 	}
@@ -909,9 +926,9 @@ func GetBodyFromNotes(notes []string) string {
 }
 
 // MakePR s.e.
-func MakePR(notes []string, asDraft bool) (err error) {
+func MakePR(title string, notes []string, asDraft bool) (err error) {
 	if len(notes) == 0 {
-		return errors.New(errMsgPRNotesImpossible)
+		return errors.New(ErrMsgPRNotesImpossible)
 	}
 	var strnotes string
 	var url string
@@ -921,7 +938,7 @@ func MakePR(notes []string, asDraft bool) (err error) {
 		b = strnotes
 	}
 	if len(url) > 0 {
-		b = b + "\n" + url
+		b = b + caret + url
 	}
 
 	strnotes = strings.Replace(b, "Resolves ", "", 1)
@@ -929,11 +946,11 @@ func MakePR(notes []string, asDraft bool) (err error) {
 	parentrepo := GetParentRepoName()
 	if asDraft {
 		err = new(exec.PipedExec).
-			Command("gh", "pr", "create", "--draft", "-t", strnotes, "-b", strbody, "-R", parentrepo).
+			Command("gh", "pr", "create", "--draft", "-t", title, "-b", strbody, "-R", parentrepo).
 			Run(os.Stdout, os.Stdout)
 	} else {
 		err = new(exec.PipedExec).
-			Command("gh", "pr", "create", "-t", strnotes, "-b", strbody, "-R", parentrepo).
+			Command("gh", "pr", "create", "-t", title, "-b", strbody, "-R", parentrepo).
 			Run(os.Stdout, os.Stdout)
 	}
 	return err
@@ -942,16 +959,16 @@ func MakePR(notes []string, asDraft bool) (err error) {
 // MakePRMerge merges Pull Request by URL
 func MakePRMerge(prurl string) (err error) {
 	if len(prurl) == 0 {
-		return errors.New(errMsgPRMerge)
+		return errors.New(ErrMsgPRMerge)
 	}
 	if !strings.Contains(prurl, "https") {
-		return errors.New(errMsgPRBadFormat)
+		return errors.New(ErrMsgPRBadFormat)
 	}
 
 	parentrepo := retrieveRepoNameFromUPL(prurl)
 	var val *gchResponse
 	// The checks could not found yet, need to wait for 1..10 seconds
-	for idx := 0; idx < 5; idx++ {
+	for idx := 0; idx < timeWaitPR; idx++ {
 		val = waitPRChecks(parentrepo, prurl)
 		if prCheckAbsent(val) {
 			time.Sleep(2 * time.Second)
@@ -963,9 +980,9 @@ func MakePRMerge(prurl string) (err error) {
 
 	// If after 10 seconds  we still have no checks - then thery don't exists at all, so we can merge
 	if prCheckAbsent(val) {
-		fmt.Println(" ")
+		fmt.Println(oneSpace)
 		fmt.Println(msgPRCheckNotFound)
-		fmt.Println(" ")
+		fmt.Println(oneSpace)
 	} else {
 		if len(val._stderr) > 0 {
 			return errors.New(val._stderr)
@@ -974,7 +991,7 @@ func MakePRMerge(prurl string) (err error) {
 			return val._err
 		}
 		if !prCheckSuccess(val) {
-			return errors.New(errUnknowGHResponse + ": " + val._stdout)
+			return errors.New(ErrUnknowGHResponse + ": " + val._stdout)
 		}
 	}
 
@@ -993,7 +1010,7 @@ func MakePRMerge(prurl string) (err error) {
 		repo, org := GetRepoAndOrgName()
 		if len(repo) > 0 {
 			err = new(exec.PipedExec).
-				Command("gh", "repo", "sync", org+"/"+repo).
+				Command("gh", "repo", "sync", org+slash+repo).
 				Run(os.Stdout, os.Stdout)
 		}
 
@@ -1002,17 +1019,17 @@ func MakePRMerge(prurl string) (err error) {
 }
 
 func retrieveRepoNameFromUPL(prurl string) string {
-	var strs []string = strings.Split(prurl, "/")
-	if len(strs) < 4 {
+	var strs []string = strings.Split(prurl, slash)
+	if len(strs) < minRepoNameLength {
 		return ""
 	}
 	res := ""
 	lenstr := len(strs)
-	for i := lenstr - 4; i < lenstr-2; i++ {
+	for i := lenstr - minRepoNameLength; i < lenstr-2; i++ {
 		if res == "" {
 			res = strs[i]
 		} else {
-			res = res + "/" + strs[i]
+			res = res + slash + strs[i]
 		}
 	}
 	return res
@@ -1023,7 +1040,7 @@ func prCheckAbsent(val *gchResponse) bool {
 }
 
 func prCheckSuccess(val *gchResponse) bool {
-	ss := strings.Split(val._stdout, "\n")
+	ss := strings.Split(val._stdout, caret)
 	for _, s := range ss {
 		if strings.Contains(s, "build") && strings.Contains(s, "pass") {
 			return true
@@ -1041,7 +1058,7 @@ func waitPRChecks(parentrepo string, prurl string) *gchResponse {
 	strw := msgWaitingPR
 	var val *gchResponse
 	var ok bool
-	waitTimer := time.NewTimer(40 * time.Second)
+	waitTimer := time.NewTimer(prTimeWait * time.Second)
 	fmt.Print(strw)
 	for {
 		select {
@@ -1050,10 +1067,10 @@ func waitPRChecks(parentrepo string, prurl string) *gchResponse {
 			if ok {
 				return val
 			}
-			return &gchResponse{_err: errors.New(errSomethigWrong)}
+			return &gchResponse{_err: errors.New(ErrSomethigWrong)}
 		case <-waitTimer.C:
 			fmt.Println("")
-			return &gchResponse{_err: errors.New(errTimer40Sec)}
+			return &gchResponse{_err: errors.New(ErrTimer40Sec)}
 		default:
 			time.Sleep(time.Second)
 			fmt.Print(".")
@@ -1089,7 +1106,7 @@ func getRemotes() []string {
 	stdout, _, _ := new(exec.PipedExec).
 		Command(git, "remote").
 		RunToStrings()
-	strs := strings.Split(stdout, "\n")
+	strs := strings.Split(stdout, caret)
 	for i, str := range strs {
 		if len(strings.TrimSpace(str)) == 0 {
 			strs = append(strs[:i], strs[i+1:]...)
@@ -1103,7 +1120,7 @@ func GetFilesForCommit() []string {
 	stdout, _, _ := new(exec.PipedExec).
 		Command(git, "status", "-s").
 		RunToStrings()
-	ss := strings.Split(stdout, "\n")
+	ss := strings.Split(stdout, caret)
 	var strs []string
 	for _, s := range ss {
 		if strings.TrimSpace(s) != "" {
@@ -1115,7 +1132,7 @@ func GetFilesForCommit() []string {
 
 func setUpstreamBranch(repo string, branch string) {
 	if branch == "" {
-		branch = "main"
+		branch = mainBrachName
 	}
 	errupstream := new(exec.PipedExec).
 		Command(git, "push", "--set-upstream", repo, branch).
@@ -1132,7 +1149,7 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 		Command("gawk", "{if ($1 == \"??\") print $2}").
 		RunToStrings()
 	ExitIfError(err)
-	files := strings.Split(stdout, "\n")
+	files := strings.Split(stdout, caret)
 
 	if len(files) == 0 {
 		return
@@ -1154,8 +1171,8 @@ func GetCommitFileSizes() (totalSize int, quantity int) {
 					fmt.Println("Error during conversion of value: ", err.Error())
 					return
 				}
-				totalSize = totalSize + sz
-				quantity = quantity + 1
+				totalSize += sz
+				quantity++
 			}
 		}
 	}
@@ -1188,7 +1205,7 @@ func GlobalPreCommitHookExist() bool {
 	err := os.MkdirAll(filepath, os.ModePerm)
 	ExitIfError(err)
 
-	filepath = filepath + "/pre-commit"
+	filepath += "/pre-commit"
 	// Check if the file already exists
 	if _, err := os.Stat(filepath); os.IsNotExist(err) {
 		return false // File pre-commit does not exist
@@ -1224,7 +1241,7 @@ func SetGlobalPreCommitHook() {
 		rootUser, err := user.Current()
 		ExitIfError(err)
 		path = rootUser.HomeDir
-		path = path + "/.git/hooks"
+		path += "/.git/hooks"
 		err = os.MkdirAll(path, os.ModePerm)
 		ExitIfError(err)
 	}
@@ -1255,9 +1272,10 @@ func GetRootFolder() string {
 func SetLocalPreCommitHook() {
 
 	// Turn off globa1 hooks
-	new(exec.PipedExec).
+	err := new(exec.PipedExec).
 		Command(git, "config", "--global", "--unset", "core.hookspath").
 		Run(os.Stdout, os.Stdout)
+	ExitIfError(err)
 
 	dir := GetRootFolder()
 	filename := "/.git/hooks/pre-commit"
@@ -1281,7 +1299,7 @@ func createOrOpenFile(filepath string) *os.File {
 		ExitIfError(err)
 		_, err = f.WriteString("#!/bin/bash\n")
 	} else {
-		f, err = os.OpenFile(filepath, os.O_APPEND|os.O_WRONLY, 0644)
+		f, err = os.OpenFile(filepath, os.O_APPEND|os.O_WRONLY, bashFilePerm)
 	}
 	ExitIfError(err)
 	return f
@@ -1303,7 +1321,7 @@ func fillPreCommitFile(myfilepath string) {
 	ExitIfError(err)
 
 	hookcode := "\n#Here is large files commit prevent is added by [qs]\n"
-	hookcode = hookcode + "bash " + lf + "\n"
+	hookcode = hookcode + "bash " + lf + caret
 	_, err = f.WriteString(hookcode)
 	ExitIfError(err)
 
@@ -1327,7 +1345,7 @@ func PRAhead() bool {
 
 	remotelist := getRemotes()
 	if len(remotelist) < 2 {
-		ExitIfError(errors.New("Upstream is not set, Pull Request can not be done."))
+		ExitIfError(errors.New("upstream is not set, Pull Request can not be done"))
 	}
 
 	err := new(exec.PipedExec).
@@ -1415,7 +1433,7 @@ func GetLastQSVersion() string {
 		logger.Error("GetLastQSVersion error:", stderr)
 	}
 
-	arr := strings.Split(strings.TrimSpace(stdouts), " ")
+	arr := strings.Split(strings.TrimSpace(stdouts), oneSpace)
 	if len(arr) == 0 {
 		return ""
 	}
@@ -1432,7 +1450,7 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 		logger.Error("GetIssueNumFromBranchName:", stderr)
 		return "", false
 	}
-	issuenums := strings.Split(stdouts, "\n")
+	issuenums := strings.Split(stdouts, caret)
 	myfullbranchname := strings.TrimSpace(getFullRepoAndOrgName() + "/tree/" + GetCurrentBranchName())
 	fmt.Println("Searching linked issue ")
 	for _, issuenum := range issuenums {
@@ -1442,8 +1460,8 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 				Command("gh", "issue", "develop", issuenum, "--list", "-R", parentrepo).
 				Command("gawk", "{print $2}").
 				RunToStrings()
-			if (err1 == nil) && (len(stdouts1) > 10) {
-				linkedbranches := strings.Split(stdouts1, "\n")
+			if (err1 == nil) && (len(stdouts1) > minIssueNoteLength) {
+				linkedbranches := strings.Split(stdouts1, caret)
 				for _, linkedbranche := range linkedbranches {
 					if strings.EqualFold(myfullbranchname, linkedbranche) {
 						return issuenum, true
@@ -1457,8 +1475,8 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 
 func GetIssuePRTitle(issueNum string, parentrepo string) []string {
 	name := GetIssueNameByNumber(issueNum, parentrepo)
-	s := IssuePRTtilePrefix + " " + name
-	body := IssueSign + issueNum + " " + name
+	s := IssuePRTtilePrefix + oneSpace + name
+	body := IssueSign + issueNum + oneSpace + name
 	return []string{s, body}
 }
 
@@ -1476,7 +1494,7 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) {
 		fmt.Println("Link issue to mileStone error: ", err.Error())
 		return
 	}
-	milestones := strings.Split(strMilestones, "\n")
+	milestones := strings.Split(strMilestones, caret)
 	// Sample date string in the "yyyy.mm.dd" format.
 	dateString := "2006.01.02"
 	// Get the current date and time.

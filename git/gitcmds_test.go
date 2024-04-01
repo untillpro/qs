@@ -8,7 +8,7 @@ import (
 
 func TestGetTaskIDFromUrl(t *testing.T) {
 	reponame := retrieveRepoNameFromUPL("https://github.com/IVVORG/test-repo/pull/38")
-	assert.Equal(t, reponame, "IVVORG/test-repo")
+	assert.Equal(t, "IVVORG/test-repo", reponame)
 }
 
 func TestGetNotes(t *testing.T) {
@@ -17,13 +17,13 @@ func TestGetNotes(t *testing.T) {
 	s2 := " https://dev.untill.com/projects/#!361164  "
 	notes := []string{s1, s2}
 	title, url := GetNoteAndURL(notes)
-	assert.Equal(t, title, "Permanent support for Peter,  Pascal, and customers")
-	assert.Equal(t, url, "https://dev.untill.com/projects/#!361164")
+	assert.Equal(t, "Permanent support for Peter,  Pascal, and customers", title)
+	assert.Equal(t, "https://dev.untill.com/projects/#!361164", url)
 
 	notes = []string{s2, s1}
 	title, url = GetNoteAndURL(notes)
-	assert.Equal(t, title, "Permanent support for Peter,  Pascal, and customers")
-	assert.Equal(t, url, "https://dev.untill.com/projects/#!361164")
+	assert.Equal(t, "Permanent support for Peter,  Pascal, and customers", title)
+	assert.Equal(t, "https://dev.untill.com/projects/#!361164", url)
 
 	// Test for GH Issue types
 
@@ -31,8 +31,8 @@ func TestGetNotes(t *testing.T) {
 	s2 = "Resolves #324"
 	notes = []string{s1, s2}
 	title, url = GetNoteAndURL(notes)
-	assert.Equal(t, title, "Resolves issue #324 My Best problem ever")
-	assert.Equal(t, url, "")
+	assert.Equal(t, "Resolves issue #324 My Best problem ever", title)
+	assert.Equal(t, "", url)
 }
 
 func TestGetBody(t *testing.T) {
@@ -41,12 +41,12 @@ func TestGetBody(t *testing.T) {
 	s2 := " https://dev.untill.com/projects/#!361164  "
 	notes := []string{s1, s2}
 	body := GetBodyFromNotes(notes)
-	assert.Equal(t, body, "")
+	assert.Equal(t, "", body)
 
 	// Test for GH Issue types
 	s1 = "Resolves issue #324 My Best problem ever"
 	s2 = " Resolves #324  "
 	notes = []string{s1, s2}
 	body = GetBodyFromNotes(notes)
-	assert.Equal(t, body, "Resolves #324")
+	assert.Equal(t, "Resolves #324", body)
 }
