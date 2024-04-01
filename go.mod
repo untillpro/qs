@@ -1,6 +1,6 @@
 module github.com/untillpro/qs
 
-go 1.21.5
+go 1.22.1
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
