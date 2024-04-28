@@ -314,6 +314,13 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				fmt.Println("You are in trunk. PR is only allowed from forked branch.")
 				os.Exit(0)
 			}
+			curBranch := git.GetCurrentBranchName()
+			isMainBranch := (curBranch == "main") || (curBranch == "master")
+			if isMainBranch {
+				fmt.Printf("\nUnable to create a pull request on branch '%s'. Use 'qs dev <branch_name>.\n", curBranch)
+				os.Exit(0)
+			}
+
 			var response string
 			if git.UpstreamNotExist(parentrepo) {
 				fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")

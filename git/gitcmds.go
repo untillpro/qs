@@ -1272,11 +1272,16 @@ func GetRootFolder() string {
 func SetLocalPreCommitHook() {
 
 	// Turn off globa1 hooks
-	err := new(exec.PipedExec).
-		Command(git, "config", "--global", "--unset", "core.hookspath").
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
 
+	err := new(exec.PipedExec).
+		Command(git, "config", "--global", "--get", "core.hookspath").
+		Run(os.Stdout, os.Stdout)
+	if nil == err {
+		err = new(exec.PipedExec).
+			Command(git, "config", "--global", "--unset", "core.hookspath").
+			Run(os.Stdout, os.Stdout)
+		ExitIfError(err)
+	}
 	dir := GetRootFolder()
 	filename := "/.git/hooks/pre-commit"
 	filepath := dir + filename
