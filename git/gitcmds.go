@@ -1386,6 +1386,13 @@ func MergeFromUpstream() {
 	ExitIfError(err)
 }
 
+func GawkInstalled() bool {
+	_, _, err := new(exec.PipedExec).
+		Command("gawk", "--version").
+		RunToStrings()
+	return err == nil
+}
+
 // GHInstalled returns is gh utility installed
 func GHInstalled() bool {
 	_, _, err := new(exec.PipedExec).

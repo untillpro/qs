@@ -838,6 +838,7 @@ func checkGH() bool {
 		return false
 	}
 	if !git.GHLoggedIn() {
+		fmt.Print("\nGH utility is not logged in\n")
 		return false
 	}
 	return true
