@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -727,6 +728,9 @@ func GetNotes() (notes []string, result bool) {
 		if len(note) > 0 {
 			notes = append(notes, note)
 		}
+	}
+	if len(notes) == 0 {
+		return notes, false
 	}
 	return notes, true
 }
@@ -1452,6 +1456,42 @@ func GetLastQSVersion() string {
 	return arr[len(arr)-1]
 }
 
+func extractIntegerPrefix(input string) (string, error) {
+	// Define the regular expression pattern
+	pattern := `^\d+`
+	re := regexp.MustCompile(pattern)
+
+	// Find the match
+	match := re.FindString(input)
+	if match == "" {
+		return "", fmt.Errorf("no integer found at the beginning of the string")
+	}
+
+	// Convert the matched string to an integer
+	integerValue, err := strconv.Atoi(match)
+	if err != nil {
+		return "", fmt.Errorf("error converting string to integer: %v", err)
+	}
+
+	return strconv.Itoa(integerValue), nil
+}
+
+func issuenumExists(parentrepo string, issuenum string) bool {
+	stdouts, _, err := new(exec.PipedExec).
+		Command("gh", "issue", "develop", issuenum, "--list", "-R", parentrepo).
+		Command("gawk", "{print $2}").
+		RunToStrings()
+	if (err == nil) && (len(stdouts) > minIssueNoteLength) {
+		names := strings.Split(stdouts, caret)
+		for _, name := range names {
+			if strings.Contains(name, slash+issuenum+"-") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 	stdouts, stderr, err := new(exec.PipedExec).
 		Command("gh", "issue", "list", "-R", parentrepo).
@@ -1462,25 +1502,24 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 		return "", false
 	}
 	issuenums := strings.Split(stdouts, caret)
-	myfullbranchname := strings.TrimSpace(getFullRepoAndOrgName() + "/tree/" + GetCurrentBranchName())
 	fmt.Println("Searching linked issue ")
+
+	tempissuenum, err := extractIntegerPrefix(parentrepo)
+	if err == nil {
+		if issuenumExists(parentrepo, tempissuenum) {
+			return tempissuenum, true
+		}
+	}
+
 	for _, issuenum := range issuenums {
 		if len(issuenum) > 0 {
 			fmt.Println("  Issue number: ", issuenum, "...")
-			stdouts1, _, err1 := new(exec.PipedExec).
-				Command("gh", "issue", "develop", issuenum, "--list", "-R", parentrepo).
-				Command("gawk", "{print $2}").
-				RunToStrings()
-			if (err1 == nil) && (len(stdouts1) > minIssueNoteLength) {
-				linkedbranches := strings.Split(stdouts1, caret)
-				for _, linkedbranche := range linkedbranches {
-					if strings.EqualFold(myfullbranchname, linkedbranche) {
-						return issuenum, true
-					}
-				}
+			if issuenumExists(parentrepo, issuenum) {
+				return issuenum, true
 			}
 		}
 	}
+
 	return "", false
 }
 
