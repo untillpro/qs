@@ -941,7 +941,6 @@ func MakePR(title string, notes []string, asDraft bool) (err error) {
 		b = b + caret + url
 	}
 
-	strnotes = strings.Replace(b, "Resolves ", "", 1)
 	strbody := fmt.Sprintln(b)
 	parentrepo := GetParentRepoName()
 	if asDraft {
