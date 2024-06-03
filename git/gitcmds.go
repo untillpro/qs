@@ -78,6 +78,7 @@ func ExitIfFalse(cond bool, args ...interface{}) {
 		fmt.Fprintln(os.Stderr, args...)
 		os.Exit(1)
 	}
+
 }
 
 // ExitIfError s.e.
@@ -87,6 +88,7 @@ func ExitIfError(err error, args ...interface{}) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+
 }
 
 func CheckIfGitRepo() string {
@@ -108,6 +110,7 @@ func ChangedFilesExist() (uncommitedFiles string, exist bool) {
 	uncommitedFiles = strings.TrimSpace(files)
 	exist = len(uncommitedFiles) > 0
 	return uncommitedFiles, exist
+
 }
 
 // Stash entries exist ?
@@ -118,6 +121,7 @@ func stashEntiresExist() bool {
 	ExitIfError(err)
 	stashentires := strings.TrimSpace(stdouts)
 	return len(stashentires) > 0
+
 }
 
 // Status shows git repo status
@@ -138,6 +142,7 @@ func Status(cfg vcs.CfgStatus) {
 		Command("git", "status", "-s", "-b", "-uall").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
+
 }
 
 /*
@@ -234,6 +239,7 @@ func Release() {
 			Run(os.Stdout, os.Stdout)
 		ExitIfError(err)
 	}
+
 }
 
 // Upload upload sources to git repo
@@ -312,6 +318,7 @@ func Upload(cfg vcs.CfgUpload) {
 	}
 
 	ExitIfError(err)
+
 }
 
 // Download sources from git repo
@@ -340,6 +347,7 @@ func getFullRepoAndOrgName() string {
 		return ""
 	}
 	return strings.TrimSuffix(strings.TrimSpace(stdouts), slash)
+
 }
 
 // GetRepoAndOrgName - from .git/config
