@@ -1489,6 +1489,7 @@ func issuenumExists(parentrepo string, issuenum string) bool {
 		Command("gh", "issue", "develop", issuenum, "--list", "-R", parentrepo).
 		Command("gawk", "{print $2}").
 		RunToStrings()
+
 	if (err == nil) && (len(stdouts) > minIssueNoteLength) {
 		names := strings.Split(stdouts, caret)
 		for _, name := range names {
@@ -1500,7 +1501,18 @@ func issuenumExists(parentrepo string, issuenum string) bool {
 	return false
 }
 
-func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
+func GetIssueNumFromBranchName(parentrepo string, curbranch string) (issuenum string, ok bool) {
+
+	tempissuenum, err := extractIntegerPrefix(curbranch)
+	if tempissuenum == "" {
+		return "", false
+	}
+	if err == nil {
+		if issuenumExists(parentrepo, tempissuenum) {
+			return tempissuenum, true
+		}
+	}
+
 	stdouts, stderr, err := new(exec.PipedExec).
 		Command("gh", "issue", "list", "-R", parentrepo).
 		Command("gawk", "{print $1}").
@@ -1511,13 +1523,6 @@ func GetIssueNumFromBranchName(parentrepo string) (issuenum string, ok bool) {
 	}
 	issuenums := strings.Split(stdouts, caret)
 	fmt.Println("Searching linked issue ")
-
-	tempissuenum, err := extractIntegerPrefix(parentrepo)
-	if err == nil {
-		if issuenumExists(parentrepo, tempissuenum) {
-			return tempissuenum, true
-		}
-	}
 
 	for _, issuenum := range issuenums {
 		if len(issuenum) > 0 {
