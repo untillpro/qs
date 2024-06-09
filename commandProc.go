@@ -358,7 +358,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				if !ok || issueNote(notes) {
 					issueNum, issueok = getIssueNumFromNotes(notes)
 					if !issueok {
-						issueNum, issueok = git.GetIssueNumFromBranchName(parentrepo)
+						issueNum, issueok = git.GetIssueNumFromBranchName(parentrepo, curBranch)
 					}
 				}
 				if !ok && issueok {
