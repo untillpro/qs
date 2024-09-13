@@ -24,6 +24,7 @@ const (
 	caret                 = "\n"
 	git                   = "git"
 	push                  = "push"
+	pull                  = "pull"
 	fetch                 = "fetch"
 	branch                = "branch"
 	checkout              = "checkout"
@@ -160,7 +161,7 @@ func Release() {
 	// *************************************************
 	logger.Info("Pulling")
 	err := new(exec.PipedExec).
-		Command("git", "pull").
+		Command("git", pull).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
@@ -317,7 +318,7 @@ func Upload(cfg vcs.CfgUpload) {
 // Download sources from git repo
 func Download(cfg vcs.CfgDownload) {
 	err := new(exec.PipedExec).
-		Command(git, "pull").
+		Command(git, pull).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 }
@@ -498,7 +499,7 @@ func DevShort(branch string, comments []string) {
 	ExitIfError(err)
 
 	err = new(exec.PipedExec).
-		Command(git, "pull", "upstream", mainbrach, "--no-edit").
+		Command(git, pull, "upstream", mainbrach, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
@@ -643,13 +644,14 @@ func Dev(branch string, comments []string) {
 	ExitIfError(err)
 
 	err = new(exec.PipedExec).
-		Command(git, "pull", "upstream", mainbrach, "--no-edit").
+		Command(git, pull, "upstream", mainbrach, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
 	_, stderr, err := new(exec.PipedExec).
 		Command(git, "checkout", mainbrach).
 		RunToStrings()
+
 	if err != nil {
 		if strings.Contains(err.Error(), err128) && strings.Contains(stderr, "matched multiple") {
 			err = new(exec.PipedExec).
@@ -659,9 +661,14 @@ func Dev(branch string, comments []string) {
 		}
 	}
 	ExitIfError(err)
-
+	/*
+		err = new(exec.PipedExec).
+			Command(git, "rebase", mainbrach).
+			Run(os.Stdout, os.Stdout)
+		ExitIfError(err)
+	*/
 	err = new(exec.PipedExec).
-		Command(git, "pull", "-p", "upstream", mainbrach).
+		Command(git, pull, "-p", "upstream", mainbrach).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 	err = new(exec.PipedExec).
@@ -684,6 +691,7 @@ func Dev(branch string, comments []string) {
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
+	// Add empty commit to create commit object and link notes to it
 	addNotes(comments)
 
 	err = new(exec.PipedExec).
@@ -840,7 +848,7 @@ func DeleteBranchesRemote(brs []string) {
 func PullUpstream() {
 	mainbr := GetMainBranch()
 	err := new(exec.PipedExec).
-		Command(git, "pull", "upstream", mainbr, "--no-edit").
+		Command(git, pull, "upstream", mainbr, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 }
@@ -1369,6 +1377,25 @@ func PRAhead() bool {
 
 }
 
+func MergeFromUpstreamRebase() {
+	mainbr := GetMainBranch()
+	err := new(exec.PipedExec).
+		Command(git, "fetch", "upstream").
+		Run(os.Stdout, os.Stdout)
+	ExitIfError(err)
+
+	err = new(exec.PipedExec).
+		Command(git, "rebase", "upstream/"+mainbr).
+		Run(os.Stdout, os.Stdout)
+	ExitIfError(err)
+
+	brName := GetCurrentBranchName()
+	err = new(exec.PipedExec).
+		Command(git, push, "-f", origin, brName).
+		Run(os.Stdout, os.Stdout)
+	ExitIfError(err)
+}
+
 func MergeFromUpstream() {
 	mainbr := GetMainBranch()
 
@@ -1384,7 +1411,7 @@ func MergeFromUpstream() {
 
 	brName := GetCurrentBranchName()
 	err = new(exec.PipedExec).
-		Command(git, "push", "origin", brName).
+		Command(git, push, origin, brName).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 }
