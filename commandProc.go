@@ -341,7 +341,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 					return
 				}
 				response = ""
-				git.MergeFromUpstream()
+				git.MergeFromUpstreamRebase()
 				//git.MergeFromUpstream()
 			}
 
