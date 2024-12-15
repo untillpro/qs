@@ -774,6 +774,9 @@ func GetMergedBranchList() (brlist []string, err error) {
 
 	stdouts, _, err := new(exec.PipedExec).
 		Command("gh", "pr", "list", "-L", "200", "--state", "merged", "--author", org, "--repo", repo).
+		Command("gawk", "/MERGED/{print $4}").
+		Command("gawk", "-F:", "{print $2}").
+		Command("grep", "-v", "'^$'").
 		RunToStrings()
 	if err != nil {
 		return []string{}, err
@@ -781,15 +784,9 @@ func GetMergedBranchList() (brlist []string, err error) {
 
 	mbrlistraw := strings.Split(stdouts, caret)
 	for _, mbranchstr := range mbrlistraw {
-		arr := strings.Split(mbranchstr, ":")
-		if len(arr) > 1 {
-			if strings.Contains(arr[1], "MERGED") {
-				arrstr := strings.ReplaceAll(strings.TrimSpace(arr[1]), "MERGED", "")
-				arrstr = strings.TrimSpace(arrstr)
-				if !strings.Contains(arrstr, "master") && !strings.Contains(arrstr, mainBrachName) {
-					mbrlist = append(mbrlist, arrstr)
-				}
-			}
+		arrstr := strings.TrimSpace(mbranchstr)
+		if (strings.TrimSpace(arrstr) != "") && !strings.Contains(arrstr, "master") && !strings.Contains(arrstr, mainBrachName) {
+			mbrlist = append(mbrlist, arrstr)
 		}
 	}
 	_, _, err = new(exec.PipedExec).
@@ -850,7 +847,11 @@ func PullUpstream() {
 	err := new(exec.PipedExec).
 		Command(git, pull, "upstream", mainbr, "--no-edit").
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+
+	if err != nil {
+		parentrepo := GetParentRepoName()
+		MakeUpstreamForBranch(parentrepo)
+	}
 }
 
 // GetGoneBranchesLocal returns gone local branches
@@ -866,15 +867,9 @@ func GetGoneBranchesLocal() *[]string {
 		RunToStrings()
 	ExitIfError(err)
 	// 2. Step
-	mainbranch := GetMainBranch()
-	_, _, err = new(exec.PipedExec).
-		Command(git, checkout, mainbranch).
-		RunToStrings()
-	ExitIfError(err)
-	// 3. Step
 	stdouts, _, err := new(exec.PipedExec).
 		Command(git, branch, "-vv").
-		Command("grep", ": ").
+		Command("grep", ":").
 		Command("gawk", "{print $1}").
 		RunToStrings()
 	if nil != err {

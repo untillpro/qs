@@ -28,7 +28,7 @@ const (
 	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
 	ignorehook       = "--ignore-hook"
-	pushConfirm      = "\n*** Changes shown above will be uploaded to repository"
+	pushConfirm      = "\n*** Changes shown above will be uploaded to repository(they are merged)"
 	pushFail         = "Ok, see you"
 	pushYes          = "y"
 	pushMessageWord  = "message"
@@ -792,29 +792,39 @@ func (cp *commandProcessor) deleteBranches() {
 
 	fmt.Print("\nChecking if unused local branches exist...")
 	var strs *[]string = git.GetGoneBranchesLocal()
+
 	var strFin []string
+
 	for _, str := range *strs {
-		if (strings.TrimSpace(str) != "") && (strings.TrimSpace(str) != "*") {
+		if (strings.TrimSpace(str) != "") && (strings.TrimSpace(str) != "*") && (strings.TrimSpace(str) != "main") && (strings.TrimSpace(str) != "master") {
 			strFin = append(strFin, str)
 		}
 	}
+
 	if len(strFin) == 0 {
 		fmt.Print("\n***There no unused local branches.")
 		return
 	}
+
 	fmt.Print(devider)
+
 	for _, str := range strFin {
 		fmt.Print("\n" + str)
 	}
+
 	fmt.Print(devider)
 	fmt.Print(delLocalBranchConfirm)
 	fmt.Scanln(&response)
 	switch response {
 	case pushYes:
+
 		git.DeleteBranchesLocal(strs)
+
 	default:
+
 		fmt.Print(pushFail)
 	}
+
 }
 
 func setPreCommitHook() {
