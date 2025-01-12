@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -535,16 +536,20 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				}
 			}
 			issueNum, ok := argContainsIssueLink(args...)
-			if ok {
+			if ok { // github issue
 				fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
 				fmt.Scanln(&response)
 				if response == pushYes {
 					// Remote developer branch, linked to issue is created
 					branch, notes = git.DevIssue(issueNum, args...)
 				}
-			} else {
-				branch, notes = getBranchName(false, args...)
-
+			} else { // PK topic or Jira issue
+				_, ok := argContainsJiraIssue(args...)
+				if ok { // Jira issue
+					branch, notes = getJiraBranchName(args...)
+				} else {
+					branch, notes = getBranchName(false, args...)
+				}
 				devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 				fmt.Print(devMsg)
 				fmt.Scanln(&response)
@@ -628,6 +633,23 @@ func getTaskIDFromURL(url string) string {
 	return strings.TrimSpace(entry)
 }
 
+func argContainsJiraIssue(args ...string) (jiraName string, ok bool) {
+	// Define a regular expression to match JIRA issue URLs
+	// The regex matches URLs like "https://<subdomain>.atlassian.net/browse/<ISSUE-KEY>"
+	re := regexp.MustCompile(`https://[a-zA-Z0-9-]+\.atlassian\.net/browse/([A-Z]+-[A-Z0-9-]+)`)
+
+	for _, arg := range args {
+		// Check if the argument matches the pattern
+		if matches := re.FindStringSubmatch(arg); matches != nil {
+			// Return the issue key (group 1) and true
+			return matches[1], true
+		}
+	}
+
+	// No matching argument was found
+	return "", false
+}
+
 func argContainsIssueLink(args ...string) (issueNum int, ok bool) {
 	ok = false
 	if len(args) != 1 {
@@ -644,6 +666,38 @@ func argContainsIssueLink(args ...string) (issueNum int, ok bool) {
 		return i, true
 	}
 	return
+}
+
+// getJiraBranchName generates a branch name based on a JIRA issue URL in the arguments.
+// If a JIRA URL is found, it generates a branch name in the format "<ISSUE-KEY>-<cleaned-description>".
+// Additionally, it generates comments in the format "[<ISSUE-KEY>] <original-line>".
+func getJiraBranchName(args ...string) (branch string, comments []string) {
+	re := regexp.MustCompile(`https://([a-zA-Z0-9-]+)\.atlassian\.net/browse/([A-Z]+-[A-Z0-9-]+)`)
+
+	for _, arg := range args {
+		if matches := re.FindStringSubmatch(arg); matches != nil {
+			issueKey := matches[2] // Extract the JIRA issue key (e.g., "AIR-270")
+
+			// Extract the subdomain for the branch name if no description is present
+			subdomain := strings.ReplaceAll(matches[1], ".", "-")  // Replace dots in the subdomain with hyphens
+			description := strings.ReplaceAll(arg, matches[0], "") // Remove the URL from the argument
+			description = strings.TrimSpace(description)
+			description = strings.ToLower(strings.ReplaceAll(description, " ", "-"))
+
+			// If description is empty, fallback to subdomain-based naming
+			if description == "" {
+				branch = issueKey + "-" + subdomain + "-atlassian-net"
+			} else {
+				branch = issueKey + "-" + description
+			}
+
+			comments = append(comments, "["+issueKey+"]")
+		} else {
+			comments = append(comments, arg)
+		}
+	}
+
+	return branch, comments
 }
 
 func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string) {
