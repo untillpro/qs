@@ -176,6 +176,13 @@ func TestGetJiraBranchName(t *testing.T) {
 	}
 }
 
+func TestGetJiraIssueName(t *testing.T) {
+	name, ok := getJiraIssueNameByNumber("AIR-270")
+	if ok {
+		assert.Equal(t, "qwfwf", name)
+	}
+}
+
 // Helper function to compare two slices
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {

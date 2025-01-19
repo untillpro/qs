@@ -400,6 +400,19 @@ func Fork() (repo string, err error) {
 	return repo, nil
 }
 
+// GetUserEmail - github user email
+func GetUserEmail() string {
+	stdouts, strerr, err := new(exec.PipedExec).
+		Command("gh", "api", "user", "--jq", ".email").
+		RunToStrings()
+	if err != nil {
+		fmt.Println("--------------------------------------------------------------------")
+		fmt.Println(strerr)
+		os.Exit(1)
+	}
+	return strings.TrimSpace(stdouts)
+}
+
 func GetRemoteUpstreamURL() string {
 	stdouts, _, err := new(exec.PipedExec).
 		Command(git, "config", "--local", "remote.upstream.url").

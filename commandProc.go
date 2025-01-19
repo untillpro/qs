@@ -3,7 +3,10 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -673,30 +676,24 @@ func argContainsIssueLink(args ...string) (issueNum int, ok bool) {
 // Additionally, it generates comments in the format "[<ISSUE-KEY>] <original-line>".
 func getJiraBranchName(args ...string) (branch string, comments []string) {
 	re := regexp.MustCompile(`https://([a-zA-Z0-9-]+)\.atlassian\.net/browse/([A-Z]+-[A-Z0-9-]+)`)
-
 	for _, arg := range args {
 		if matches := re.FindStringSubmatch(arg); matches != nil {
 			issueKey := matches[2] // Extract the JIRA issue key (e.g., "AIR-270")
 
-			// Extract the subdomain for the branch name if no description is present
-			subdomain := strings.ReplaceAll(matches[1], ".", "-")  // Replace dots in the subdomain with hyphens
-			description := strings.ReplaceAll(arg, matches[0], "") // Remove the URL from the argument
-			description = strings.TrimSpace(description)
-			description = strings.ToLower(strings.ReplaceAll(description, " ", "-"))
+			issuename := getJiraIssueNameByNumber(issueKey)
 
-			// If description is empty, fallback to subdomain-based naming
-			if description == "" {
-				branch = issueKey + "-" + subdomain + "-atlassian-net"
+			var brname string
+			if issuename == "" {
+				branch, _ = getBranchName(false, args...)
 			} else {
-				branch = issueKey + "-" + description
+				brname, _ = getBranchName(false, issuename)
+				branch = issueKey + "-" + brname
 			}
+			comments = append(comments, "["+issueKey+"] "+issuename)
 
-			comments = append(comments, "["+issueKey+"]")
-		} else {
-			comments = append(comments, arg)
 		}
 	}
-
+	comments = append(comments, args...)
 	return branch, comments
 }
 
@@ -925,4 +922,75 @@ func checkQSver() bool {
 		return response == pushYes
 	}
 	return true
+}
+
+func getJiraIssueNameByNumber(issueNum string) (name string) {
+	// Validate the issue key
+	if issueNum == "" {
+		fmt.Println("Error: Issue key is required.")
+		return ""
+	}
+
+	// Retrieve API token and email from environment variables
+	apiToken := os.Getenv("JIRA_API_TOKEN")
+	if apiToken == "" {
+		fmt.Println("Error: API token is not set. Please export JIRA_API_TOKEN.")
+		return ""
+	}
+	var email string
+	email = os.Getenv("JIRA_EMAIL")
+	if email == "" {
+		email = git.GetUserEmail() // Replace with your email
+	}
+	if email == "" {
+		fmt.Println("Error: Please export JIRA_EMAIL.")
+		return ""
+	}
+	fmt.Println("User email: ", email)
+	jiraDomain := "https://untill.atlassian.net"
+
+	// Build the request URL
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s", jiraDomain, issueNum)
+
+	// Create HTTP client and request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return ""
+	}
+	req.SetBasicAuth(email, apiToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	// Read and parse the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var result struct {
+		Fields struct {
+			Summary string `json:"summary"`
+		} `json:"fields"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		fmt.Println("Error parsing JSON response:", err)
+		return ""
+	}
+
+	// Check if the summary field exists
+	if result.Fields.Summary == "" {
+		return ""
+	}
+
+	return result.Fields.Summary
 }
