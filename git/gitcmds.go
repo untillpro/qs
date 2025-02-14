@@ -448,7 +448,8 @@ func GetMainBranch() string {
 
 func getUserName() string {
 	stdouts, _, err := new(exec.PipedExec).
-		Command(git, "config", "--global", "user.name").
+		Command("gh", "api", "user").
+		Command("jq", "-r", ".login").
 		RunToStrings()
 	ExitIfError(err)
 	return strings.TrimSpace(stdouts)
