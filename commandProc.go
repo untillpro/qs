@@ -680,9 +680,8 @@ func getJiraBranchName(args ...string) (branch string, comments []string) {
 		if matches := re.FindStringSubmatch(arg); matches != nil {
 			issueKey := matches[2] // Extract the JIRA issue key (e.g., "AIR-270")
 
-			issuename := getJiraIssueNameByNumber(issueKey)
-
 			var brname string
+			issuename := getJiraIssueNameByNumber(issueKey)
 			if issuename == "" {
 				branch, _ = getBranchName(false, args...)
 			} else {
@@ -934,7 +933,11 @@ func getJiraIssueNameByNumber(issueNum string) (name string) {
 	// Retrieve API token and email from environment variables
 	apiToken := os.Getenv("JIRA_API_TOKEN")
 	if apiToken == "" {
-		fmt.Println("Error: API token is not set. Please export JIRA_API_TOKEN.")
+		fmt.Println("--------------------------------------------------------------------------------")
+		fmt.Println("Error: JIRA API token not found. Please set environment variable JIRA_API_TOKEN.")
+		fmt.Println("            Jira API token can generate on this page:")
+		fmt.Println("          https://id.atlassian.com/manage-profile/security/api-tokens           ")
+		fmt.Println("--------------------------------------------------------------------------------")
 		return ""
 	}
 	var email string
