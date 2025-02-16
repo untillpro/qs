@@ -507,8 +507,13 @@ func DevShort(branch string, comments []string) {
 		ExitIfError(err)
 	}
 
+	rebaseval := "true"
+	upstream := GetRemoteUpstreamURL()
+	if strings.TrimSpace(upstream) == "" {
+		rebaseval = "false"
+	}
 	err = new(exec.PipedExec).
-		Command(git, "config", "pull.rebase", "false").
+		Command(git, "config", "pull.rebase", rebaseval).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
@@ -652,8 +657,13 @@ func Dev(branch string, comments []string) {
 		ExitIfError(err)
 	}
 
+	rebaseval := "true"
+	upstream := GetRemoteUpstreamURL()
+	if strings.TrimSpace(upstream) == "" {
+		rebaseval = "false"
+	}
 	err = new(exec.PipedExec).
-		Command(git, "config", "pull.rebase", "false").
+		Command(git, "config", "pull.rebase", rebaseval).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
@@ -675,12 +685,6 @@ func Dev(branch string, comments []string) {
 		}
 	}
 	ExitIfError(err)
-	/*
-		err = new(exec.PipedExec).
-			Command(git, "rebase", mainbrach).
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
-	*/
 	err = new(exec.PipedExec).
 		Command(git, pull, "-p", "upstream", mainbrach).
 		Run(os.Stdout, os.Stdout)
@@ -1402,26 +1406,6 @@ func MergeFromUpstreamRebase() {
 	brName := GetCurrentBranchName()
 	err = new(exec.PipedExec).
 		Command(git, push, "-f", origin, brName).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-}
-
-func MergeFromUpstream() {
-	mainbr := GetMainBranch()
-
-	err := new(exec.PipedExec).
-		Command(git, "config", "pull.rebase", "false").
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-
-	err = new(exec.PipedExec).
-		Command(git, "pull", "upstream", mainbr, "--no-edit").
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-
-	brName := GetCurrentBranchName()
-	err = new(exec.PipedExec).
-		Command(git, push, origin, brName).
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 }

@@ -346,7 +346,6 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 				}
 				response = ""
 				git.MergeFromUpstreamRebase()
-				//git.MergeFromUpstream()
 			}
 
 			var err error

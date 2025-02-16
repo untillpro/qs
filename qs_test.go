@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -176,7 +177,6 @@ func TestGetJiraBranchName(t *testing.T) {
 	}
 }
 
-/*
 func TestGetJiraIssueName(t *testing.T) {
 	os.Setenv("JIRA_EMAIL", "v.istratenko@dev.untill.com")
 	name := getJiraIssueNameByNumber("AIR-270")
@@ -184,7 +184,7 @@ func TestGetJiraIssueName(t *testing.T) {
 		assert.Equal(t, "qwfwf", name)
 	}
 }
-*/
+
 // Helper function to compare two slices
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {
