@@ -45,6 +45,7 @@ const (
 	delBranchConfirm      = "\n*** Branches shown above will be deleted from your forked repository, 'y': agree>"
 	delBranchNothing      = "\n*** There are no remote branches to delete."
 	delLocalBranchConfirm = "\n*** Branches shown above are unused local branches. Delete them all? 'y': agree>"
+	delLocalBranchNothing = "\n*** There no unused local branches."
 
 	pullParam     = "d"
 	pullParamDesc = "Download sources from repo"
@@ -823,7 +824,7 @@ func (cp *commandProcessor) deleteBranches() {
 
 	var response string
 	if len(lst) == 0 {
-		fmt.Print(delBranchNothing)
+		fmt.Println(delBranchNothing)
 	} else {
 		fmt.Print(devider)
 		for _, l := range lst {
@@ -848,13 +849,13 @@ func (cp *commandProcessor) deleteBranches() {
 	var strFin []string
 
 	for _, str := range *strs {
-		if (strings.TrimSpace(str) != "") && (strings.TrimSpace(str) != "*") && (strings.TrimSpace(str) != "main") && (strings.TrimSpace(str) != "master") {
+		if (strings.TrimSpace(str) != "") && (strings.TrimSpace(str) != "*") {
 			strFin = append(strFin, str)
 		}
 	}
 
 	if len(strFin) == 0 {
-		fmt.Print("\n***There no unused local branches.")
+		fmt.Println(delLocalBranchNothing)
 		return
 	}
 

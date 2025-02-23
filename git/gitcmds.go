@@ -534,7 +534,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	ExitIfError(err)
 
 	stdouts, stderr, err := new(exec.PipedExec).
-		Command("gh", "issue", "develop", strissuenum, "--issue-repo="+parentrepo, "--repo", myrepo).
+		Command("gh", "issue", "develop", strissuenum, "--repo="+parentrepo, "--repo", myrepo).
 		RunToStrings()
 	if err != nil {
 		fmt.Println(stderr)
@@ -718,18 +718,19 @@ func GetMergedBranchList() (brlist []string, err error) {
 
 	stdouts, _, err := new(exec.PipedExec).
 		Command("gh", "pr", "list", "-L", "200", "--state", "merged", "--author", org, "--repo", repo).
-		Command("gawk", "/MERGED/{print $4}").
 		Command("gawk", "-F:", "{print $2}").
-		Command("grep", "-v", "'^$'").
+		Command("gawk", "/MERGED/{print $1}").
 		RunToStrings()
 	if err != nil {
 		return []string{}, err
 	}
 
 	mbrlistraw := strings.Split(stdouts, caret)
+	mainbr := GetMainBranch()
+	curbr := GetCurrentBranchName()
 	for _, mbranchstr := range mbrlistraw {
 		arrstr := strings.TrimSpace(mbranchstr)
-		if (strings.TrimSpace(arrstr) != "") && !strings.Contains(arrstr, "master") && !strings.Contains(arrstr, mainBrachName) {
+		if (strings.TrimSpace(arrstr) != "") && !strings.Contains(arrstr, curbr) && !strings.Contains(arrstr, mainbr) {
 			mbrlist = append(mbrlist, arrstr)
 		}
 	}
@@ -749,9 +750,7 @@ func GetMergedBranchList() (brlist []string, err error) {
 		mybranch = strings.ReplaceAll(strings.TrimSpace(mybranch), originSlash, "")
 		mybranch = strings.TrimSpace(mybranch)
 		bfound := false
-		if strings.Contains(mybranch, "master") || strings.Contains(mybranch, mainBrachName) || strings.Contains(mybranch, "HEAD") {
-			bfound = false
-		} else {
+		if !strings.Contains(mybranch, mainbr) && !strings.Contains(mybranch, "HEAD") {
 			for _, mbranch := range mbrlist {
 				mbranch = strings.ReplaceAll(strings.TrimSpace(mbranch), "MERGED", "")
 				mbranch = strings.TrimSpace(mbranch)
@@ -789,7 +788,7 @@ func DeleteBranchesRemote(brs []string) {
 func PullUpstream() {
 	mainbr := GetMainBranch()
 	err := new(exec.PipedExec).
-		Command(git, pull, "upstream", mainbr, "--no-edit").
+		Command(git, pull, "-q", "upstream", mainbr, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 
 	if err != nil {
@@ -820,8 +819,39 @@ func GetGoneBranchesLocal() *[]string {
 	if nil != err {
 		return &[]string{}
 	}
-	strs := strings.Split(stdouts, caret)
-	return &strs
+	mbrlocallist := strings.Split(stdouts, caret)
+	fmt.Println("mbrlocallist\n", mbrlocallist)
+
+	stsr := []string{}
+	stdouts, _, err = new(exec.PipedExec).
+		Command(git, branch, "-r").
+		RunToStrings()
+	ExitIfError(err)
+	myremotelist := strings.Split(stdouts, caret)
+	mainbr := GetMainBranch()
+	curbr := GetCurrentBranchName()
+	for _, mylocalbranch := range mbrlocallist {
+		mybranch := strings.TrimSpace(mylocalbranch)
+		bfound := false
+		if strings.Contains(mybranch, curbr) {
+			bfound = true
+		} else {
+			if !strings.Contains(mybranch, mainbr) && !strings.Contains(mybranch, "HEAD") {
+				for _, mbranch := range myremotelist {
+					mbranch = strings.TrimSpace(mbranch)
+					if mybranch == mbranch {
+						bfound = true
+						break
+					}
+				}
+			}
+		}
+		if !bfound {
+			// delete branch in fork
+			stsr = append(stsr, mybranch)
+		}
+	}
+	return &stsr
 }
 
 // DeleteBranchesLocal s.e.
