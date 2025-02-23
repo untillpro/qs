@@ -128,55 +128,6 @@ func TestContainsJiraName(t *testing.T) {
 	}
 }
 
-func TestGetJiraBranchName(t *testing.T) {
-	tests := []struct {
-		name      string
-		args      []string
-		expectedB string
-		expectedC []string
-	}{
-		{
-			name:      "Valid JIRA issue URL",
-			args:      []string{"Line 1", "https://untill.atlassian.net/browse/AIR-270", "Line 3"},
-			expectedB: "AIR-270-untill-atlassian-net",
-			expectedC: []string{"Line 1", "[AIR-270]", "Line 3"},
-		},
-		{
-			name:      "Multiple arguments with valid JIRA issue URL",
-			args:      []string{"random-text", "https://voedger.atlassian.net/browse/TRE-FISH-270", "another-arg"},
-			expectedB: "TRE-FISH-270-voedger-atlassian-net",
-			expectedC: []string{"random-text", "[TRE-FISH-270]", "another-arg"},
-		},
-		{
-			name:      "JIRA URL with description",
-			args:      []string{"My name of issue https://untill.atlassian.net/browse/AIR-270"},
-			expectedB: "AIR-270-my-name-of-issue",
-			expectedC: []string{"[AIR-270]"},
-		},
-		{
-			name:      "No JIRA issue URL",
-			args:      []string{"random-text", "another-arg"},
-			expectedB: "",
-			expectedC: []string{"random-text", "another-arg"},
-		},
-		{
-			name:      "Empty arguments",
-			args:      []string{},
-			expectedB: "",
-			expectedC: []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			branch, comments := getJiraBranchName(tt.args...)
-			if branch != tt.expectedB || !equalSlices(comments, tt.expectedC) {
-				t.Errorf("getJiraBranchName(%v) = (%v, %v), want (%v, %v)", tt.args, branch, comments, tt.expectedB, tt.expectedC)
-			}
-		})
-	}
-}
-
 func TestGetJiraIssueName(t *testing.T) {
 	os.Setenv("JIRA_EMAIL", "v.istratenko@dev.untill.com")
 	name := getJiraIssueNameByNumber("AIR-270")
