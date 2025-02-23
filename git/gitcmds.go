@@ -491,74 +491,6 @@ func MakeUpstream(repo string) {
 	ExitIfError(err)
 }
 
-// DevShort  - dev branch in trunk
-func DevShort(branch string, comments []string) {
-	mainbrach := GetMainBranch()
-	_, chExist := ChangedFilesExist()
-	var err error
-	if chExist {
-		err = new(exec.PipedExec).
-			Command(git, "add", ".").
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
-		err = new(exec.PipedExec).
-			Command(git, "stash").
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
-	}
-
-	rebaseval := "true"
-	upstream := GetRemoteUpstreamURL()
-	if strings.TrimSpace(upstream) == "" {
-		rebaseval = "false"
-	}
-	err = new(exec.PipedExec).
-		Command(git, "config", "pull.rebase", rebaseval).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-
-	err = new(exec.PipedExec).
-		Command(git, pull, "upstream", mainbrach, "--no-edit").
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-
-	_, stderr, err := new(exec.PipedExec).
-		Command(git, "checkout", mainbrach).
-		RunToStrings()
-	if err != nil {
-		if strings.Contains(err.Error(), err128) && strings.Contains(stderr, "matched multiple") {
-			err = new(exec.PipedExec).
-				Command(git, "checkout", "--track", originSlash+mainbrach).
-				Run(os.Stdout, os.Stdout)
-			ExitIfError(err)
-		}
-	}
-
-	err = new(exec.PipedExec).
-		Command(git, "checkout", "-b", branch).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-
-	// Add empty commit to create commit object and link notes to it
-	err = new(exec.PipedExec).
-		Command(git, "commit", "--allow-empty", "-m", MsgCommitForNotes).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-	addNotes(comments)
-
-	err = new(exec.PipedExec).
-		Command(git, push, "-u", origin, branch).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-
-	if chExist {
-		err = new(exec.PipedExec).
-			Command(git, "stash", "pop").
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
-	}
-}
-
 func GetIssuerepoFromUrl(url string) (reponame string) {
 	if len(url) < 2 {
 		return
@@ -642,7 +574,7 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 }
 
 // Dev branch
-func Dev(branch string, comments []string) {
+func Dev(branch string, comments []string, branchinfork bool) {
 	mainbrach := GetMainBranch()
 	_, chExist := ChangedFilesExist()
 	var err error
@@ -657,13 +589,8 @@ func Dev(branch string, comments []string) {
 		ExitIfError(err)
 	}
 
-	rebaseval := "true"
-	upstream := GetRemoteUpstreamURL()
-	if strings.TrimSpace(upstream) == "" {
-		rebaseval = "false"
-	}
 	err = new(exec.PipedExec).
-		Command(git, "config", "pull.rebase", rebaseval).
+		Command(git, "config", "pull.rebase", "true").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
@@ -685,19 +612,18 @@ func Dev(branch string, comments []string) {
 		}
 	}
 	ExitIfError(err)
-	err = new(exec.PipedExec).
-		Command(git, pull, "-p", "upstream", mainbrach).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-	err = new(exec.PipedExec).
-		Command(git, push).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
 
-	err = new(exec.PipedExec).
-		Command(git, "checkout", "-b", branch).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if branchinfork {
+		err = new(exec.PipedExec).
+			Command(git, pull, "-p", "upstream", mainbrach).
+			Run(os.Stdout, os.Stdout)
+		ExitIfError(err)
+		err = new(exec.PipedExec).
+			Command(git, push, origin, mainbrach).
+			Run(os.Stdout, os.Stdout)
+		ExitIfError(err)
+	}
+
 	err = new(exec.PipedExec).
 		Command(git, "checkout", "-B", branch).
 		Run(os.Stdout, os.Stdout)
@@ -1354,9 +1280,6 @@ func fillPreCommitFile(myfilepath string) {
 	hookcode = hookcode + "bash " + lf + caret
 	_, err = f.WriteString(hookcode)
 	ExitIfError(err)
-
-	//cmd := exec.Command("chmod +x " + myfilepath)
-	//err = cmd.Run()
 
 	err = new(exec.PipedExec).
 		Command("chmod", "+x", myfilepath).

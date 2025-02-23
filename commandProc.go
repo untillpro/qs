@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -270,6 +272,7 @@ func (cp *commandProcessor) Execute() {
 
 	if err != nil {
 		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 
@@ -574,9 +577,9 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 					}
 				}
 				if len(remoteURL) == 0 {
-					git.DevShort(branch, notes)
+					git.Dev(branch, notes, false)
 				} else {
-					git.Dev(branch, notes)
+					git.Dev(branch, notes, true)
 				}
 			default:
 				fmt.Print(pushFail)
@@ -995,4 +998,36 @@ func getJiraIssueNameByNumber(issueNum string) (name string) {
 	}
 
 	return result.Fields.Summary
+}
+
+// redText returns the given text wrapped in ANSI escape codes (for Linux/macOS)
+// or formatted for Windows.
+func redText(text string) string {
+	if runtime.GOOS == "windows" {
+		// Windows: Use cmd ANSI sequences if supported, otherwise just return text
+		return "\033[31m" + text + "\033[0m"
+	}
+	// Linux/macOS ANSI escape codes for red text
+	return "\033[31m" + text + "\033[0m"
+}
+
+// checkCommands verifies if the required commands are installed on the system
+func checkCommands(commands []string) error {
+	missing := []string{}
+	for _, cmd := range commands {
+		_, err := exec.LookPath(cmd)
+		if err != nil {
+			missing = append(missing, cmd)
+		}
+	}
+
+	if len(missing) > 0 {
+		if len(missing) == 1 {
+			return fmt.Errorf(redText("Error: missing required command: %s"), missing[0])
+		} else {
+			return fmt.Errorf(redText("Error: missing required commands: %v"), missing)
+		}
+	}
+
+	return nil
 }
