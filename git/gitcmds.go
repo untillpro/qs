@@ -534,7 +534,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	ExitIfError(err)
 
 	stdouts, stderr, err := new(exec.PipedExec).
-		Command("gh", "issue", "develop", strissuenum, "--repo="+parentrepo, "--repo", myrepo).
+		Command("gh", "issue", "develop", strissuenum, "--issue-repo="+parentrepo, "--repo", myrepo).
 		RunToStrings()
 	if err != nil {
 		fmt.Println(stderr)
