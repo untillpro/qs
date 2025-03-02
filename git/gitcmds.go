@@ -1543,3 +1543,16 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) {
 		}
 	}
 }
+
+// Is current Git branch is main ?
+func IamInMainBranch() (string, bool) {
+	stdouts, _, err := new(exec.PipedExec).
+		Command(git, branch, "--show-current").
+		RunToStrings()
+	ExitIfError(err)
+	mainbr := GetMainBranch()
+	curBr := strings.TrimSpace(stdouts)
+
+	repo, org := GetRepoAndOrgName()
+	return org + "/" + repo + "/" + curBr, strings.EqualFold(curBr, mainbr)
+}

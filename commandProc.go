@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/atotto/clipboard"
+	"github.com/fatih/color"
 	cobra "github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/git"
@@ -541,6 +542,15 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 					return
 				}
 			}
+			curBranch, isMain := git.IamInMainBranch()
+			if !isMain {
+				fmt.Println("--------------------------------------------------------")
+				fmt.Println("You are in")
+				color.New(color.FgHiCyan).Println(curBranch)
+				fmt.Println("Switch to main branch before running 'qs dev'")
+				return
+			}
+
 			issueNum, ok := argContainsIssueLink(args...)
 			if ok { // github issue
 				fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
@@ -1029,6 +1039,5 @@ func checkCommands(commands []string) error {
 			return fmt.Errorf(redText("Error: missing required commands: %v"), missing)
 		}
 	}
-
 	return nil
 }
