@@ -1550,9 +1550,16 @@ func IamInMainBranch() (string, bool) {
 		Command(git, branch, "--show-current").
 		RunToStrings()
 	ExitIfError(err)
-	mainbr := GetMainBranch()
+
 	curBr := strings.TrimSpace(stdouts)
+	stdouts, _, err = new(exec.PipedExec).
+		Command(git, "for-each-ref", "--format='%(upstream:short)'", "refs/heads/"+curBr).
+		Command("gawk", "-F/", "{print $2}").
+		RunToStrings()
+	ExitIfError(err)
+	curBrOrigin := strings.TrimSpace(stdouts)
+	mainbr := GetMainBranch()
 
 	repo, org := GetRepoAndOrgName()
-	return org + "/" + repo + "/" + curBr, strings.EqualFold(curBr, mainbr)
+	return org + "/" + repo + "/" + curBr, strings.EqualFold(curBrOrigin, mainbr)
 }
