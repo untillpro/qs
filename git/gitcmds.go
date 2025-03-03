@@ -1553,7 +1553,7 @@ func IamInMainBranch() (string, bool) {
 
 	curBr := strings.TrimSpace(stdouts)
 	stdouts, _, err = new(exec.PipedExec).
-		Command(git, "for-each-ref", "--format='%(upstream:short)'", "refs/heads/"+curBr).
+		Command(git, "for-each-ref", "--format=%(upstream:short)", "refs/heads/"+curBr).
 		Command("gawk", "-F/", "{print $2}").
 		RunToStrings()
 	ExitIfError(err)
