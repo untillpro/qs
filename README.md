@@ -15,7 +15,7 @@
 ### git
 
 - $Git\usr\bin must be in PATH
-  - gives `yes`, `grep`, `sed` and other Unix utilities
+  - gives `yes`, `grep`, `sed`, `jq` and other Unix utilities
 
 ### xclip
 For linux additionally:   sudo apt install xclip
