@@ -1562,3 +1562,12 @@ func IamInMainBranch() (string, bool) {
 	repo, org := GetRepoAndOrgName()
 	return org + "/" + repo + "/" + curBr, strings.EqualFold(curBrOrigin, mainbr)
 }
+
+func PullOrigin() {
+
+	mainbr := GetMainBranch()
+	_, _, err := new(exec.PipedExec).
+		Command(git, pull, origin, mainbr).
+		RunToStrings()
+	ExitIfError(err)
+}
