@@ -820,7 +820,6 @@ func GetGoneBranchesLocal() *[]string {
 		return &[]string{}
 	}
 	mbrlocallist := strings.Split(stdouts, caret)
-	fmt.Println("mbrlocallist\n", mbrlocallist)
 
 	stsr := []string{}
 	stdouts, _, err = new(exec.PipedExec).
