@@ -515,8 +515,6 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 				return
 			}
 
-			git.PullOrigin()
-
 			// qs dev -d is running
 			if cmd.Flag(devDelParamFull).Value.String() == trueStr {
 				cp.deleteBranches()

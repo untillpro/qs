@@ -589,6 +589,8 @@ func Dev(branch string, comments []string, branchinfork bool) {
 		ExitIfError(err)
 	}
 
+	pullOrigin()
+
 	err = new(exec.PipedExec).
 		Command(git, "config", "pull.rebase", "true").
 		Run(os.Stdout, os.Stdout)
@@ -1563,7 +1565,7 @@ func IamInMainBranch() (string, bool) {
 	return org + "/" + repo + "/" + curBr, strings.EqualFold(curBrOrigin, mainbr)
 }
 
-func PullOrigin() {
+func pullOrigin() {
 
 	mainbr := GetMainBranch()
 	_, _, err := new(exec.PipedExec).
