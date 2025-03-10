@@ -814,8 +814,8 @@ func GetGoneBranchesLocal() *[]string {
 	// 2. Step
 	stdouts, _, err := new(exec.PipedExec).
 		Command(git, branch, "-vv").
-		Command("grep", ":").
-		Command("sed", "-n", "2p").
+		Command("grep", "\\[[^]]*:[^]]*\\]").
+		Command("sed", "-n", "1p").
 		Command("gawk", "{print $1}").
 		RunToStrings()
 	if nil != err {
