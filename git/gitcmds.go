@@ -592,12 +592,7 @@ func Dev(branch string, comments []string, branchinfork bool) {
 	pullOrigin()
 
 	err = new(exec.PipedExec).
-		Command(git, "config", "pull.rebase", "true").
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-
-	err = new(exec.PipedExec).
-		Command(git, pull, "upstream", mainbrach, "--no-edit").
+		Command(git, pull, "--rebase", "upstream", mainbrach, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
@@ -815,7 +810,6 @@ func GetGoneBranchesLocal() *[]string {
 	stdouts, _, err := new(exec.PipedExec).
 		Command(git, branch, "-vv").
 		Command("grep", "\\[[^]]*:[^]]*\\]").
-		Command("sed", "-n", "1p").
 		Command("gawk", "{print $1}").
 		RunToStrings()
 	if nil != err {
