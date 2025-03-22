@@ -56,7 +56,7 @@ Path qs.exe should be added to system PATH env variable.
 - `qs version`  	          : Shows version of currently installed qs
 
 ## Usage with JIRA
-Create branch from Jira issue use "qs dev https://untill.atlassian.net/browse/[Issue Number]"
+Create branch from Jira issue use "qs dev https://untill.atlassian.net/browse/Issue-Number"
 Example:
 ```
 1. qs dev https://untill.atlassian.net/browse/AIR-270
