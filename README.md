@@ -59,11 +59,11 @@ Path qs.exe should be added to system PATH env variable.
 Create branch from Jira issue use "qs dev https://untill.atlassian.net/browse/[Issue Number]"
 Example:
 ```
-qs dev https://untill.atlassian.net/browse/AIR-270
+1. qs dev https://untill.atlassian.net/browse/AIR-270
 ```
 In order it works define the following env variables:
-1. JIRA_EMAIL=[user email]
-2. JIRA_API_TOKEN=[user jira api token] - it's genertated [here]([url](https://id.atlassian.com/manage-profile/security/api-tokens)).
+- JIRA_EMAIL=[user email]
+- JIRA_API_TOKEN=[user jira api token] - it's genertated [here]([url](https://id.atlassian.com/manage-profile/security/api-tokens)).
 
 If JIRA_EMAIL is not defined qs tries to get it from local git settings.
 If it's not defined, qs gives error "Error: Please export JIRA_EMAIL."
