@@ -55,6 +55,29 @@ Path qs.exe should be added to system PATH env variable.
 - `qs upgrade`  	          : Shows command to install qs
 - `qs version`  	          : Shows version of currently installed qs
 
+## Usage with JIRA
+Create branch from Jira issue use "qs dev https://untill.atlassian.net/browse/[Issue Number]"
+Example:
+```
+qs dev https://untill.atlassian.net/browse/AIR-270
+```
+In order it works define the following env variables:
+1. JIRA_EMAIL=[user email]
+2. JIRA_API_TOKEN=[user jira api token] - it's genertated [here]([url](https://id.atlassian.com/manage-profile/security/api-tokens)).
+
+If JIRA_EMAIL is not defined qs tries to get it from local git settings.
+If it's not defined, qs gives error "Error: Please export JIRA_EMAIL."
+If JIRA_API_TOKEN is not found, qs gives error:
+
+```
+--------------------------------------------------------------------------------
+Error: JIRA API token not found. Please set environment variable JIRA_API_TOKEN.
+            Jira API token can generate on this page:
+          https://id.atlassian.com/manage-profile/security/api-tokens           
+--------------------------------------------------------------------------------
+```
+
+2. "qs pr" creates Pull Request with link on Jira issue.
   
 > **Note**
   - `qs u` takes comment from clipboard. If current branch is "main/master", 
