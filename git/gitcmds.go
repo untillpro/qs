@@ -809,12 +809,11 @@ func GetGoneBranchesLocal() *[]string {
 	// 2. Step
 	stdouts, _, err := new(exec.PipedExec).
 		Command(git, branch, "-vv").
-		Command("grep", "\\[[^]]*:[^]]*\\]").
+		Command("grep", "\\[[^]]*: gone[^]]*\\]").
 		Command("gawk", "{print $1}").
 		RunToStrings()
-	if nil != err {
-		return &[]string{}
-	}
+	ExitIfError(err)
+	// alternate: grep '\[.*: gone'
 	mbrlocallist := strings.Split(stdouts, caret)
 
 	stsr := []string{}
