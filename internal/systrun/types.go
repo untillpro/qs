@@ -11,10 +11,10 @@ type SystemTestCfg struct {
 }
 
 type SystemTest struct {
-	t         *testing.T
-	clonePath string
-	cfg       SystemTestCfg
-	cases     []TestCase
+	t            *testing.T
+	cloneDirPath string
+	cfg          SystemTestCfg
+	cases        []TestCase
 }
 
 type TestCase struct {

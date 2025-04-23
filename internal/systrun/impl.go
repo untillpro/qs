@@ -16,7 +16,7 @@ func (st *SystemTest) AddCase(tc TestCase) {
 }
 
 func (st *SystemTest) GetClonePath() string {
-	return st.clonePath
+	return st.cloneDirPath
 }
 
 // Run executes all test cases in the system test
@@ -224,7 +224,7 @@ func (st *SystemTest) deleteEnv() error {
 	}
 
 	// Remove local clone
-	if err := os.RemoveAll(st.clonePath); err != nil {
+	if err := os.RemoveAll(st.cloneDirPath); err != nil {
 		return fmt.Errorf("failed to remove clone directory: %w", err)
 	}
 
@@ -234,7 +234,7 @@ func (st *SystemTest) deleteEnv() error {
 // runCommand runs a command in the clone repository
 func (st *SystemTest) runCommand(command string, args ...string) (string, string, error) {
 	cmd := exec.Command(command, args...)
-	cmd.Dir = st.clonePath
+	cmd.Dir = st.cloneDirPath
 
 	// Capture stdout and stderr
 	stdout := &strings.Builder{}
