@@ -85,11 +85,8 @@ There must be `.internal/testdata` directory with the following structure:
 ```
 
 ## Implementation
-1. Check if gh can create remote repo with code
-2. Check if gh can fork remote repo
-3. Check if gh can clone fork repo
-4. The framework must return SystemTest object
-5. SystemTest object must have the following methods:
+1. The framework must return SystemTest object
+2. SystemTest object must have the following methods:
    - `AddCase()`
    - `Run()`
 
