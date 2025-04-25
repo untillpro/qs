@@ -8,13 +8,13 @@ type SystemTestCfg struct {
 	GithubOrg             string
 	UpstreamGithubAccount string
 	UpstreamRepoName      string
+	KeepEnvAfterTest      bool
 }
 
 type SystemTest struct {
-	t            *testing.T
-	cloneDirPath string
-	cfg          SystemTestCfg
-	cases        []TestCase
+	t     *testing.T
+	cfg   SystemTestCfg
+	cases []TestCase
 }
 
 type TestCase struct {

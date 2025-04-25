@@ -1,9 +1,11 @@
 package systrun
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -15,46 +17,44 @@ func (st *SystemTest) AddCase(tc TestCase) {
 	st.cases = append(st.cases, tc)
 }
 
+// GetClonePath returns local path of the clone repository
 func (st *SystemTest) GetClonePath() string {
-	return st.cloneDirPath
+	return filepath.Join(TestDataDir, st.cfg.UpstreamRepoName)
+}
+
+func (st *SystemTest) GetUpstreamRepoURL() string {
+	return fmt.Sprintf("%s/%s/%s", GithubURL, st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
+}
+
+func (st *SystemTest) GetForkRepoURL() string {
+	return fmt.Sprintf("%s/%s/%s", GithubURL, st.cfg.GithubAccount, st.cfg.UpstreamRepoName)
 }
 
 // Run executes all test cases in the system test
-func (st *SystemTest) Run() error {
-	if err := st.createEnv(); err != nil {
-		return fmt.Errorf("failed to create environment: %w", err)
-	}
+func (st *SystemTest) Run() {
+	err := st.createEnv()
+	require.NoErrorf(st.t, err, "failed to create environment: %v", err)
+	st.t.Logf("Upstream repo URL: %s", st.GetUpstreamRepoURL())
+	st.t.Logf("Fork repo URL: %s", st.GetForkRepoURL())
+	st.t.Logf("Clone path: %s", st.GetClonePath())
 
-	success := true
 	for _, tc := range st.cases {
+		st.t.Logf("-------------------------------------")
 		st.t.Logf("Running test case: %s", tc.Name)
 
 		stdout, stderr, err := st.runCommand(tc.Cmd, tc.Args...)
 		if !tc.ErrorExpected {
-			require.NoError(st.t, err)
+			require.NoErrorf(st.t, err, "Error running command: %v", err)
 		} else {
-			require.Error(st.t, err)
+			require.Error(st.t, err, "Error running command: %v", err)
 		}
 
-		if err != nil {
-			st.t.Logf("Error running command: %v", err)
-			success = false
-
-			continue
+		if len(tc.Stdout) > 0 {
+			require.Containsf(st.t, stdout, tc.Stdout, "Expected stdout %v, got %v", tc.Stdout, stdout)
 		}
 
-		if len(tc.Stdout) > 0 && !strings.Contains(stdout, tc.Stdout) {
-			st.t.Logf("Expected stdout to contain: %s, got: %s", tc.Stdout, stdout)
-			success = false
-
-			continue
-		}
-
-		if len(tc.Stderr) > 0 && !strings.Contains(stderr, tc.Stderr) {
-			st.t.Logf("Expected stderr to contain: %s, got: %s", tc.Stderr, stderr)
-			success = false
-
-			continue
+		if len(tc.Stderr) > 0 {
+			require.Containsf(st.t, stderr, tc.Stderr, "Expected stderr %v, got %v", tc.Stderr, stderr)
 		}
 
 		if tc.CheckResults != nil {
@@ -62,43 +62,38 @@ func (st *SystemTest) Run() error {
 		}
 	}
 
-	if success {
-		if err := st.deleteEnv(); err != nil {
-			st.t.Logf("Failed to delete environment: %v", err)
-
-			return err
-		}
-	} else {
-		st.t.Logf("Test failed, keeping environment for debugging: %s", st.cfg.UpstreamRepoName)
+	if !st.cfg.KeepEnvAfterTest {
+		err := st.deleteEnv()
+		require.NoErrorf(st.t, err, "Failed to delete environment: %v", err)
 	}
-
-	return nil
 }
 
 // checkPrerequisites checks if all required tools are installed
 func (st *SystemTest) checkPrerequisites() error {
 	// Check if qs is installed
-	_, err := exec.LookPath("qs")
-	if err != nil {
+	if _, err := exec.LookPath("qs"); err != nil {
 		return fmt.Errorf("qs utility must be installed: %w", err)
 	}
 
 	// Check if git is installed
-	_, err = exec.LookPath("git")
-	if err != nil {
+	if _, err := exec.LookPath("git"); err != nil {
 		return fmt.Errorf("git must be installed: %w", err)
 	}
 
 	// Check if gh is installed
-	_, err = exec.LookPath("gh")
-	if err != nil {
+	if _, err := exec.LookPath("gh"); err != nil {
 		return fmt.Errorf("GitHub CLI (gh) must be installed: %w", err)
 	}
 
-	// Check if gh is logged in
-	cmd := exec.Command("gh", "auth", "status")
-	err = cmd.Run()
+	cmd := exec.Command("gh", "auth", "login", "--with-token")
+	cmd.Stdin = bytes.NewBufferString(st.cfg.GithubToken)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
+		return fmt.Errorf("Auth failed: %v\n%s\n", err, string(output))
+	}
+
+	// Check if gh is logged in
+	if err := exec.Command("gh", "auth", "status").Run(); err != nil {
 		return fmt.Errorf("GitHub CLI (gh) must be logged in: %w", err)
 	}
 
@@ -112,77 +107,75 @@ func (st *SystemTest) createEnv() error {
 		return fmt.Errorf("prerequisites check failed: %w", err)
 	}
 
+	// Create an upstream repo
 	if err := st.createUpstreamRepo(); err != nil {
-		return fmt.Errorf("failed to create main repo: %w", err)
+		return fmt.Errorf("failed to create upstream repo: %w", err)
 	}
-
-	return nil
+	// Create .testdata dir If it doesn't exist
+	return os.MkdirAll(TestDataDir, defaultDirPerms)
 }
 
-// createUpstreamRepo creates the main repository
+// createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo() error {
 	// Create GitHub repo using gh cli
 	upstreamRepo := fmt.Sprintf("%s/%s", st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
-	cmd := exec.Command("gh", "repo", "create", upstreamRepo, "--public", "--confirm")
-	if st.cfg.GithubToken != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", EnvGithubToken, st.cfg.GithubToken))
-	}
+	cmd := exec.Command("gh", "repo", "create", upstreamRepo, "--private", "--confirm")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to create main repo: %v, output: %s", err, output)
+		return fmt.Errorf("failed to create upstream repo: %v, output: %s", err, output)
 	}
 
 	// Clone the empty repo to a temporary directory
-	tempDir, err := os.MkdirTemp("", "main-*")
+	tempDirForCloneRepo, err := os.MkdirTemp("", "main-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer func() {
-		_ = os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDirForCloneRepo)
 	}()
 
-	// Clone the main repo
-	repoUrl := fmt.Sprintf("%s/%s/%s.git", githubURL, st.cfg.GithubAccount, st.cfg.UpstreamRepoName)
+	// Clone the upstream repo
+	repoUrl := fmt.Sprintf("%s/%s/%s.git", GithubURL, st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
 	if st.cfg.GithubOrg != "" {
-		repoUrl = fmt.Sprintf("%s/%s/%s.git", githubURL, st.cfg.GithubOrg, st.cfg.UpstreamRepoName)
+		repoUrl = fmt.Sprintf("%s/%s/%s.git", GithubURL, st.cfg.GithubOrg, st.cfg.UpstreamRepoName)
 	}
 
-	cmd = exec.Command("git", "clone", repoUrl, tempDir)
+	cmd = exec.Command("git", "clone", repoUrl, tempDirForCloneRepo)
 	output, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to clone main repo: %v, output: %s", err, output)
+		return fmt.Errorf("failed to clone upstream repo: %v, output: %s", err, output)
 	}
 
 	// Copy template files from testdata to the repo
-	err = copyTemplateFiles("./internal/testdata/repo", tempDir)
+	err = copyFiles("./internal/testdata/repo", tempDirForCloneRepo)
 	if err != nil {
 		return fmt.Errorf("failed to copy template files: %w", err)
 	}
 
 	// Process go.mod.tmpl
-	err = processGoModTemplate(tempDir, st.cfg.GithubAccount)
+	err = processGoModTemplate(tempDirForCloneRepo, st.cfg.GithubAccount)
 	if err != nil {
 		return fmt.Errorf("failed to process go.mod.tmpl: %w", err)
 	}
 
 	// Add, commit and push files
 	cmd = exec.Command("git", "add", ".")
-	cmd.Dir = tempDir
+	cmd.Dir = tempDirForCloneRepo
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to add files: %v, output: %s", err, output)
 	}
 
 	cmd = exec.Command("git", "commit", "-m", "Initial commit")
-	cmd.Dir = tempDir
+	cmd.Dir = tempDirForCloneRepo
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to commit files: %v, output: %s", err, output)
 	}
 
 	cmd = exec.Command("git", "push", "origin", "main")
-	cmd.Dir = tempDir
+	cmd.Dir = tempDirForCloneRepo
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to push files: %v, output: %s", err, output)
@@ -191,40 +184,35 @@ func (st *SystemTest) createUpstreamRepo() error {
 	return nil
 }
 
-// deleteEnv deletes the test environment
+// deleteEnv deletes the test environment: Github repos and local clone
 func (st *SystemTest) deleteEnv() error {
 	// Delete fork repo
-	repoName := fmt.Sprintf("%s/%s", st.cfg.GithubAccount, st.cfg.UpstreamRepoName)
-	cmd := exec.Command("gh", "repo", "delete", repoName, "--yes")
-	if st.cfg.GithubToken != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", EnvGithubToken, st.cfg.GithubToken))
-	}
-
-	_, err := cmd.CombinedOutput() // Ignore output
-	if err != nil {
+	forkRepoName := fmt.Sprintf("%s/%s", st.cfg.GithubAccount, st.cfg.UpstreamRepoName)
+	cmd := exec.Command("gh", "repo", "delete", forkRepoName, "--yes")
+	if _, err := cmd.CombinedOutput(); err != nil {
 		st.t.Logf("Warning: failed to delete fork repo: %v", err)
 		// Continue anyway
 	}
 
-	// Delete main repo
-	repoName = fmt.Sprintf("%s/%s", st.cfg.GithubAccount, st.cfg.UpstreamRepoName)
+	upstreamRepoName := fmt.Sprintf("%s/%s", st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
 	if st.cfg.GithubOrg != "" {
-		repoName = fmt.Sprintf("%s/%s", st.cfg.GithubOrg, st.cfg.UpstreamRepoName)
+		upstreamRepoName = fmt.Sprintf("%s/%s", st.cfg.GithubOrg, st.cfg.UpstreamRepoName)
 	}
 
-	cmd = exec.Command("gh", "repo", "delete", repoName, "--yes")
-	if st.cfg.GithubToken != "" {
-		cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", EnvGithubToken, st.cfg.GithubToken))
-	}
+	if upstreamRepoName != forkRepoName {
+		// Delete upstream repo
+		cmd = exec.Command("gh", "repo", "delete", upstreamRepoName, "--yes")
+		if st.cfg.GithubToken != "" {
+			cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", EnvGithubToken, st.cfg.GithubToken))
+		}
 
-	_, err = cmd.CombinedOutput() // Ignore output
-	if err != nil {
-		st.t.Logf("Warning: failed to delete main repo: %v", err)
-		// Continue anyway
+		if _, err := cmd.CombinedOutput(); err != nil {
+			st.t.Logf("Warning: failed to delete upstream repo: %v", err)
+		}
 	}
 
 	// Remove local clone
-	if err := os.RemoveAll(st.cloneDirPath); err != nil {
+	if err := os.RemoveAll(st.GetClonePath()); err != nil {
 		return fmt.Errorf("failed to remove clone directory: %w", err)
 	}
 
@@ -234,7 +222,7 @@ func (st *SystemTest) deleteEnv() error {
 // runCommand runs a command in the clone repository
 func (st *SystemTest) runCommand(command string, args ...string) (string, string, error) {
 	cmd := exec.Command(command, args...)
-	cmd.Dir = st.cloneDirPath
+	cmd.Dir = TestDataDir
 
 	// Capture stdout and stderr
 	stdout := &strings.Builder{}
@@ -248,8 +236,8 @@ func (st *SystemTest) runCommand(command string, args ...string) (string, string
 
 // Helper functions
 
-// copyTemplateFiles copies template files to the target directory
-func copyTemplateFiles(srcDir, dstDir string) error {
+// copyFiles copies repo files to the working directory
+func copyFiles(srcDir, dstDir string) error {
 	// Get list of template files
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
@@ -263,12 +251,12 @@ func copyTemplateFiles(srcDir, dstDir string) error {
 
 		if entry.IsDir() {
 			// Create directory if it doesn't exist
-			if err := os.MkdirAll(dstPath, 0755); err != nil {
+			if err := os.MkdirAll(dstPath, defaultDirPerms); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", dstPath, err)
 			}
 
 			// Recursively copy files in directory
-			if err := copyTemplateFiles(srcPath, dstPath); err != nil {
+			if err := copyFiles(srcPath, dstPath); err != nil {
 				return err
 			}
 		} else {

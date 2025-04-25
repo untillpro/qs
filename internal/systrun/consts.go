@@ -1,9 +1,10 @@
 package systrun
 
-// testDataDir is the constant for the test data directory
 const (
-	testDataDir = "./.testdata"
-	githubURL   = "https://github.com"
+	TestDataDir     = "./.testdata"
+	TestDataRepoDir = "./internal/testdata/repo"
+	GithubURL       = "https://github.com"
+	defaultDirPerms = 0755
 )
 
 const (

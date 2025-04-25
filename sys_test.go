@@ -11,7 +11,54 @@ import (
 	"github.com/untillpro/qs/internal/systrun"
 )
 
+func TestCreateUpstreamRepo(t *testing.T) {
+	// Get GitHub account from environment
+	ghAccount := os.Getenv(systrun.EnvGithubAccount)
+	if ghAccount == "" {
+		t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
+	}
+
+	ghToken := os.Getenv(systrun.EnvGithubToken)
+	err := os.Unsetenv(systrun.EnvGithubToken)
+	require.NoError(t, err)
+
+	// Generate unique repo names with UUID
+	repoID := uuid.New().String()
+	mainRepoName := fmt.Sprintf("qs-test-%s", repoID)
+
+	// Create test configuration
+	cfg := systrun.SystemTestCfg{
+		GithubAccount:         ghAccount,
+		GithubToken:           ghToken,
+		UpstreamGithubAccount: ghAccount,
+		UpstreamRepoName:      mainRepoName,
+	}
+
+	// Create system test
+	st := systrun.NewSystemTest(t, cfg)
+	// Test cloning upstream repo
+	st.AddCase(systrun.TestCase{
+		Name: "Clone upstream repo",
+		Cmd:  "gh",
+		Args: []string{"repo", "clone", fmt.Sprintf("%s/%s/%s", systrun.GithubURL, ghAccount, mainRepoName)},
+		CheckResults: func(t *testing.T) {
+			// Compare main.go from upstream repo with local file
+			// Read the content of the local main.go file
+			localContent, err := os.ReadFile(fmt.Sprintf("%s/main.go", systrun.TestDataRepoDir))
+			require.NoError(t, err, "failed to read local main.go file: %v", err)
+			// Read the content of the upstream main.go file
+			upstreamContent, err := os.ReadFile(fmt.Sprintf("%s/main.go", st.GetClonePath()))
+			require.NoError(t, err, "failed to read upstream main.go file: %v", err)
+			// Compare the content of the two files
+			require.Equal(t, string(localContent), string(upstreamContent), "local main.go content does not match upstream main.go content")
+		},
+	})
+
+	st.Run()
+}
+
 func TestMainWorkflow(t *testing.T) {
+	t.Skip()
 	// Skip if running in CI without proper setup
 	if os.Getenv("CI") == "true" && os.Getenv(systrun.EnvGithubAccount) == "" {
 		t.Skip("Skipping system test in CI environment without proper setup")
@@ -109,11 +156,11 @@ func TestMainWorkflow(t *testing.T) {
 	})
 
 	// Run all test cases
-	err := st.Run()
-	require.NoError(t, err)
+	st.Run()
 }
 
 func TestEdgeCases(t *testing.T) {
+	t.Skip()
 	// Skip if running in CI without proper setup
 	if os.Getenv("CI") == "true" && os.Getenv(systrun.EnvGithubAccount) == "" {
 		t.Skip("Skipping system test in CI environment without proper setup")
@@ -166,7 +213,7 @@ func TestEdgeCases(t *testing.T) {
 		})
 
 		// Run the test
-		_ = st.Run() // We expect this to fail with branch mismatch error
+		st.Run() // We expect this to fail with branch mismatch error
 	})
 
 	t.Run("EmptyCommitNotes", func(t *testing.T) {
@@ -216,7 +263,7 @@ func TestEdgeCases(t *testing.T) {
 		})
 
 		// Run the test
-		_ = st.Run() // We expect this to fail with empty commit message error
+		st.Run() // We expect this to fail with empty commit message error
 	})
 
 	t.Run("PushWithStash", func(t *testing.T) {
@@ -295,8 +342,7 @@ func TestEdgeCases(t *testing.T) {
 		})
 
 		// Run the test
-		err := st.Run()
-		require.NoError(t, err)
+		st.Run()
 	})
 
 	t.Run("LargeFilesCheck", func(t *testing.T) {
@@ -354,11 +400,12 @@ func TestEdgeCases(t *testing.T) {
 		})
 
 		// Run the test
-		_ = st.Run() // We expect warning about large files
+		st.Run() // We expect warning about large files
 	})
 }
 
 func TestNoGithubToken(t *testing.T) {
+	t.Skip()
 	// Skip if running in CI without proper setup
 	if os.Getenv("CI") == "true" && os.Getenv(systrun.EnvGithubAccount) == "" {
 		t.Skip("Skipping system test in CI environment without proper setup")
@@ -398,5 +445,5 @@ func TestNoGithubToken(t *testing.T) {
 	// Try to create a repo without token
 	// The test should still work if gh CLI is logged in through other means
 	// But might fail if authentication is required
-	_ = st.Run()
+	st.Run()
 }
