@@ -4,9 +4,11 @@ import (
 	"testing"
 )
 
-func NewSystemTest(t *testing.T, cfg SystemTestCfg) *SystemTest {
+// New creates a new SystemTest instance
+func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 	return &SystemTest{
-		t:   t,
-		cfg: cfg,
+		t:             t,
+		cfg:           testConfig,
+		cloneRepoPath: generateCloneRepoPath(),
 	}
 }

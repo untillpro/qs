@@ -1,35 +1,35 @@
 package systrun
 
-import "testing"
+import (
+	"testing"
+)
 
-type SystemTestCfg struct {
-	GithubAccount         string
-	GithubToken           string
-	GithubOrg             string
-	UpstreamGithubAccount string
-	UpstreamRepoName      string
-	KeepEnvAfterTest      bool
-}
-
+// SystemTest represents a single system test for the qs utility
 type SystemTest struct {
-	t     *testing.T
-	cfg   SystemTestCfg
-	cases []TestCase
+	t             *testing.T
+	cfg           *TestConfig
+	cloneRepoPath string
 }
 
-type TestCase struct {
-	// Name is the name of the test case.
-	Name string
-	// Stderr is the expected error output of the command.
-	Stderr string
-	// Stdout is the expected output of the command.
-	Stdout string
-	// Cmd is the command to run.
-	Cmd string
-	// Args are the arguments to the command.
-	Args []string
-	// CheckResults is intented to check the results of the test case.
-	CheckResults func(t *testing.T)
-	// ErrorExpected is true if the test case is expected to fail, false otherwise.
-	ErrorExpected bool
+// TestConfig contains all configuration for a system test
+type TestConfig struct {
+	TestID         string
+	GHConfig       GithubConfig
+	Command        string
+	Args           []string
+	ExpectedStderr string
+	ExpectedStdout string
+	UpstreamState  RemoteState
+	ForkState      RemoteState
+	SyncState      SyncState
+	// DevBranchExists indicates if the dev branch exists in the clone repo
+	DevBranchExists bool
+}
+
+// GithubConfig holds GitHub account and token information
+type GithubConfig struct {
+	UpstreamAccount string
+	UpstreamToken   string
+	ForkAccount     string
+	ForkToken       string
 }

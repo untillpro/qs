@@ -2,298 +2,720 @@ package systrun
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
-// AddCase adds a test case to the system test
-func (st *SystemTest) AddCase(tc TestCase) {
-	st.cases = append(st.cases, tc)
-}
-
-// GetClonePath returns local path of the clone repository
-func (st *SystemTest) GetClonePath() string {
-	return filepath.Join(TestDataDir, st.cfg.UpstreamRepoName)
-}
-
-func (st *SystemTest) GetUpstreamRepoURL() string {
-	return fmt.Sprintf("%s/%s/%s", GithubURL, st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
-}
-
-func (st *SystemTest) GetForkRepoURL() string {
-	return fmt.Sprintf("%s/%s/%s", GithubURL, st.cfg.GithubAccount, st.cfg.UpstreamRepoName)
-}
-
-// Run executes all test cases in the system test
-func (st *SystemTest) Run() {
-	err := st.createEnv()
-	require.NoErrorf(st.t, err, "failed to create environment: %v", err)
-	st.t.Logf("Upstream repo URL: %s", st.GetUpstreamRepoURL())
-	st.t.Logf("Fork repo URL: %s", st.GetForkRepoURL())
-	st.t.Logf("Clone path: %s", st.GetClonePath())
-
-	for _, tc := range st.cases {
-		st.t.Logf("-------------------------------------")
-		st.t.Logf("Running test case: %s", tc.Name)
-
-		stdout, stderr, err := st.runCommand(tc.Cmd, tc.Args...)
-		if !tc.ErrorExpected {
-			require.NoErrorf(st.t, err, "Error running command: %v", err)
-		} else {
-			require.Error(st.t, err, "Error running command: %v", err)
-		}
-
-		if len(tc.Stdout) > 0 {
-			require.Containsf(st.t, stdout, tc.Stdout, "Expected stdout %v, got %v", tc.Stdout, stdout)
-		}
-
-		if len(tc.Stderr) > 0 {
-			require.Containsf(st.t, stderr, tc.Stderr, "Expected stderr %v, got %v", tc.Stderr, stderr)
-		}
-
-		if tc.CheckResults != nil {
-			tc.CheckResults(st.t)
-		}
-	}
-
-	if !st.cfg.KeepEnvAfterTest {
-		err := st.deleteEnv()
-		require.NoErrorf(st.t, err, "Failed to delete environment: %v", err)
-	}
-}
-
-// checkPrerequisites checks if all required tools are installed
+// checkPrerequisites ensures all required tools are available
 func (st *SystemTest) checkPrerequisites() error {
-	// Check if qs is installed
-	if _, err := exec.LookPath("qs"); err != nil {
-		return fmt.Errorf("qs utility must be installed: %w", err)
-	}
-
-	// Check if git is installed
+	// Check for git
 	if _, err := exec.LookPath("git"); err != nil {
-		return fmt.Errorf("git must be installed: %w", err)
+		return fmt.Errorf("git not found in PATH: %w", err)
 	}
 
-	// Check if gh is installed
+	// Check for gh
 	if _, err := exec.LookPath("gh"); err != nil {
-		return fmt.Errorf("GitHub CLI (gh) must be installed: %w", err)
+		return fmt.Errorf("gh not found in PATH: %w", err)
 	}
 
-	cmd := exec.Command("gh", "auth", "login", "--with-token")
-	cmd.Stdin = bytes.NewBufferString(st.cfg.GithubToken)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("Auth failed: %v\n%s\n", err, string(output))
-	}
-
-	// Check if gh is logged in
-	if err := exec.Command("gh", "auth", "status").Run(); err != nil {
-		return fmt.Errorf("GitHub CLI (gh) must be logged in: %w", err)
+	// Check for qs
+	if _, err := exec.LookPath("qs"); err != nil {
+		return fmt.Errorf("qs not found in PATH: %w", err)
 	}
 
 	return nil
 }
 
-// createEnv creates the test environment
-func (st *SystemTest) createEnv() error {
-	// Check prerequisites
-	if err := st.checkPrerequisites(); err != nil {
-		return fmt.Errorf("prerequisites check failed: %w", err)
+// createTestEnvironment sets up the test repositories based on configuration
+func (st *SystemTest) createTestEnvironment() error {
+	// Generate unique repo name
+	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
+	repoName := fmt.Sprintf("%s-%s", st.cfg.TestID, timestamp)
+
+	// Setup upstream repo if needed
+	if st.cfg.UpstreamState != RemoteStateNull {
+		upstreamRepoURL := fmt.Sprintf("https://github.com/%s/%s.git",
+			st.cfg.GHConfig.UpstreamAccount, repoName)
+
+		if err := st.createUpstreamRepo(repoName, upstreamRepoURL); err != nil {
+			return err
+		}
 	}
 
-	// Create an upstream repo
-	if err := st.createUpstreamRepo(); err != nil {
-		return fmt.Errorf("failed to create upstream repo: %w", err)
+	// Setup fork repo if needed
+	if st.cfg.ForkState != RemoteStateNull {
+		forkRepoURL := fmt.Sprintf("https://github.com/%s/%s.git",
+			st.cfg.GHConfig.ForkAccount, repoName)
+
+		if err := st.createForkRepo(repoName, forkRepoURL); err != nil {
+			return err
+		}
 	}
-	// Create .testdata dir If it doesn't exist
-	return os.MkdirAll(TestDataDir, defaultDirPerms)
+
+	// Clone the appropriate repo
+	clonePath := filepath.Join(".testdata", repoName)
+	st.cloneRepoPath = clonePath
+
+	// Determine which repo to clone based on test configuration
+	var cloneURL string
+	var authToken string
+
+	if st.cfg.ForkState != RemoteStateNull {
+		// Clone from fork if it exists
+		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
+			st.cfg.GHConfig.ForkAccount, repoName)
+		authToken = st.cfg.GHConfig.ForkToken
+	} else if st.cfg.UpstreamState != RemoteStateNull {
+		// Otherwise clone from upstream
+		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
+			st.cfg.GHConfig.UpstreamAccount, repoName)
+		authToken = st.cfg.GHConfig.UpstreamToken
+	} else {
+		return fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
+	}
+
+	if err := st.cloneRepo(cloneURL, clonePath, authToken); err != nil {
+		return err
+	}
+
+	// Configure remotes based on test scenario
+	if err := st.configureRemotes(repoName); err != nil {
+		return err
+	}
+
+	// Setup dev branch if needed
+	if st.cfg.DevBranchExists {
+		if err := st.setupDevBranch(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // createUpstreamRepo creates the upstream repository
-func (st *SystemTest) createUpstreamRepo() error {
-	// Create GitHub repo using gh cli
-	upstreamRepo := fmt.Sprintf("%s/%s", st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
-	cmd := exec.Command("gh", "repo", "create", upstreamRepo, "--private", "--confirm")
+func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
+	// Use GitHub API to create repo
+	cmd := exec.Command("gh", "repo", "create",
+		fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
+		"--public")
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to create upstream repo: %v, output: %s", err, output)
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", err, output)
 	}
 
-	// Clone the empty repo to a temporary directory
-	tempDirForCloneRepo, err := os.MkdirTemp("", "main-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
-	}
-	defer func() {
-		_ = os.RemoveAll(tempDirForCloneRepo)
-	}()
+	// Initialize repo with a README if state should be OK
+	if st.cfg.UpstreamState == RemoteStateOK {
+		// Create temp dir for initial commit
+		tempDir, err := os.MkdirTemp("", "repo-init-*")
+		if err != nil {
+			return fmt.Errorf("failed to create temp directory: %w", err)
+		}
+		defer os.RemoveAll(tempDir)
 
-	// Clone the upstream repo
-	repoUrl := fmt.Sprintf("%s/%s/%s.git", GithubURL, st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
-	if st.cfg.GithubOrg != "" {
-		repoUrl = fmt.Sprintf("%s/%s/%s.git", GithubURL, st.cfg.GithubOrg, st.cfg.UpstreamRepoName)
-	}
+		// Initialize git repo
+		repo, err := git.PlainInit(tempDir, false)
+		if err != nil {
+			return fmt.Errorf("failed to initialize git repo: %w", err)
+		}
 
-	cmd = exec.Command("git", "clone", repoUrl, tempDirForCloneRepo)
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to clone upstream repo: %v, output: %s", err, output)
-	}
+		// Create README file
+		readmePath := filepath.Join(tempDir, "README.md")
+		readmeContent := "# Test Repository\n\nThis is a test repository created for system tests."
+		if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
+			return fmt.Errorf("failed to create README file: %w", err)
+		}
 
-	// Copy template files from testdata to the repo
-	err = copyFiles("./internal/testdata/repo", tempDirForCloneRepo)
-	if err != nil {
-		return fmt.Errorf("failed to copy template files: %w", err)
-	}
+		// Get worktree
+		wt, err := repo.Worktree()
+		if err != nil {
+			return fmt.Errorf("failed to get worktree: %w", err)
+		}
 
-	// Process go.mod.tmpl
-	err = processGoModTemplate(tempDirForCloneRepo, st.cfg.GithubAccount)
-	if err != nil {
-		return fmt.Errorf("failed to process go.mod.tmpl: %w", err)
-	}
+		// Add README to index
+		if _, err := wt.Add("README.md"); err != nil {
+			return fmt.Errorf("failed to add README to index: %w", err)
+		}
 
-	// Add, commit and push files
-	cmd = exec.Command("git", "add", ".")
-	cmd.Dir = tempDirForCloneRepo
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to add files: %v, output: %s", err, output)
-	}
+		// Commit changes
+		_, err = wt.Commit("Initial commit", &git.CommitOptions{
+			Author: &object.Signature{
+				Name:  "System Test",
+				Email: "test@example.com",
+				When:  time.Now(),
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to commit changes: %w", err)
+		}
 
-	cmd = exec.Command("git", "commit", "-m", "Initial commit")
-	cmd.Dir = tempDirForCloneRepo
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to commit files: %v, output: %s", err, output)
-	}
+		// Set remote
+		_, err = repo.CreateRemote(&config.RemoteConfig{
+			Name: "origin",
+			URLs: []string{repoURL},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to set remote: %w", err)
+		}
 
-	cmd = exec.Command("git", "push", "origin", "main")
-	cmd.Dir = tempDirForCloneRepo
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to push files: %v, output: %s", err, output)
+		// Push changes
+		err = repo.Push(&git.PushOptions{
+			RemoteName: "origin",
+			Auth: &http.BasicAuth{
+				Username: "x-access-token",
+				Password: st.cfg.GHConfig.UpstreamToken,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to push changes: %w", err)
+		}
 	}
 
 	return nil
 }
 
-// deleteEnv deletes the test environment: Github repos and local clone
-func (st *SystemTest) deleteEnv() error {
-	// Delete fork repo
-	forkRepoName := fmt.Sprintf("%s/%s", st.cfg.GithubAccount, st.cfg.UpstreamRepoName)
-	cmd := exec.Command("gh", "repo", "delete", forkRepoName, "--yes")
-	if _, err := cmd.CombinedOutput(); err != nil {
-		st.t.Logf("Warning: failed to delete fork repo: %v", err)
-		// Continue anyway
-	}
+// createForkRepo creates or configures the fork repository
+func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
+	if st.cfg.UpstreamState != RemoteStateNull {
+		// Fork the upstream repo
+		cmd := exec.Command("gh", "repo", "fork",
+			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
+			"--clone=false")
 
-	upstreamRepoName := fmt.Sprintf("%s/%s", st.cfg.UpstreamGithubAccount, st.cfg.UpstreamRepoName)
-	if st.cfg.GithubOrg != "" {
-		upstreamRepoName = fmt.Sprintf("%s/%s", st.cfg.GithubOrg, st.cfg.UpstreamRepoName)
-	}
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 
-	if upstreamRepoName != forkRepoName {
-		// Delete upstream repo
-		cmd = exec.Command("gh", "repo", "delete", upstreamRepoName, "--yes")
-		if st.cfg.GithubToken != "" {
-			cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", EnvGithubToken, st.cfg.GithubToken))
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to fork upstream repo: %w\nOutput: %s", err, output)
+		}
+	} else {
+		// Create an independent repo
+		cmd := exec.Command("gh", "repo", "create",
+			fmt.Sprintf("%s/%s", st.cfg.GHConfig.ForkAccount, repoName),
+			"--public")
+
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to create fork repo: %w\nOutput: %s", err, output)
 		}
 
-		if _, err := cmd.CombinedOutput(); err != nil {
-			st.t.Logf("Warning: failed to delete upstream repo: %v", err)
-		}
-	}
+		// Initialize repo with a README if state should be OK
+		if st.cfg.ForkState == RemoteStateOK {
+			// Create temp dir for initial commit
+			tempDir, err := os.MkdirTemp("", "repo-init-*")
+			if err != nil {
+				return fmt.Errorf("failed to create temp directory: %w", err)
+			}
+			defer os.RemoveAll(tempDir)
 
-	// Remove local clone
-	if err := os.RemoveAll(st.GetClonePath()); err != nil {
-		return fmt.Errorf("failed to remove clone directory: %w", err)
+			// Initialize git repo
+			repo, err := git.PlainInit(tempDir, false)
+			if err != nil {
+				return fmt.Errorf("failed to initialize git repo: %w", err)
+			}
+
+			// Create README file
+			readmePath := filepath.Join(tempDir, "README.md")
+			readmeContent := "# Test Repository\n\nThis is a test repository created for system tests."
+			if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
+				return fmt.Errorf("failed to create README file: %w", err)
+			}
+
+			// Get worktree
+			wt, err := repo.Worktree()
+			if err != nil {
+				return fmt.Errorf("failed to get worktree: %w", err)
+			}
+
+			// Add README to index
+			if _, err := wt.Add("README.md"); err != nil {
+				return fmt.Errorf("failed to add README to index: %w", err)
+			}
+
+			// Commit changes
+			_, err = wt.Commit("Initial commit", &git.CommitOptions{
+				Author: &object.Signature{
+					Name:  "System Test",
+					Email: "test@example.com",
+					When:  time.Now(),
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to commit changes: %w", err)
+			}
+
+			// Set remote
+			_, err = repo.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{repoURL},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to set remote: %w", err)
+			}
+
+			// Push changes
+			err = repo.Push(&git.PushOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: "x-access-token",
+					Password: st.cfg.GHConfig.ForkToken,
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to push changes: %w", err)
+			}
+		}
 	}
 
 	return nil
 }
 
-// runCommand runs a command in the clone repository
-func (st *SystemTest) runCommand(command string, args ...string) (string, string, error) {
-	cmd := exec.Command(command, args...)
-	cmd.Dir = TestDataDir
+// cloneRepo clones a repository to the local machine
+func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
+	// Create parent directory if it doesn't exist
+	if err := os.MkdirAll(filepath.Dir(clonePath), 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	// Clone the repository
+	cloneOpts := &git.CloneOptions{
+		URL: repoURL,
+		Auth: &http.BasicAuth{
+			Username: "x-access-token",
+			Password: token,
+		},
+	}
+
+	_, err := git.PlainClone(clonePath, false, cloneOpts)
+	if err != nil {
+		return fmt.Errorf("failed to clone repository: %w", err)
+	}
+
+	return nil
+}
+
+// configureRemotes sets up the remote configuration in the cloned repository
+func (st *SystemTest) configureRemotes(repoName string) error {
+	// Open the repository
+	repo, err := git.PlainOpen(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Configure remotes based on test scenario
+	switch {
+	case st.cfg.ForkState != RemoteStateNull && st.cfg.UpstreamState != RemoteStateNull:
+		// Both upstream and fork exist, configure both remotes
+		_, err := repo.Remote("origin")
+		if err != nil {
+			// Add origin remote pointing to fork
+			forkURL := fmt.Sprintf("https://github.com/%s/%s.git",
+				st.cfg.GHConfig.ForkAccount, repoName)
+			_, err = repo.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{forkURL},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create origin remote: %w", err)
+			}
+		}
+
+		_, err = repo.Remote("upstream")
+		if err != nil {
+			// Add upstream remote
+			upstreamURL := fmt.Sprintf("https://github.com/%s/%s.git",
+				st.cfg.GHConfig.UpstreamAccount, repoName)
+			_, err = repo.CreateRemote(&config.RemoteConfig{
+				Name: "upstream",
+				URLs: []string{upstreamURL},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create upstream remote: %w", err)
+			}
+		}
+
+	case st.cfg.ForkState == RemoteStateNull && st.cfg.UpstreamState != RemoteStateNull:
+		// Only upstream exists, make sure origin points to upstream
+		_, err := repo.Remote("origin")
+		if err != nil {
+			upstreamURL := fmt.Sprintf("https://github.com/%s/%s.git",
+				st.cfg.GHConfig.UpstreamAccount, repoName)
+			_, err = repo.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{upstreamURL},
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create origin remote: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// setupDevBranch creates and configures the dev branch
+func (st *SystemTest) setupDevBranch() error {
+	// Open the repository
+	repo, err := git.PlainOpen(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Get worktree
+	wt, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Create dev branch from HEAD
+	headRef, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	// Create local dev branch
+	branchRef := plumbing.NewBranchReferenceName("dev")
+	ref := plumbing.NewHashReference(branchRef, headRef.Hash())
+	if err := repo.Storer.SetReference(ref); err != nil {
+		return fmt.Errorf("failed to create dev branch: %w", err)
+	}
+
+	// Checkout the dev branch
+	err = wt.Checkout(&git.CheckoutOptions{
+		Branch: branchRef,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to checkout dev branch: %w", err)
+	}
+
+	// Push dev branch to remote (if fork exists)
+	if st.cfg.ForkState != RemoteStateNull {
+		err = repo.Push(&git.PushOptions{
+			RemoteName: "origin",
+			Auth: &http.BasicAuth{
+				Username: "x-access-token",
+				Password: st.cfg.GHConfig.ForkToken,
+			},
+			RefSpecs: []config.RefSpec{
+				config.RefSpec(fmt.Sprintf("refs/heads/dev:refs/heads/dev")),
+			},
+		})
+		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return fmt.Errorf("failed to push dev branch to fork: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// runCommand executes the specified qs command
+func (st *SystemTest) runCommand() (string, string, error) {
+	// Change to the clone repo directory
+	originalDir, err := os.Getwd()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get current directory: %w", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(st.cloneRepoPath); err != nil {
+		return "", "", fmt.Errorf("failed to change directory to clone repo: %w", err)
+	}
+
+	// Prepare command
+	cmd := exec.Command(st.cfg.Command, st.cfg.Args...)
 
 	// Capture stdout and stderr
-	stdout := &strings.Builder{}
-	stderr := &strings.Builder{}
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	// Run the command
+	err = cmd.Run()
+
 	return stdout.String(), stderr.String(), err
 }
 
-// Helper functions
-
-// copyFiles copies repo files to the working directory
-func copyFiles(srcDir, dstDir string) error {
-	// Get list of template files
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
-		return fmt.Errorf("failed to read source directory: %w", err)
+// validateOutput checks the command output against expected values
+func (st *SystemTest) validateOutput(stdout, stderr string) error {
+	// Check stdout if specified
+	if st.cfg.ExpectedStdout != "" {
+		if !strings.Contains(stdout, st.cfg.ExpectedStdout) {
+			return fmt.Errorf("expected stdout to contain: %q, got: %q",
+				st.cfg.ExpectedStdout, stdout)
+		}
 	}
 
-	// Copy each file
-	for _, entry := range entries {
-		srcPath := fmt.Sprintf("%s/%s", srcDir, entry.Name())
-		dstPath := fmt.Sprintf("%s/%s", dstDir, entry.Name())
-
-		if entry.IsDir() {
-			// Create directory if it doesn't exist
-			if err := os.MkdirAll(dstPath, defaultDirPerms); err != nil {
-				return fmt.Errorf("failed to create directory %s: %w", dstPath, err)
-			}
-
-			// Recursively copy files in directory
-			if err := copyFiles(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			// Copy file
-			content, err := os.ReadFile(srcPath)
-			if err != nil {
-				return fmt.Errorf("failed to read file %s: %w", srcPath, err)
-			}
-
-			if err := os.WriteFile(dstPath, content, 0644); err != nil {
-				return fmt.Errorf("failed to write file %s: %w", dstPath, err)
-			}
+	// Check stderr if specified
+	if st.cfg.ExpectedStderr != "" {
+		if !strings.Contains(stderr, st.cfg.ExpectedStderr) {
+			return fmt.Errorf("expected stderr to contain: %q, got: %q",
+				st.cfg.ExpectedStderr, stderr)
 		}
 	}
 
 	return nil
 }
 
-// processGoModTemplate processes go.mod.tmpl to create go.mod
-func processGoModTemplate(dir, ghAccount string) error {
-	// Read template
-	tmplPath := fmt.Sprintf("%s/go.mod.tmpl", dir)
-	content, err := os.ReadFile(tmplPath)
+// validateCommandResult validates the state after command execution
+func (st *SystemTest) validateCommandResult() error {
+	switch st.cfg.Command {
+	case "fork":
+		return st.validateForkResult()
+	case "dev":
+		return st.validateDevResult()
+	case "pr":
+		return st.validatePRResult()
+	case "d":
+		return st.validateDownloadResult()
+	case "u":
+		return st.validateUploadResult()
+	default:
+		return fmt.Errorf("unknown command: %s", st.cfg.Command)
+	}
+}
+
+// validateForkResult checks the repository state after a fork operation
+func (st *SystemTest) validateForkResult() error {
+	// Open the repository
+	repo, err := git.PlainOpen(st.cloneRepoPath)
 	if err != nil {
-		return fmt.Errorf("failed to read go.mod.tmpl: %w", err)
+		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
 
-	// Replace placeholders
-	modContent := string(content)
-	modContent = strings.Replace(modContent, "GithubAccount", ghAccount, -1)
-	modContent = strings.Replace(modContent, "UUID", uuid.New().String(), -1)
+	// Check remotes configuration
+	origin, err := repo.Remote("origin")
+	if err != nil {
+		return fmt.Errorf("origin remote not found after fork command: %w", err)
+	}
 
-	// Write go.mod
-	modPath := fmt.Sprintf("%s/go.mod", dir)
-	if err := os.WriteFile(modPath, []byte(modContent), 0644); err != nil {
-		return fmt.Errorf("failed to write go.mod: %w", err)
+	// Verify origin points to fork
+	expectedForkURL := fmt.Sprintf("https://github.com/%s/", st.cfg.GHConfig.ForkAccount)
+	if !strings.Contains(origin.Config().URLs[0], expectedForkURL) {
+		return fmt.Errorf("origin remote does not point to fork: %s", origin.Config().URLs[0])
+	}
+
+	// Verify upstream remote exists and points to upstream
+	upstream, err := repo.Remote("upstream")
+	if err != nil {
+		return fmt.Errorf("upstream remote not found after fork command: %w", err)
+	}
+
+	expectedUpstreamURL := fmt.Sprintf("https://github.com/%s/", st.cfg.GHConfig.UpstreamAccount)
+	if !strings.Contains(upstream.Config().URLs[0], expectedUpstreamURL) {
+		return fmt.Errorf("upstream remote does not point to upstream: %s", upstream.Config().URLs[0])
 	}
 
 	return nil
+}
+
+// validateDevResult checks the repository state after a dev operation
+func (st *SystemTest) validateDevResult() error {
+	// Open the repository
+	repo, err := git.PlainOpen(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Check if dev branch exists
+	devRef := plumbing.NewBranchReferenceName("dev")
+	_, err = repo.Reference(devRef, true)
+	if err != nil {
+		return fmt.Errorf("dev branch not found after dev command: %w", err)
+	}
+
+	// Check if the local branch is tracking the remote branch
+	cfg, err := repo.Config()
+	if err != nil {
+		return fmt.Errorf("failed to get repo config: %w", err)
+	}
+
+	if branch, ok := cfg.Branches["dev"]; ok {
+		if branch.Remote != "origin" {
+			return fmt.Errorf("dev branch is not tracking origin remote: %s", branch.Remote)
+		}
+	} else {
+		return fmt.Errorf("dev branch configuration not found")
+	}
+
+	return nil
+}
+
+// validatePRResult checks if a pull request was created
+func (st *SystemTest) validatePRResult() error {
+	// Use GitHub API to check if PR was created
+	cmd := exec.Command("gh", "pr", "list",
+		"--repo", fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, st.getRepoName()),
+		"--head", fmt.Sprintf("%s:dev", st.cfg.GHConfig.ForkAccount),
+		"--json", "number")
+
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
+
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check pull requests: %w", err)
+	}
+
+	// Parse JSON output
+	type prList struct {
+		Number int `json:"number"`
+	}
+
+	var prs []prList
+	if err := json.Unmarshal(output, &prs); err != nil {
+		return fmt.Errorf("failed to parse PR list: %w", err)
+	}
+
+	if len(prs) == 0 {
+		return fmt.Errorf("no pull request created")
+	}
+
+	return nil
+}
+
+// validateDownloadResult checks the repository state after a download operation
+func (st *SystemTest) validateDownloadResult() error {
+	// Compare local and remote branches to ensure they're in sync
+	repo, err := git.PlainOpen(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Get the current branch
+	head, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	// Get the branch name
+	branchName := ""
+	if head.Name().IsBranch() {
+		branchName = head.Name().Short()
+	} else {
+		return fmt.Errorf("HEAD is not on a branch")
+	}
+
+	// Get the remote branch reference
+	remoteBranchRef := plumbing.NewRemoteReferenceName("origin", branchName)
+	remoteBranch, err := repo.Reference(remoteBranchRef, true)
+	if err != nil {
+		return fmt.Errorf("failed to get remote branch: %w", err)
+	}
+
+	// Check if local and remote are in sync
+	if head.Hash() != remoteBranch.Hash() {
+		return fmt.Errorf("local and remote branches are not in sync")
+	}
+
+	return nil
+}
+
+// validateUploadResult checks the repository state after an upload operation
+func (st *SystemTest) validateUploadResult() error {
+	// Similar to download but checks if the changes were pushed to remote
+	repo, err := git.PlainOpen(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Get the current branch
+	head, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	// Get the branch name
+	branchName := ""
+	if head.Name().IsBranch() {
+		branchName = head.Name().Short()
+	} else {
+		return fmt.Errorf("HEAD is not on a branch")
+	}
+
+	// Execute git fetch to get latest remote state
+	cmd := exec.Command("git", "fetch", "origin")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to fetch from remote: %w", err)
+	}
+
+	// Check if local branch is ahead of remote branch
+	cmd = exec.Command("git", "rev-list", "--count",
+		fmt.Sprintf("origin/%s..%s", branchName, branchName))
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check if branch is ahead: %w", err)
+	}
+
+	aheadCount, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	if err != nil {
+		return fmt.Errorf("failed to parse ahead count: %w", err)
+	}
+
+	if aheadCount > 0 {
+		return fmt.Errorf("local branch is ahead of remote by %d commits", aheadCount)
+	}
+
+	return nil
+}
+
+// getRepoName extracts the repository name from the clone path
+func (st *SystemTest) getRepoName() string {
+	return filepath.Base(st.cloneRepoPath)
+}
+
+// Run executes the complete system test
+func (st *SystemTest) Run() error {
+	// Check prerequisites
+	if err := st.checkPrerequisites(); err != nil {
+		return err
+	}
+
+	// Create test environment
+	if err := st.createTestEnvironment(); err != nil {
+		return err
+	}
+
+	// Run the command
+	stdout, stderr, err := st.runCommand()
+	if err != nil {
+		return err
+	}
+
+	// Validate output
+	if err := st.validateOutput(stdout, stderr); err != nil {
+		return err
+	}
+
+	// Validate command result
+	if err := st.validateCommandResult(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// generateCloneRepoPath generates a unique path for the clone repo
+func generateCloneRepoPath() string {
+	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
+	repoName := fmt.Sprintf("qs-test-%s", timestamp)
+
+	return filepath.Join(".testdata", repoName)
 }

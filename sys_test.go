@@ -1,449 +1,272 @@
 package main
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/untillpro/qs/internal/systrun"
 )
 
-func TestCreateUpstreamRepo(t *testing.T) {
-	// Get GitHub account from environment
-	ghAccount := os.Getenv(systrun.EnvGithubAccount)
-	if ghAccount == "" {
-		t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
+// TestForkNonExistingFork tests the case where a fork does not exist yet
+func TestForkNonExistingFork(t *testing.T) {
+	require := require.New(t)
+
+	ghConfig := getGithubConfig(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "fork-non-existing",
+		GHConfig:       getGithubConfig(t),
+		Command:        "fork",
+		Args:           []string{systrun.GithubURL + "/" + ghConfig.UpstreamAccount + "/test-repo"},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateNull,
+		ExpectedStdout: "Repository forked successfully",
 	}
 
-	ghToken := os.Getenv(systrun.EnvGithubToken)
-	err := os.Unsetenv(systrun.EnvGithubToken)
-	require.NoError(t, err)
-
-	// Generate unique repo names with UUID
-	repoID := uuid.New().String()
-	mainRepoName := fmt.Sprintf("qs-test-%s", repoID)
-
-	// Create test configuration
-	cfg := systrun.SystemTestCfg{
-		GithubAccount:         ghAccount,
-		GithubToken:           ghToken,
-		UpstreamGithubAccount: ghAccount,
-		UpstreamRepoName:      mainRepoName,
-	}
-
-	// Create system test
-	st := systrun.NewSystemTest(t, cfg)
-	// Test cloning upstream repo
-	st.AddCase(systrun.TestCase{
-		Name: "Clone upstream repo",
-		Cmd:  "gh",
-		Args: []string{"repo", "clone", fmt.Sprintf("%s/%s/%s", systrun.GithubURL, ghAccount, mainRepoName)},
-		CheckResults: func(t *testing.T) {
-			// Compare main.go from upstream repo with local file
-			// Read the content of the local main.go file
-			localContent, err := os.ReadFile(fmt.Sprintf("%s/main.go", systrun.TestDataRepoDir))
-			require.NoError(t, err, "failed to read local main.go file: %v", err)
-			// Read the content of the upstream main.go file
-			upstreamContent, err := os.ReadFile(fmt.Sprintf("%s/main.go", st.GetClonePath()))
-			require.NoError(t, err, "failed to read upstream main.go file: %v", err)
-			// Compare the content of the two files
-			require.Equal(t, string(localContent), string(upstreamContent), "local main.go content does not match upstream main.go content")
-		},
-	})
-
-	st.Run()
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
 }
 
-func TestMainWorkflow(t *testing.T) {
-	t.Skip()
-	// Skip if running in CI without proper setup
-	if os.Getenv("CI") == "true" && os.Getenv(systrun.EnvGithubAccount) == "" {
-		t.Skip("Skipping system test in CI environment without proper setup")
+// TestForkExistingFork tests the case where a fork already exists
+func TestForkExistingFork(t *testing.T) {
+	require := require.New(t)
+
+	ghConfig := getGithubConfig(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "fork-existing",
+		GHConfig:       getGithubConfig(t),
+		Command:        "fork",
+		Args:           []string{systrun.GithubURL + "/" + ghConfig.UpstreamAccount + "/test-repo"},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		ExpectedStdout: "Fork already exists",
 	}
 
-	// Get GitHub account from environment
-	ghAccount := os.Getenv(systrun.EnvGithubAccount)
-	if ghAccount == "" {
-		t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
-	}
-
-	// Generate unique repo names with UUID
-	repoID := uuid.New().String()[:8]
-	mainRepoName := fmt.Sprintf("qs-test-%s", repoID)
-
-	// Create test configuration
-	cfg := systrun.SystemTestCfg{
-		GithubAccount:    ghAccount,
-		GithubToken:      os.Getenv(systrun.EnvGithubToken),
-		UpstreamRepoName: mainRepoName,
-	}
-
-	// Create system test
-	st := systrun.NewSystemTest(t, cfg)
-
-	// Add test cases for main workflow
-
-	// 1. Create developer branch
-	devBranchName := "feature-test"
-	// TODO: Add forking test case via `qs fork`
-	// TODO: Add cloning test case via `git clone`
-
-	st.AddCase(systrun.TestCase{
-		Name:   "Create developer branch",
-		Cmd:    "qs",
-		Args:   []string{"dev", devBranchName},
-		Stdout: fmt.Sprintf("Dev branch '%s' will be created", devBranchName),
-		CheckResults: func(t *testing.T) {
-			// Verify branch was created
-			cmd := exec.Command("git", "branch", "--show-current")
-			cmd.Dir = st.GetClonePath()
-			output, err := cmd.Output()
-			require.NoErrorf(t, err, "failed to get current branch: %v", err)
-
-			currentBranch := string(output)
-			require.Containsf(t, currentBranch, devBranchName, "expected branch %s, got %s", devBranchName, currentBranch)
-		},
-	})
-
-	// 2. Make changes to a file
-	newContent := "package main\n\nimport \"fmt\"\n\nfunc Sum(a, b int) int {\n\treturn a + b\n}\n\nfunc main() {\n\tfmt.Println(Sum(1, 3))\n}"
-	st.AddCase(systrun.TestCase{
-		Name: "Make changes to a file",
-		Cmd:  "bash",
-		Args: []string{"-c", fmt.Sprintf("echo '%s' > %s/main.go", newContent, st.GetClonePath())},
-		CheckResults: func(t *testing.T) {
-			// Verify file was modified
-			content, err := os.ReadFile(fmt.Sprintf("%s/main.go", st.GetClonePath()))
-			require.NoErrorf(t, err, "failed to read file: %v", err)
-			require.Equal(t, string(content), newContent, "file content does not match")
-		},
-	})
-
-	// 3. Add and commit changes
-	st.AddCase(systrun.TestCase{
-		Name:   "Add and commit changes",
-		Cmd:    "qs",
-		Args:   []string{"u", "-m", "Add test function"},
-		Stdout: "Add test function",
-		CheckResults: func(t *testing.T) {
-			// Verify commit was created
-			cmd := exec.Command("git", "log", "-1", "--pretty=%B")
-			cmd.Dir = st.GetClonePath()
-			output, err := cmd.Output()
-			require.NoErrorf(t, err, "failed to get commit message: %v", err)
-			// TODO: check if push was successful and fork-repo got updated
-			require.Containsf(t, string(output), "Add test function", "expected commit message 'Add test function', got %s", string(output))
-		},
-	})
-
-	// 4. Create pull request
-	st.AddCase(systrun.TestCase{
-		Name:   "Create pull request",
-		Cmd:    "qs",
-		Args:   []string{"pr"},
-		Stdout: "Pull request",
-		CheckResults: func(t *testing.T) {
-			// Verify PR was created
-			cmd := exec.Command("gh", "pr", "list", "--state", "open")
-			cmd.Dir = st.GetClonePath()
-			output, err := cmd.Output()
-			require.NoErrorf(t, err, "failed to list pull requests: %v", err)
-			require.NotEmpty(t, output, "pull requests are not empty")
-		},
-	})
-
-	// Run all test cases
-	st.Run()
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
 }
 
-func TestEdgeCases(t *testing.T) {
-	t.Skip()
-	// Skip if running in CI without proper setup
-	if os.Getenv("CI") == "true" && os.Getenv(systrun.EnvGithubAccount) == "" {
-		t.Skip("Skipping system test in CI environment without proper setup")
+// TestForkNoOriginRemote tests the case where there is no origin remote
+func TestForkNoOriginRemote(t *testing.T) {
+	require := require.New(t)
+
+	ghConfig := getGithubConfig(t)
+	testConfig := &systrun.TestConfig{
+		TestID:         "fork-no-origin",
+		GHConfig:       getGithubConfig(t),
+		Command:        "fork",
+		Args:           []string{systrun.GithubURL + "/" + ghConfig.UpstreamAccount + "/test-repo"},
+		UpstreamState:  systrun.RemoteStateNull,
+		ForkState:      systrun.RemoteStateNull,
+		ExpectedStderr: "origin remote not found",
 	}
 
-	t.Run("BranchMismatch", func(t *testing.T) {
-		// Get GitHub account from environment
-		ghAccount := os.Getenv(systrun.EnvGithubAccount)
-		if ghAccount == "" {
-			t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
-		}
-
-		// Generate unique repo names
-		repoID := uuid.New().String()[:8]
-		mainRepoName := fmt.Sprintf("qs-test-branch-%s", repoID)
-
-		// Create test configuration
-		cfg := systrun.SystemTestCfg{
-			GithubAccount:    ghAccount,
-			GithubToken:      os.Getenv(systrun.EnvGithubToken),
-			UpstreamRepoName: mainRepoName,
-		}
-
-		// Create system test
-		st := systrun.NewSystemTest(t, cfg)
-
-		// First create a non-main branch
-		st.AddCase(systrun.TestCase{
-			Name: "Create initial branch",
-			Cmd:  "git",
-			Args: []string{"checkout", "-b", "non-main-branch"},
-			CheckResults: func(t *testing.T) {
-				// Verify branch was created
-				cmd := exec.Command("git", "branch", "--show-current")
-				cmd.Dir = st.GetClonePath()
-				output, err := cmd.Output()
-				require.NoErrorf(t, err, "failed to get current branch: %v", err)
-
-				currentBranch := string(output[:len(output)-1])
-				require.Equal(t, currentBranch, "non-main-branch", "expected branch non-main-branch, got %s", currentBranch)
-			},
-		})
-
-		// Try to create a dev branch from a non-main branch
-		st.AddCase(systrun.TestCase{
-			Name:   "Try to create dev branch from non-main branch",
-			Cmd:    "qs",
-			Args:   []string{"dev", "feature-branch"},
-			Stderr: "not on main branch",
-		})
-
-		// Run the test
-		st.Run() // We expect this to fail with branch mismatch error
-	})
-
-	t.Run("EmptyCommitNotes", func(t *testing.T) {
-		// Get GitHub account from environment
-		ghAccount := os.Getenv(systrun.EnvGithubAccount)
-		if ghAccount == "" {
-			t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
-		}
-
-		// Generate unique repo names
-		repoID := uuid.New().String()[:8]
-		mainRepoName := fmt.Sprintf("qs-test-empty-%s", repoID)
-
-		// Create test configuration
-		cfg := systrun.SystemTestCfg{
-			GithubAccount:    ghAccount,
-			GithubToken:      os.Getenv(systrun.EnvGithubToken),
-			UpstreamRepoName: mainRepoName,
-		}
-
-		// Create system test
-		st := systrun.NewSystemTest(t, cfg)
-
-		// Create a dev branch
-		devBranchName := "feature-empty-commit"
-		st.AddCase(systrun.TestCase{
-			Name:   "Create developer branch",
-			Cmd:    "qs",
-			Args:   []string{"dev", devBranchName},
-			Stdout: fmt.Sprintf("Dev branch '%s' will be created", devBranchName),
-		})
-
-		// Make some changes
-		newContent := "package main\n\nimport \"fmt\"\n\nfunc Sum(a, b int) int {\n\treturn a + b\n}\n\nfunc main() {\n\tfmt.Println(Sum(1, 3))\n}"
-		st.AddCase(systrun.TestCase{
-			Name: "Make changes",
-			Cmd:  "bash",
-			Args: []string{"-c", fmt.Sprintf("echo '%s' > %s/main.go", newContent, st.GetClonePath())},
-		})
-
-		// Try to commit with empty message
-		st.AddCase(systrun.TestCase{
-			Name:   "Try to commit with empty message",
-			Cmd:    "qs",
-			Args:   []string{"u", "-m", ""},
-			Stderr: "commit message",
-		})
-
-		// Run the test
-		st.Run() // We expect this to fail with empty commit message error
-	})
-
-	t.Run("PushWithStash", func(t *testing.T) {
-		// Get GitHub account from environment
-		ghAccount := os.Getenv(systrun.EnvGithubAccount)
-		if ghAccount == "" {
-			t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
-		}
-
-		// Generate unique repo names
-		repoID := uuid.New().String()[:8]
-		mainRepoName := fmt.Sprintf("qs-test-stash-%s", repoID)
-
-		// Create test configuration
-		cfg := systrun.SystemTestCfg{
-			GithubAccount:    ghAccount,
-			GithubToken:      os.Getenv(systrun.EnvGithubToken),
-			UpstreamRepoName: mainRepoName,
-		}
-
-		// Create system test
-		st := systrun.NewSystemTest(t, cfg)
-
-		// Create a dev branch
-		devBranchName := "feature-stash-test"
-		st.AddCase(systrun.TestCase{
-			Name:   "Create developer branch",
-			Cmd:    "qs",
-			Args:   []string{"dev", devBranchName},
-			Stdout: fmt.Sprintf("Dev branch '%s' will be created", devBranchName),
-		})
-
-		// Make changes and commit
-		newContent := "package main\n\nimport \"fmt\"\n\nfunc Sum(a, b int) int {\n\treturn a + b\n}\n\nfunc main() {\n\tfmt.Println(Sum(1, 3))\n}"
-		st.AddCase(systrun.TestCase{
-			Name: "Make initial changes",
-			Cmd:  "bash",
-			Args: []string{"-c", fmt.Sprintf("echo '%s' > %s/main.go", newContent, st.GetClonePath())},
-		})
-
-		st.AddCase(systrun.TestCase{
-			Name: "Commit initial changes",
-			Cmd:  "qs",
-			Args: []string{"u", "-m", "Add stash test function 1"},
-		})
-
-		// Make additional uncommitted changes
-		st.AddCase(systrun.TestCase{
-			Name: "Create empty file",
-			Cmd:  "bash",
-			Args: []string{"-c", fmt.Sprintf("touch %s/mul.go", st.GetClonePath())},
-		})
-
-		// Make additional uncommitted changes
-		newFileContent := "package main\n\nimport \"fmt\"\n\nfunc Mul(a, b int) int {\n\treturn a * b\n}\n\n"
-		st.AddCase(systrun.TestCase{
-			Name: "Make additional uncommitted changes",
-			Cmd:  "bash",
-			Args: []string{"-c", fmt.Sprintf("echo '%s' > %s/mul.go", newFileContent, st.GetClonePath())},
-		})
-
-		// Create new branch that should stash changes
-		st.AddCase(systrun.TestCase{
-			Name:   "Create new branch with stashed changes",
-			Cmd:    "qs",
-			Args:   []string{"dev", "another-feature"},
-			Stdout: "stash",
-			CheckResults: func(t *testing.T) {
-				// Check stash list
-				cmd := exec.Command("git", "stash", "list")
-				cmd.Dir = st.GetClonePath()
-				output, err := cmd.Output()
-				require.NoErrorf(t, err, "failed to list stash: %v", err)
-				require.NotEmpty(t, string(output), "no stashed changes found")
-			},
-		})
-
-		// Run the test
-		st.Run()
-	})
-
-	t.Run("LargeFilesCheck", func(t *testing.T) {
-		// Get GitHub account from environment
-		ghAccount := os.Getenv(systrun.EnvGithubAccount)
-		if ghAccount == "" {
-			t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
-		}
-
-		// Generate unique repo names
-		repoID := uuid.New().String()[:8]
-		mainRepoName := fmt.Sprintf("qs-test-large-%s", repoID)
-
-		// Create test configuration
-		cfg := systrun.SystemTestCfg{
-			GithubAccount:    ghAccount,
-			GithubToken:      os.Getenv(systrun.EnvGithubToken),
-			UpstreamRepoName: mainRepoName,
-		}
-
-		// Create system test
-		st := systrun.NewSystemTest(t, cfg)
-
-		// Create a dev branch
-		devBranchName := "feature-large-file"
-		st.AddCase(systrun.TestCase{
-			Name:   "Create developer branch",
-			Cmd:    "qs",
-			Args:   []string{"dev", devBranchName},
-			Stdout: fmt.Sprintf("Dev branch '%s' will be created", devBranchName),
-		})
-
-		// Create a large file (5MB, which should exceed most Git LFS limits)
-		st.AddCase(systrun.TestCase{
-			Name: "Create large file",
-			Cmd:  "bash",
-			Args: []string{"-c", fmt.Sprintf("dd if=/dev/zero of=%s/large-file.bin bs=1024 count=5120", st.GetClonePath())},
-			CheckResults: func(t *testing.T) {
-				// Verify file was created
-				filePath := fmt.Sprintf("%s/large-file.bin", st.GetClonePath())
-				info, err := os.Stat(filePath)
-				require.NoErrorf(t, err, "failed to stat file: %v", err)
-
-				expectedSize := int64(5120 * 1024) // 5MB
-				require.Equalf(t, info.Size(), expectedSize, "file size incorrect, expected %d, got %d", expectedSize, info.Size())
-			},
-		})
-
-		// Try to add and commit large file
-		st.AddCase(systrun.TestCase{
-			Name:   "Try to commit large file",
-			Cmd:    "qs",
-			Args:   []string{"u", "-m", "Add large file"},
-			Stderr: "large", // Error message should mention large files
-		})
-
-		// Run the test
-		st.Run() // We expect warning about large files
-	})
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.Error(err)
 }
 
-func TestNoGithubToken(t *testing.T) {
-	t.Skip()
-	// Skip if running in CI without proper setup
-	if os.Getenv("CI") == "true" && os.Getenv(systrun.EnvGithubAccount) == "" {
-		t.Skip("Skipping system test in CI environment without proper setup")
+// TestDevNewBranch tests creating a new dev branch when it doesn't exist
+func TestDevNewBranch(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:          "dev-new-branch",
+		GHConfig:        getGithubConfig(t),
+		Command:         "dev",
+		Args:            []string{},
+		UpstreamState:   systrun.RemoteStateOK,
+		ForkState:       systrun.RemoteStateOK,
+		DevBranchExists: false,
+		ExpectedStdout:  "New dev branch created",
 	}
 
-	// Save current token
-	oldToken := os.Getenv(systrun.EnvGithubToken)
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
 
-	// Unset token
-	os.Unsetenv(systrun.EnvGithubToken)
+// TestDevExistingBranch tests behavior when dev branch already exists
+func TestDevExistingBranch(t *testing.T) {
+	require := require.New(t)
 
-	// Restore token after test
-	defer func() {
-		os.Setenv(systrun.EnvGithubToken, oldToken)
-	}()
-
-	// Get GitHub account from environment
-	ghAccount := os.Getenv(systrun.EnvGithubAccount)
-	if ghAccount == "" {
-		t.Skipf("%s environment variable must be set", systrun.EnvGithubAccount)
+	testConfig := &systrun.TestConfig{
+		TestID:          "dev-existing-branch",
+		GHConfig:        getGithubConfig(t),
+		Command:         "dev",
+		Args:            []string{},
+		UpstreamState:   systrun.RemoteStateOK,
+		ForkState:       systrun.RemoteStateOK,
+		DevBranchExists: true,
+		ExpectedStdout:  "Dev branch already exists",
 	}
 
-	// Generate unique repo names
-	repoID := uuid.New().String()[:8]
-	mainRepoName := fmt.Sprintf("qs-test-notoken-%s", repoID)
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
 
-	// Create test configuration without token
-	cfg := systrun.SystemTestCfg{
-		GithubAccount:    ghAccount,
-		GithubToken:      "", // Explicitly empty
-		UpstreamRepoName: mainRepoName,
+// TestDevNoFork tests creating a dev branch when fork doesn't exist
+func TestDevNoFork(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:          "dev-no-fork",
+		GHConfig:        getGithubConfig(t),
+		Command:         "dev",
+		Args:            []string{},
+		UpstreamState:   systrun.RemoteStateOK,
+		ForkState:       systrun.RemoteStateNull,
+		DevBranchExists: false,
+		ExpectedStdout:  "Creating dev branch in upstream repo",
 	}
 
-	// Create system test
-	st := systrun.NewSystemTest(t, cfg)
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
 
-	// Try to create a repo without token
-	// The test should still work if gh CLI is logged in through other means
-	// But might fail if authentication is required
-	st.Run()
+// TestPRBasic tests creating a basic PR
+func TestPRBasic(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "pr-basic",
+		GHConfig:       getGithubConfig(t),
+		Command:        "pr",
+		Args:           []string{},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		SyncState:      systrun.SyncStateSynchronized,
+		ExpectedStdout: "Creating pull request",
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestPRDevBranchOutOfDate tests behavior when dev branch is out of date
+func TestPRDevBranchOutOfDate(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "pr-branch-out-of-date",
+		GHConfig:       getGithubConfig(t),
+		Command:        "pr",
+		Args:           []string{},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		SyncState:      systrun.SyncStateForkChanged,
+		ExpectedStderr: "This branch is out-of-date. Merge automatically [y/n]?",
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.Error(err)
+}
+
+// TestPRWrongBranch tests PR creation when not on dev branch
+func TestPRWrongBranch(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "pr-wrong-branch",
+		GHConfig:       getGithubConfig(t),
+		Command:        "pr",
+		Args:           []string{},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		SyncState:      systrun.SyncStateDoesntTrackOrigin,
+		ExpectedStderr: "You are not on dev branch",
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.Error(err)
+}
+
+// TestDownload tests synchronizing local repository with remote changes
+func TestDownload(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "download",
+		GHConfig:       getGithubConfig(t),
+		Command:        "d",
+		Args:           []string{},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		SyncState:      systrun.SyncStateForkChanged,
+		ExpectedStdout: "Downloading changes from remote",
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestUpload tests uploading local changes to remote repository
+func TestUpload(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "upload",
+		GHConfig:       getGithubConfig(t),
+		Command:        "u",
+		Args:           []string{},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		SyncState:      systrun.SyncStateCloneChanged,
+		ExpectedStdout: "Uploading changes to remote",
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestUploadConflict tests uploading changes when there are conflicts
+func TestUploadConflict(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:         "upload-conflict",
+		GHConfig:       getGithubConfig(t),
+		Command:        "u",
+		Args:           []string{},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		SyncState:      systrun.SyncStateBothChangedConflict,
+		ExpectedStderr: "There are conflicts that need to be resolved manually",
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.Error(err)
+}
+
+// getGithubConfig retrieves GitHub credentials from environment variables
+// and skips the test if any credentials are missing
+func getGithubConfig(t *testing.T) systrun.GithubConfig {
+	upstreamAccount := os.Getenv(systrun.EnvUpstreamGithubAccount)
+	upstreamToken := os.Getenv(systrun.EnvUpstreamGithubToken)
+	forkAccount := os.Getenv(systrun.EnvForkGithubAccount)
+	forkToken := os.Getenv(systrun.EnvForkGithubToken)
+
+	// Skip test if credentials are not set
+	if upstreamAccount == "" || upstreamToken == "" || forkAccount == "" || forkToken == "" {
+		t.Skip("GitHub credentials not set, skipping test")
+	}
+
+	return systrun.GithubConfig{
+		UpstreamAccount: upstreamAccount,
+		UpstreamToken:   upstreamToken,
+		ForkAccount:     forkAccount,
+		ForkToken:       forkToken,
+	}
 }
