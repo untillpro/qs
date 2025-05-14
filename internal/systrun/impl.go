@@ -36,7 +36,22 @@ func (st *SystemTest) checkPrerequisites() error {
 		return fmt.Errorf("qs not found in PATH: %w", err)
 	}
 
+	// Check command validity
+	if err := st.checkCommand(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// checkCommand validates the command to be executed
+func (st *SystemTest) checkCommand() error {
+	switch st.cfg.Command {
+	case "fork", "dev", "pr", "d", "u":
+		return nil
+	default:
+		return fmt.Errorf("unknown command: %s", st.cfg.Command)
+	}
 }
 
 // createTestEnvironment sets up the test repositories based on configuration
