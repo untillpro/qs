@@ -22,6 +22,12 @@ func TestForkNonExistingFork(t *testing.T) {
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateNull,
 		ExpectedStdout: "Repository forked successfully",
+		Expectations: []systrun.IExpectation{
+			systrun.ExpectedRemoteState{
+				UpstreamRemoteState: systrun.RemoteStateOK,
+				ForkRemoteState:     systrun.RemoteStateOK,
+			},
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -46,6 +52,7 @@ func TestForkExistingFork(t *testing.T) {
 	}
 
 	sysTest := systrun.New(t, testConfig)
+	// TODO: Run must accept post conditions array
 	err := sysTest.Run()
 	require.NoError(err)
 }

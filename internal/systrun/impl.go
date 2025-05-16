@@ -2,13 +2,11 @@ package systrun
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -56,16 +54,12 @@ func (st *SystemTest) checkCommand() error {
 
 // createTestEnvironment sets up the test repositories based on configuration
 func (st *SystemTest) createTestEnvironment() error {
-	// Generate unique repo name
-	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
-	repoName := fmt.Sprintf("%s-%s", st.cfg.TestID, timestamp)
-
 	// Setup upstream repo if needed
 	if st.cfg.UpstreamState != RemoteStateNull {
 		upstreamRepoURL := fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.UpstreamAccount, repoName)
+			st.cfg.GHConfig.UpstreamAccount, st.repoName)
 
-		if err := st.createUpstreamRepo(repoName, upstreamRepoURL); err != nil {
+		if err := st.createUpstreamRepo(st.repoName, upstreamRepoURL); err != nil {
 			return err
 		}
 	}
@@ -73,16 +67,12 @@ func (st *SystemTest) createTestEnvironment() error {
 	// Setup fork repo if needed
 	if st.cfg.ForkState != RemoteStateNull {
 		forkRepoURL := fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.ForkAccount, repoName)
+			st.cfg.GHConfig.ForkAccount, st.repoName)
 
-		if err := st.createForkRepo(repoName, forkRepoURL); err != nil {
+		if err := st.createForkRepo(st.repoName, forkRepoURL); err != nil {
 			return err
 		}
 	}
-
-	// Clone the appropriate repo
-	clonePath := filepath.Join(".testdata", repoName)
-	st.cloneRepoPath = clonePath
 
 	// Determine which repo to clone based on test configuration
 	var cloneURL string
@@ -91,23 +81,23 @@ func (st *SystemTest) createTestEnvironment() error {
 	if st.cfg.ForkState != RemoteStateNull {
 		// Clone from fork if it exists
 		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.ForkAccount, repoName)
+			st.cfg.GHConfig.ForkAccount, st.repoName)
 		authToken = st.cfg.GHConfig.ForkToken
 	} else if st.cfg.UpstreamState != RemoteStateNull {
 		// Otherwise clone from upstream
 		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.UpstreamAccount, repoName)
+			st.cfg.GHConfig.UpstreamAccount, st.repoName)
 		authToken = st.cfg.GHConfig.UpstreamToken
 	} else {
 		return fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
 	}
 
-	if err := st.cloneRepo(cloneURL, clonePath, authToken); err != nil {
+	if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
 		return err
 	}
 
 	// Configure remotes based on test scenario
-	if err := st.configureRemotes(repoName); err != nil {
+	if err := st.configureRemotes(st.repoName); err != nil {
 		return err
 	}
 
@@ -121,16 +111,53 @@ func (st *SystemTest) createTestEnvironment() error {
 	return nil
 }
 
+func ghAuthLogin(token string) error {
+	// Connect stdin to pass the token to the gh process
+	cmd := exec.Command("gh", "auth", "login", "--with-token")
+
+	// Important: Connect stdout and stderr too
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stdin pipe: %w", err)
+	}
+
+	// Write token immediately
+	_, err = stdin.Write([]byte(token))
+	if err != nil {
+		return fmt.Errorf("failed to write token to stdin: %w", err)
+	}
+
+	// Start the command first!
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start gh auth login: %w", err)
+	}
+
+	return stdin.Close() // IMPORTANT: Close stdin immediately after writing
+}
+
 // createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
+	// GitHub Authentication
+	if err := ghAuthLogin(st.cfg.GHConfig.UpstreamToken); err != nil {
+		return fmt.Errorf("failed to authenticate with GitHub: %w", err)
+	}
+	//authCmd := exec.Command("gh", "auth", "login", "--with-token")
+	//authCmd.Stdin = strings.NewReader(st.cfg.GHConfig.UpstreamToken)
+	//if _, err := authCmd.CombinedOutput(); err != nil {
+	//	return fmt.Errorf("failed to authenticate with GitHub: %v", err)
+	//}
+
 	// Use GitHub API to create repo
 	cmd := exec.Command("gh", "repo", "create",
 		fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-		"--public")
+		"--private")
 
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
-
+	//cmd.Env = append(os.Environ(),
+	//	fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
+	//
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", err, output)
 	}
@@ -223,7 +250,7 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 		// Create an independent repo
 		cmd := exec.Command("gh", "repo", "create",
 			fmt.Sprintf("%s/%s", st.cfg.GHConfig.ForkAccount, repoName),
-			"--public")
+			"--private")
 
 		cmd.Env = append(os.Environ(),
 			fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
@@ -489,203 +516,12 @@ func (st *SystemTest) validateOutput(stdout, stderr string) error {
 	return nil
 }
 
-// validateCommandResult validates the state after command execution
-func (st *SystemTest) validateCommandResult() error {
-	switch st.cfg.Command {
-	case "fork":
-		return st.validateForkResult()
-	case "dev":
-		return st.validateDevResult()
-	case "pr":
-		return st.validatePRResult()
-	case "d":
-		return st.validateDownloadResult()
-	case "u":
-		return st.validateUploadResult()
-	default:
-		return fmt.Errorf("unknown command: %s", st.cfg.Command)
-	}
-}
-
-// validateForkResult checks the repository state after a fork operation
-func (st *SystemTest) validateForkResult() error {
-	// Open the repository
-	repo, err := git.PlainOpen(st.cloneRepoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Check remotes configuration
-	origin, err := repo.Remote("origin")
-	if err != nil {
-		return fmt.Errorf("origin remote not found after fork command: %w", err)
-	}
-
-	// Verify origin points to fork
-	expectedForkURL := fmt.Sprintf("https://github.com/%s/", st.cfg.GHConfig.ForkAccount)
-	if !strings.Contains(origin.Config().URLs[0], expectedForkURL) {
-		return fmt.Errorf("origin remote does not point to fork: %s", origin.Config().URLs[0])
-	}
-
-	// Verify upstream remote exists and points to upstream
-	upstream, err := repo.Remote("upstream")
-	if err != nil {
-		return fmt.Errorf("upstream remote not found after fork command: %w", err)
-	}
-
-	expectedUpstreamURL := fmt.Sprintf("https://github.com/%s/", st.cfg.GHConfig.UpstreamAccount)
-	if !strings.Contains(upstream.Config().URLs[0], expectedUpstreamURL) {
-		return fmt.Errorf("upstream remote does not point to upstream: %s", upstream.Config().URLs[0])
-	}
-
-	return nil
-}
-
-// validateDevResult checks the repository state after a dev operation
-func (st *SystemTest) validateDevResult() error {
-	// Open the repository
-	repo, err := git.PlainOpen(st.cloneRepoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Check if dev branch exists
-	devRef := plumbing.NewBranchReferenceName("dev")
-	_, err = repo.Reference(devRef, true)
-	if err != nil {
-		return fmt.Errorf("dev branch not found after dev command: %w", err)
-	}
-
-	// Check if the local branch is tracking the remote branch
-	cfg, err := repo.Config()
-	if err != nil {
-		return fmt.Errorf("failed to get repo config: %w", err)
-	}
-
-	if branch, ok := cfg.Branches["dev"]; ok {
-		if branch.Remote != "origin" {
-			return fmt.Errorf("dev branch is not tracking origin remote: %s", branch.Remote)
+// checkExpectations checks expectations after command execution
+func (st *SystemTest) checkExpectations() error {
+	for _, expectation := range st.cfg.Expectations {
+		if err := expectation.Check(st.cloneRepoPath); err != nil {
+			return fmt.Errorf("validation failed: %w", err)
 		}
-	} else {
-		return fmt.Errorf("dev branch configuration not found")
-	}
-
-	return nil
-}
-
-// validatePRResult checks if a pull request was created
-func (st *SystemTest) validatePRResult() error {
-	// Use GitHub API to check if PR was created
-	cmd := exec.Command("gh", "pr", "list",
-		"--repo", fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, st.getRepoName()),
-		"--head", fmt.Sprintf("%s:dev", st.cfg.GHConfig.ForkAccount),
-		"--json", "number")
-
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
-
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to check pull requests: %w", err)
-	}
-
-	// Parse JSON output
-	type prList struct {
-		Number int `json:"number"`
-	}
-
-	var prs []prList
-	if err := json.Unmarshal(output, &prs); err != nil {
-		return fmt.Errorf("failed to parse PR list: %w", err)
-	}
-
-	if len(prs) == 0 {
-		return fmt.Errorf("no pull request created")
-	}
-
-	return nil
-}
-
-// validateDownloadResult checks the repository state after a download operation
-func (st *SystemTest) validateDownloadResult() error {
-	// Compare local and remote branches to ensure they're in sync
-	repo, err := git.PlainOpen(st.cloneRepoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Get the current branch
-	head, err := repo.Head()
-	if err != nil {
-		return fmt.Errorf("failed to get HEAD: %w", err)
-	}
-
-	// Get the branch name
-	branchName := ""
-	if head.Name().IsBranch() {
-		branchName = head.Name().Short()
-	} else {
-		return fmt.Errorf("HEAD is not on a branch")
-	}
-
-	// Get the remote branch reference
-	remoteBranchRef := plumbing.NewRemoteReferenceName("origin", branchName)
-	remoteBranch, err := repo.Reference(remoteBranchRef, true)
-	if err != nil {
-		return fmt.Errorf("failed to get remote branch: %w", err)
-	}
-
-	// Check if local and remote are in sync
-	if head.Hash() != remoteBranch.Hash() {
-		return fmt.Errorf("local and remote branches are not in sync")
-	}
-
-	return nil
-}
-
-// validateUploadResult checks the repository state after an upload operation
-func (st *SystemTest) validateUploadResult() error {
-	// Similar to download but checks if the changes were pushed to remote
-	repo, err := git.PlainOpen(st.cloneRepoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Get the current branch
-	head, err := repo.Head()
-	if err != nil {
-		return fmt.Errorf("failed to get HEAD: %w", err)
-	}
-
-	// Get the branch name
-	branchName := ""
-	if head.Name().IsBranch() {
-		branchName = head.Name().Short()
-	} else {
-		return fmt.Errorf("HEAD is not on a branch")
-	}
-
-	// Execute git fetch to get latest remote state
-	cmd := exec.Command("git", "fetch", "origin")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to fetch from remote: %w", err)
-	}
-
-	// Check if local branch is ahead of remote branch
-	cmd = exec.Command("git", "rev-list", "--count",
-		fmt.Sprintf("origin/%s..%s", branchName, branchName))
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to check if branch is ahead: %w", err)
-	}
-
-	aheadCount, err := strconv.Atoi(strings.TrimSpace(string(output)))
-	if err != nil {
-		return fmt.Errorf("failed to parse ahead count: %w", err)
-	}
-
-	if aheadCount > 0 {
-		return fmt.Errorf("local branch is ahead of remote by %d commits", aheadCount)
 	}
 
 	return nil
@@ -719,18 +555,10 @@ func (st *SystemTest) Run() error {
 		return err
 	}
 
-	// Validate command result
-	if err := st.validateCommandResult(); err != nil {
+	// Check expectations
+	if err := st.checkExpectations(); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-// generateCloneRepoPath generates a unique path for the clone repo
-func generateCloneRepoPath() string {
-	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
-	repoName := fmt.Sprintf("qs-test-%s", timestamp)
-
-	return filepath.Join(".testdata", repoName)
 }

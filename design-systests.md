@@ -37,7 +37,7 @@ The motivation behind these system tests is to ensure that the `qs` utility work
   - Build the environment according to TestConfig
   - Run the command
   - Validate the command output using ExpectedStderr and ExpectedStdout
-  - Validate command result
+  - Validate command result via checking expectations
 - RepoName: TestID-YYMMDDhhmmss
   - TestID is a unique identifier for the test
   - YYMMDDhhmmss is the date and time when the test was run
@@ -90,7 +90,8 @@ The motivation behind these system tests is to ensure that the `qs` utility work
 ```go
 func New(t *testing.T, testConfig *TestConfig) *SystemTest {
     cloneRepoPath := //generate a unique path for the clone repo in .testdata dir of the root of the qs package
-    return &SystemTest{t: t, cfg: testConfig, cloneRepoPath: cloneRepoPath}
+    
+	return &SystemTest{t: t, cfg: testConfig, cloneRepoPath: cloneRepoPath}
 }
 ```
 
@@ -118,10 +119,10 @@ func (st *SystemTest) Run() error {
         return err
     }
 
-    // Validate command result
-    if err := st.vidateCommandResult(); err != nil {
-        return err
-    }
+  // Check expectations
+  if err := st.checkExpectations(); err != nil {
+      return err
+  }
 
     return nil
 }
@@ -141,13 +142,13 @@ type TestConfig struct {
     GHConfig        GithubConfig
     Command         string
     Args            []string
-    ExpectedStderr  string
-    ExpectedStdout  string
     UpstreamState   RemoteState
     ForkState       RemoteState
     SyncState       SyncState
     DevBranchExists bool
-	// extra configuration fields can be added here
+    ExpectedStderr  string
+    ExpectedStdout  string
+    Expectations    []IExpectation
 }
 
 // GithubConfig holds GitHub account and token information
@@ -156,6 +157,61 @@ type GithubConfig struct {
     UpstreamToken   string
     ForkAccount     string
     ForkToken       string
+}
+
+// ExpectedDevBranch represents the expected state of the dev branch
+type ExpectedDevBranch struct {
+    Exists bool
+}
+
+func (e ExpectedDevBranch) Check(cloneRepoPath string) error {
+    // Check if the dev branch exists in the clone repo
+	
+    return nil
+}
+
+// ExpectedRemoteState represents the expected state of a remote
+type ExpectedRemoteState struct {
+    UpstreamRemoteState RemoteState
+    ForkRemoteState     RemoteState
+}
+
+func (e ExpectedRemoteState) Check(cloneRepoPath string) error {
+    // Implement the logic to check the remote state
+
+    return nil
+}
+
+// ExpectedPullRequest represents the expected state of a pull request
+type ExpectedPullRequest struct {
+    Exists          bool
+    Title           string
+    ForkAccount     string
+    UpstreamAccount string
+}
+
+func (e ExpectedPullRequest) Check(cloneRepoPath string) error {
+	// Check if the pull request exists in the upstream repo
+	
+    return nil
+}
+
+// ExpectedDownloadResult represents the expected state after downloading changes
+type ExpectedDownloadResult struct {}
+
+func (e ExpectedDownloadResult) Check(cloneRepoPath string) error {
+    // Compare local and remote branches to ensure they're in sync
+    
+	return nil
+}
+
+// ExpectedUploadResult represents the expected state after uploading changes
+type ExpectedUploadResult struct {}
+
+func (e ExpectedUploadResult) Check(cloneRepoPath string) error {
+	// Compare local and remote branches to ensure they're in sync
+	
+    return nil
 }
 ```
 
@@ -182,24 +238,28 @@ const (
 
 5. `./internal/systrun/impl.go`
 ```go
-func (st *SystemTest) vidateCommandResult() error {
-	switch st.cfg.Command {
-	case 'dev':
-		// Validate dev branch creation
-	case 'pr':	
-        // Validate pull request creation
-	case 'fork':	
-        // Validate fork creation
-	case 'd':	
-        // Validate downloading changes
-	case 'u':	
-        // Validate uploading changes
-	default:	
-        return fmt.Errorf("unknown command: %s", st.cfg.Command)
-	}
+// checkExpectations checks expectations after command execution
+func (st *SystemTest) checkExpectations() error {
+  for _, expectation := range st.cfg.Expectations {
+    if err := expectation.Check(st.cloneRepoPath); err != nil {
+        return fmt.Errorf("validation failed: %w", err)
+    }
+  }
+  
+  return nil
 }
 
 func (st *SystemTest) createTestEnvironment() error {
     // create upstream, form and clone repos according to the test config
 }
 ```
+
+6. `./internal/systrun/interface.go`
+```go
+// IExpectation is an interface for expectations in system tests
+type IExpectation interface {
+	// Check compares the current state of the system with the expected state
+	Check(cloneRepoPath string) error
+}
+```
+
