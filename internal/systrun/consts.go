@@ -7,8 +7,8 @@ const (
 )
 
 const (
-	EnvForkGithubAccount     = "GH_ACCOUNT"
-	EnvForkGithubToken       = "GH_TOKEN"
+	EnvForkGithubAccount     = "FORK_GH_ACCOUNT"
+	EnvForkGithubToken       = "FORK_GH_TOKEN"
 	EnvUpstreamGithubAccount = "UPSTREAM_GH_ACCOUNT"
 	EnvUpstreamGithubToken   = "UPSTREAM_GH_TOKEN"
 )

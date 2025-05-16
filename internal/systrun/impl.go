@@ -78,20 +78,22 @@ func (st *SystemTest) createTestEnvironment() error {
 	var cloneURL string
 	var authToken string
 
-	if st.cfg.ForkState != RemoteStateNull {
+	switch {
+	case st.cfg.ForkState != RemoteStateNull:
 		// Clone from fork if it exists
 		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
 			st.cfg.GHConfig.ForkAccount, st.repoName)
 		authToken = st.cfg.GHConfig.ForkToken
-	} else if st.cfg.UpstreamState != RemoteStateNull {
+	case st.cfg.UpstreamState != RemoteStateNull:
 		// Otherwise clone from upstream
 		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
 			st.cfg.GHConfig.UpstreamAccount, st.repoName)
 		authToken = st.cfg.GHConfig.UpstreamToken
-	} else {
+	default:
 		return fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
 	}
 
+	time.Sleep(time.Second)
 	if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
 		return err
 	}
@@ -141,23 +143,16 @@ func ghAuthLogin(token string) error {
 // createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 	// GitHub Authentication
-	if err := ghAuthLogin(st.cfg.GHConfig.UpstreamToken); err != nil {
-		return fmt.Errorf("failed to authenticate with GitHub: %w", err)
-	}
-	//authCmd := exec.Command("gh", "auth", "login", "--with-token")
-	//authCmd.Stdin = strings.NewReader(st.cfg.GHConfig.UpstreamToken)
-	//if _, err := authCmd.CombinedOutput(); err != nil {
-	//	return fmt.Errorf("failed to authenticate with GitHub: %v", err)
+	//if err := ghAuthLogin(st.cfg.GHConfig.UpstreamToken); err != nil {
+	//	return fmt.Errorf("failed to authenticate with GitHub: %w", err)
 	//}
-
 	// Use GitHub API to create repo
 	cmd := exec.Command("gh", "repo", "create",
 		fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-		"--private")
+		"--public")
 
-	//cmd.Env = append(os.Environ(),
-	//	fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
-	//
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
+
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", err, output)
 	}
@@ -235,25 +230,35 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 // createForkRepo creates or configures the fork repository
 func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 	if st.cfg.UpstreamState != RemoteStateNull {
-		// Fork the upstream repo
-		cmd := exec.Command("gh", "repo", "fork",
-			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-			"--clone=false")
+		//if err := ghAuthLogin(st.cfg.GHConfig.ForkToken); err != nil {
+		//	return fmt.Errorf("failed to authenticate with GitHub: %w", err)
+		//}
 
-		cmd.Env = append(os.Environ(),
-			fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+		// Fork the upstream repo
+		cmd := exec.Command(
+			"gh",
+			"repo",
+			"fork",
+			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
+			"--clone=false",
+		)
+
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to fork upstream repo: %w\nOutput: %s", err, output)
 		}
 	} else {
 		// Create an independent repo
-		cmd := exec.Command("gh", "repo", "create",
+		cmd := exec.Command(
+			"gh",
+			"repo",
+			"create",
 			fmt.Sprintf("%s/%s", st.cfg.GHConfig.ForkAccount, repoName),
-			"--private")
+			"--public",
+		)
 
-		cmd.Env = append(os.Environ(),
-			fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to create fork repo: %w\nOutput: %s", err, output)
@@ -346,8 +351,7 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 		},
 	}
 
-	_, err := git.PlainClone(clonePath, false, cloneOpts)
-	if err != nil {
+	if _, err := git.PlainClone(clonePath, false, cloneOpts); err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
@@ -481,8 +485,11 @@ func (st *SystemTest) runCommand() (string, string, error) {
 		return "", "", fmt.Errorf("failed to change directory to clone repo: %w", err)
 	}
 
+	qsArgs := make([]string, 0, len(st.cfg.Args)+1)
+	qsArgs = append(qsArgs, st.cfg.Command)
+	qsArgs = append(qsArgs, st.cfg.Args...)
 	// Prepare command
-	cmd := exec.Command(st.cfg.Command, st.cfg.Args...)
+	cmd := exec.Command("qs", qsArgs...)
 
 	// Capture stdout and stderr
 	var stdout, stderr bytes.Buffer
@@ -558,6 +565,44 @@ func (st *SystemTest) Run() error {
 	// Check expectations
 	if err := st.checkExpectations(); err != nil {
 		return err
+	}
+
+	return st.cleanupTestEnvironment()
+}
+
+func (st *SystemTest) cleanupTestEnvironment() error {
+	// Remove the cloned repository
+	if err := os.RemoveAll(st.cloneRepoPath); err != nil {
+		return fmt.Errorf("failed to remove cloned repository: %w", err)
+	}
+
+	// Optionally remove the upstream and fork repositories
+	if st.cfg.UpstreamState != RemoteStateNull {
+		if err := st.removeRepo(st.repoName, st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken); err != nil {
+			return fmt.Errorf("failed to remove upstream repository: %w", err)
+		}
+	}
+
+	if st.cfg.ForkState != RemoteStateNull {
+		if err := st.removeRepo(st.repoName, st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken); err != nil {
+			return fmt.Errorf("failed to remove fork repository: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// removeRepo removes a repository from GitHub
+func (st *SystemTest) removeRepo(repoName, account, token string) error {
+	cmd := exec.Command("gh", "repo", "delete",
+		fmt.Sprintf("%s/%s", account, repoName),
+		"--yes")
+
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GITHUB_TOKEN=%s", token))
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to delete repository: %w\nOutput: %s", err, output)
 	}
 
 	return nil

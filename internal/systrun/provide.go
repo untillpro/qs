@@ -10,7 +10,7 @@ import (
 // New creates a new SystemTest instance
 func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
-	repoName := fmt.Sprintf("qs-test-%s", timestamp)
+	repoName := fmt.Sprintf("%s-%s", testConfig.TestID, timestamp)
 
 	return &SystemTest{
 		t:             t,
