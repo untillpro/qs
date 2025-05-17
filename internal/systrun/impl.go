@@ -474,17 +474,6 @@ func (st *SystemTest) setupDevBranch() error {
 
 // runCommand executes the specified qs command
 func (st *SystemTest) runCommand() (string, string, error) {
-	// Change to the clone repo directory
-	originalDir, err := os.Getwd()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get current directory: %w", err)
-	}
-	defer os.Chdir(originalDir)
-
-	if err := os.Chdir(st.cloneRepoPath); err != nil {
-		return "", "", fmt.Errorf("failed to change directory to clone repo: %w", err)
-	}
-
 	qsArgs := make([]string, 0, len(st.cfg.Args)+1)
 	qsArgs = append(qsArgs, st.cfg.Command)
 	qsArgs = append(qsArgs, st.cfg.Args...)
@@ -493,11 +482,12 @@ func (st *SystemTest) runCommand() (string, string, error) {
 
 	// Capture stdout and stderr
 	var stdout, stderr bytes.Buffer
+	cmd.Dir = st.cloneRepoPath
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	// Run the command
-	err = cmd.Run()
+	err := cmd.Run()
 
 	return stdout.String(), stderr.String(), err
 }
