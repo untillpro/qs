@@ -1,28 +1,51 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
+	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/require"
 	"github.com/untillpro/qs/internal/systrun"
 )
 
+// TestForkExistingFork tests the case where a fork already exists
+func TestForkExistingFork(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   "fork-existing",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "fork",
+		},
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		ExpectedStdout: "you are in fork already",
+		Expectations: []systrun.IExpectation{
+			systrun.ExpectedForkExists{},
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+
+}
+
 // TestForkNonExistingFork tests the case where a fork does not exist yet
 func TestForkNonExistingFork(t *testing.T) {
-	t.Parallel()
-
 	require := require.New(t)
-	ghConfig := getGithubConfig(t)
+
 	testConfig := &systrun.TestConfig{
-		TestID:        "fork-non-existing",
-		GHConfig:      getGithubConfig(t),
-		Command:       "fork",
-		Args:          []string{systrun.GithubURL + "/" + ghConfig.UpstreamAccount + "/test-repo"},
+		TestID:   "fork-non-existing",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "fork",
+		},
 		UpstreamState: systrun.RemoteStateOK,
 		ForkState:     systrun.RemoteStateNull,
-		//ExpectedStdout: "Repository forked successfully",
-		ExpectedStdout: "you are in fork already",
 		Expectations: []systrun.IExpectation{
 			systrun.ExpectedRemoteState{
 				UpstreamRemoteState: systrun.RemoteStateOK,
@@ -36,41 +59,16 @@ func TestForkNonExistingFork(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestForkExistingFork tests the case where a fork already exists
-func TestForkExistingFork(t *testing.T) {
-	t.Parallel()
-
-	require := require.New(t)
-	ghConfig := getGithubConfig(t)
-	testConfig := &systrun.TestConfig{
-		TestID:         "fork-existing",
-		GHConfig:       getGithubConfig(t),
-		Command:        "fork",
-		Args:           []string{systrun.GithubURL + "/" + ghConfig.UpstreamAccount + "/test-repo"},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		ExpectedStdout: "you are in fork already",
-	}
-
-	sysTest := systrun.New(t, testConfig)
-	// TODO: Run must accept post conditions array
-	err := sysTest.Run()
-	require.NoError(err)
-
-}
-
 // TestForkNoOriginRemote tests the case where there is no origin remote
 func TestForkNoOriginRemote(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
 	require := require.New(t)
 
-	ghConfig := getGithubConfig(t)
 	testConfig := &systrun.TestConfig{
-		TestID:         "fork-no-origin",
-		GHConfig:       getGithubConfig(t),
-		Command:        "fork",
-		Args:           []string{systrun.GithubURL + "/" + ghConfig.UpstreamAccount + "/test-repo"},
+		TestID:   "fork-no-origin",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "fork",
+		},
 		UpstreamState:  systrun.RemoteStateNull,
 		ForkState:      systrun.RemoteStateNull,
 		ExpectedStderr: "origin remote not found",
@@ -83,45 +81,60 @@ func TestForkNoOriginRemote(t *testing.T) {
 
 // TestDevNewBranch tests creating a new dev branch when it doesn't exist
 func TestDevNewBranch(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
 	require := require.New(t)
 
+	branchName := "branch-name"
+	err := clipboard.WriteAll(branchName)
+	require.NoError(err)
+
 	testConfig := &systrun.TestConfig{
-		TestID:          "dev-new-branch",
-		GHConfig:        getGithubConfig(t),
-		Command:         "dev",
-		Args:            []string{},
-		UpstreamState:   systrun.RemoteStateOK,
-		ForkState:       systrun.RemoteStateOK,
-		DevBranchExists: false,
-		ExpectedStdout:  "New dev branch created",
+		TestID:   "dev-new-branch",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		Expectations: []systrun.IExpectation{
+			systrun.ExpectedDevBranch{
+				Exists:     true,
+				BranchName: branchName,
+			},
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)
-	err := sysTest.Run()
+	err = sysTest.Run()
 	require.NoError(err)
 }
 
 // TestDevExistingBranch tests behavior when dev branch already exists
 func TestDevExistingBranch(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
 	require := require.New(t)
 
+	err := clipboard.WriteAll("")
+	require.NoError(err)
+
+	branchName := "dev"
 	testConfig := &systrun.TestConfig{
-		TestID:          "dev-existing-branch",
-		GHConfig:        getGithubConfig(t),
-		Command:         "dev",
-		Args:            []string{},
-		UpstreamState:   systrun.RemoteStateOK,
-		ForkState:       systrun.RemoteStateOK,
-		DevBranchExists: true,
-		ExpectedStdout:  "Dev branch already exists",
+		TestID:   "dev-existing-branch",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{branchName},
+			Stdin:   "y",
+		},
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		DevBranchExists:  true,
+		CheckoutOnBranch: "main",
+		ExpectedStdout:   fmt.Sprintf("dev branch '%s' already exists", branchName),
 	}
 
 	sysTest := systrun.New(t, testConfig)
-	err := sysTest.Run()
+	err = sysTest.Run()
 	require.NoError(err)
 }
 
@@ -132,10 +145,12 @@ func TestDevNoFork(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:          "dev-no-fork",
-		GHConfig:        getGithubConfig(t),
-		Command:         "dev",
-		Args:            []string{},
+		TestID:   "dev-no-fork",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{},
+		},
 		UpstreamState:   systrun.RemoteStateOK,
 		ForkState:       systrun.RemoteStateNull,
 		DevBranchExists: false,
@@ -154,10 +169,12 @@ func TestPRBasic(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:         "pr-basic",
-		GHConfig:       getGithubConfig(t),
-		Command:        "pr",
-		Args:           []string{},
+		TestID:   "pr-basic",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "pr",
+			Args:    []string{},
+		},
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		SyncState:      systrun.SyncStateSynchronized,
@@ -176,10 +193,12 @@ func TestPRDevBranchOutOfDate(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:         "pr-branch-out-of-date",
-		GHConfig:       getGithubConfig(t),
-		Command:        "pr",
-		Args:           []string{},
+		TestID:   "pr-branch-out-of-date",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "pr",
+			Args:    []string{},
+		},
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		SyncState:      systrun.SyncStateForkChanged,
@@ -198,10 +217,12 @@ func TestPRWrongBranch(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:         "pr-wrong-branch",
-		GHConfig:       getGithubConfig(t),
-		Command:        "pr",
-		Args:           []string{},
+		TestID:   "pr-wrong-branch",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "pr",
+			Args:    []string{},
+		},
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		SyncState:      systrun.SyncStateDoesntTrackOrigin,
@@ -220,10 +241,12 @@ func TestDownload(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:         "download",
-		GHConfig:       getGithubConfig(t),
-		Command:        "d",
-		Args:           []string{},
+		TestID:   "download",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "d",
+			Args:    []string{},
+		},
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		SyncState:      systrun.SyncStateForkChanged,
@@ -242,10 +265,12 @@ func TestUpload(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:         "upload",
-		GHConfig:       getGithubConfig(t),
-		Command:        "u",
-		Args:           []string{},
+		TestID:   "upload",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "u",
+			Args:    []string{},
+		},
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		SyncState:      systrun.SyncStateCloneChanged,
@@ -264,10 +289,12 @@ func TestUploadConflict(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:         "upload-conflict",
-		GHConfig:       getGithubConfig(t),
-		Command:        "u",
-		Args:           []string{},
+		TestID:   "upload-conflict",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "u",
+			Args:    []string{},
+		},
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		SyncState:      systrun.SyncStateBothChangedConflict,

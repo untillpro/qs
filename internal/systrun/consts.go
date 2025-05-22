@@ -1,9 +1,9 @@
 package systrun
 
 const (
-	TestDataDir     = "./.testdata"
-	GithubURL       = "https://github.com"
-	defaultDirPerms = 0755
+	TestDataDir                 = ".testdata"
+	GithubURL                   = "https://github.com"
+	remoteGithubRepoURLTemplate = GithubURL + "/%s/%s.git"
 )
 
 const (

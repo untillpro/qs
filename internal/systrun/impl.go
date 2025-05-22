@@ -44,11 +44,11 @@ func (st *SystemTest) checkPrerequisites() error {
 
 // checkCommand validates the command to be executed
 func (st *SystemTest) checkCommand() error {
-	switch st.cfg.Command {
+	switch st.cfg.CommandConfig.Command {
 	case "fork", "dev", "pr", "d", "u":
 		return nil
 	default:
-		return fmt.Errorf("unknown command: %s", st.cfg.Command)
+		return fmt.Errorf("unknown command: %s", st.cfg.CommandConfig)
 	}
 }
 
@@ -56,9 +56,8 @@ func (st *SystemTest) checkCommand() error {
 func (st *SystemTest) createTestEnvironment() error {
 	// Setup upstream repo if needed
 	if st.cfg.UpstreamState != RemoteStateNull {
-		upstreamRepoURL := fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.UpstreamAccount, st.repoName)
-
+		upstreamRepoURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, st.repoName)
+		//upstreamRepoURL := fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.UpstreamAccount, st.repoName)
 		if err := st.createUpstreamRepo(st.repoName, upstreamRepoURL); err != nil {
 			return err
 		}
@@ -66,9 +65,8 @@ func (st *SystemTest) createTestEnvironment() error {
 
 	// Setup fork repo if needed
 	if st.cfg.ForkState != RemoteStateNull {
-		forkRepoURL := fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.ForkAccount, st.repoName)
-
+		forkRepoURL := buildRemoteURL(st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken, st.repoName)
+		//forkRepoURL := fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.ForkAccount, st.repoName)
 		if err := st.createForkRepo(st.repoName, forkRepoURL); err != nil {
 			return err
 		}
@@ -81,19 +79,19 @@ func (st *SystemTest) createTestEnvironment() error {
 	switch {
 	case st.cfg.ForkState != RemoteStateNull:
 		// Clone from fork if it exists
-		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.ForkAccount, st.repoName)
+		cloneURL = fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.ForkAccount, st.repoName)
 		authToken = st.cfg.GHConfig.ForkToken
 	case st.cfg.UpstreamState != RemoteStateNull:
 		// Otherwise clone from upstream
-		cloneURL = fmt.Sprintf("https://github.com/%s/%s.git",
-			st.cfg.GHConfig.UpstreamAccount, st.repoName)
+		cloneURL = fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.UpstreamAccount, st.repoName)
 		authToken = st.cfg.GHConfig.UpstreamToken
 	default:
 		return fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
 	}
 
-	time.Sleep(time.Second)
+	// Need some time to ensure the repo is created
+	// TODO: add check in loop with deadline instead of sleep
+	time.Sleep(time.Millisecond * 2000)
 	if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
 		return err
 	}
@@ -110,7 +108,33 @@ func (st *SystemTest) createTestEnvironment() error {
 		}
 	}
 
+	if st.cfg.CheckoutOnBranch != "" {
+		if err := st.checkoutOnBranch(st.cfg.CheckoutOnBranch); err != nil {
+			return fmt.Errorf("failed to checkout branch %s: %w", st.cfg.CheckoutOnBranch, err)
+		}
+	}
+
 	return nil
+}
+
+func (st *SystemTest) checkoutOnBranch(branchName string) error {
+	repo, err := git.PlainOpen(st.cloneRepoPath)
+	if err != nil {
+		fmt.Println("Failed to open repo:", err)
+		os.Exit(1)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		fmt.Println("Failed to get worktree:", err)
+		os.Exit(1)
+	}
+
+	return worktree.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(branchName),
+		Create: false, // true if the branch doesn't exist locally
+		Force:  false, // true to override uncommitted changes
+	})
 }
 
 func ghAuthLogin(token string) error {
@@ -143,10 +167,6 @@ func ghAuthLogin(token string) error {
 // createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 	// GitHub Authentication
-	//if err := ghAuthLogin(st.cfg.GHConfig.UpstreamToken); err != nil {
-	//	return fmt.Errorf("failed to authenticate with GitHub: %w", err)
-	//}
-	// Use GitHub API to create repo
 	cmd := exec.Command("gh", "repo", "create",
 		fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
 		"--public")
@@ -167,7 +187,12 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 		defer os.RemoveAll(tempDir)
 
 		// Initialize git repo
-		repo, err := git.PlainInit(tempDir, false)
+		repo, err := git.PlainInitWithOptions(tempDir, &git.PlainInitOptions{
+			Bare: false,
+			InitOptions: git.InitOptions{
+				DefaultBranch: plumbing.Main,
+			},
+		})
 		if err != nil {
 			return fmt.Errorf("failed to initialize git repo: %w", err)
 		}
@@ -230,10 +255,6 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 // createForkRepo creates or configures the fork repository
 func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 	if st.cfg.UpstreamState != RemoteStateNull {
-		//if err := ghAuthLogin(st.cfg.GHConfig.ForkToken); err != nil {
-		//	return fmt.Errorf("failed to authenticate with GitHub: %w", err)
-		//}
-
 		// Fork the upstream repo
 		cmd := exec.Command(
 			"gh",
@@ -274,7 +295,12 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 			defer os.RemoveAll(tempDir)
 
 			// Initialize git repo
-			repo, err := git.PlainInit(tempDir, false)
+			repo, err := git.PlainInitWithOptions(tempDir, &git.PlainInitOptions{
+				Bare: false,
+				InitOptions: git.InitOptions{
+					DefaultBranch: plumbing.Main,
+				},
+			})
 			if err != nil {
 				return fmt.Errorf("failed to initialize git repo: %w", err)
 			}
@@ -358,6 +384,10 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 	return nil
 }
 
+func buildRemoteURL(account, token, repoName string) string {
+	return "https://" + account + ":" + token + "@github.com/" + account + "/" + repoName + ".git"
+}
+
 // configureRemotes sets up the remote configuration in the cloned repository
 func (st *SystemTest) configureRemotes(repoName string) error {
 	// Open the repository
@@ -373,8 +403,7 @@ func (st *SystemTest) configureRemotes(repoName string) error {
 		_, err := repo.Remote("origin")
 		if err != nil {
 			// Add origin remote pointing to fork
-			forkURL := fmt.Sprintf("https://github.com/%s/%s.git",
-				st.cfg.GHConfig.ForkAccount, repoName)
+			forkURL := buildRemoteURL(st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken, repoName)
 			_, err = repo.CreateRemote(&config.RemoteConfig{
 				Name: "origin",
 				URLs: []string{forkURL},
@@ -387,8 +416,7 @@ func (st *SystemTest) configureRemotes(repoName string) error {
 		_, err = repo.Remote("upstream")
 		if err != nil {
 			// Add upstream remote
-			upstreamURL := fmt.Sprintf("https://github.com/%s/%s.git",
-				st.cfg.GHConfig.UpstreamAccount, repoName)
+			upstreamURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, repoName)
 			_, err = repo.CreateRemote(&config.RemoteConfig{
 				Name: "upstream",
 				URLs: []string{upstreamURL},
@@ -402,8 +430,7 @@ func (st *SystemTest) configureRemotes(repoName string) error {
 		// Only upstream exists, make sure origin points to upstream
 		_, err := repo.Remote("origin")
 		if err != nil {
-			upstreamURL := fmt.Sprintf("https://github.com/%s/%s.git",
-				st.cfg.GHConfig.UpstreamAccount, repoName)
+			upstreamURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, repoName)
 			_, err = repo.CreateRemote(&config.RemoteConfig{
 				Name: "origin",
 				URLs: []string{upstreamURL},
@@ -474,11 +501,26 @@ func (st *SystemTest) setupDevBranch() error {
 
 // runCommand executes the specified qs command
 func (st *SystemTest) runCommand() (string, string, error) {
-	qsArgs := make([]string, 0, len(st.cfg.Args)+1)
-	qsArgs = append(qsArgs, st.cfg.Command)
-	qsArgs = append(qsArgs, st.cfg.Args...)
+	qsArgs := make([]string, 0, len(st.cfg.CommandConfig.Args)+1)
+	qsArgs = append(qsArgs, st.cfg.CommandConfig.Command)
+	qsArgs = append(qsArgs, st.cfg.CommandConfig.Args...)
 	// Prepare command
 	cmd := exec.Command("qs", qsArgs...)
+
+	// if there is something to pass to command stdin
+	if st.cfg.CommandConfig.Stdin != "" {
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			return "", "", fmt.Errorf("failed to get stdin pipe: %w", err)
+		}
+
+		_, err = stdin.Write([]byte(st.cfg.CommandConfig.Stdin))
+		if err != nil {
+			return "", "", fmt.Errorf("failed to write to command stdin: %w", err)
+		}
+
+		stdin.Close()
+	}
 
 	// Capture stdout and stderr
 	var stdout, stderr bytes.Buffer
