@@ -22,7 +22,7 @@ For linux additionally:   sudo apt install xclip
 
 ## Installation
 
-go install github.com/untillpro/qs@latest
+go install github.com/untillpro/qs@latest 
 
 ## Basic Usage
 Must be run in cloned github repo folder.
