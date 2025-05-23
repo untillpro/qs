@@ -397,6 +397,8 @@ func Fork() (repo string, err error) {
 		logger.Error("Fork error:", err)
 		return repo, err
 	}
+	logger.Info("Fork error:", err)
+
 	return repo, nil
 }
 
