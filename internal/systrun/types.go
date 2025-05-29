@@ -1,8 +1,10 @@
 package systrun
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,19 +23,18 @@ type SystemTest struct {
 
 // TestConfig contains all configuration for a system test
 type TestConfig struct {
-	TestID        string
-	GHConfig      GithubConfig
-	CommandConfig CommandConfig
-	UpstreamState RemoteState
-	ForkState     RemoteState
-	SyncState     SyncState
-	// DevBranchExists indicates if the dev branch exists in the clone repo
-	DevBranchExists bool
-	// CheckoutOnBranch indicates the branch to be checked out before the command
-	CheckoutOnBranch string
-	ExpectedStderr   string
-	ExpectedStdout   string
-	Expectations     []IExpectation
+	TestID                    string
+	GHConfig                  GithubConfig
+	CommandConfig             CommandConfig
+	UpstreamState             RemoteState
+	ForkState                 RemoteState
+	SyncState                 SyncState
+	DevBranchExists           bool
+	CreateGHIssueForDevBranch bool
+	CheckoutOnBranch          string
+	ExpectedStderr            string
+	ExpectedStdout            string
+	Expectations              []IExpectation
 }
 
 type CommandConfig struct {
@@ -252,6 +253,121 @@ func (e ExpectedForkExists) Check(cloneRepoPath string) error {
 	cmd := exec.Command("git", "ls-remote", "origin")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to access remote URL: %w", err)
+	}
+
+	return nil
+}
+
+// ExpectedBranchLinkedToIssue represents the expected state of a branch linked to a GitHub issue
+type ExpectedBranchLinkedToIssue struct {
+	IssueID string
+}
+
+// Check verifies if the branch is linked to a GitHub issue
+func (e ExpectedBranchLinkedToIssue) Check(cloneRepoPath string) error {
+	// Check if the branch linked to issue via `gh issue develop --list` command contains the issue number
+
+	// Get current branch from the repo
+	repo, err := git.PlainOpen(cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	branches, err := repo.Branches()
+	if err != nil {
+		return fmt.Errorf("failed to get branches: %w", err)
+	}
+
+	// Find development branch name that starts with the issue ID
+	devBranchName := ""
+	err = branches.ForEach(func(ref *plumbing.Reference) error {
+		branchName := ref.Name().Short()
+		if strings.HasPrefix(branchName, e.IssueID) {
+			devBranchName = branchName
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to iterate through the branches: %w", err)
+	}
+
+	if devBranchName == "" {
+		return fmt.Errorf("no branch found for issue ID %s", e.IssueID)
+	}
+
+	// Find upstream remote URL or fork remote to build GitHub issue URL
+	upstreamRemote, err := repo.Remote("upstream")
+	var repoGitURL string
+	if err != nil {
+		if !errors.Is(err, git.ErrRemoteNotFound) {
+			return fmt.Errorf("failed to get upstream remote: %w", err)
+		}
+
+		originRemote, err := repo.Remote("origin")
+		if err != nil && !errors.Is(err, git.ErrRemoteNotFound) {
+			return fmt.Errorf("failed to get fork remote: %w", err)
+		}
+
+		repoGitURL = originRemote.Config().URLs[0]
+	}
+
+	if repoGitURL == "" {
+		if upstreamRemote == nil {
+			return fmt.Errorf("no upstream or fork remote found")
+		}
+		repoGitURL = upstreamRemote.Config().URLs[0]
+	}
+
+	// Build GitHub issue URL
+	githubIssueURL := strings.TrimSuffix(repoGitURL, ".git") + "/issues/" + e.IssueID
+	// extract repo and issue number from e.GithubIssueURL using regex
+	re := regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+)/issues/(\d+)`)
+	matches := re.FindStringSubmatch(githubIssueURL)
+	if matches == nil {
+		return fmt.Errorf("invalid GitHub issue URL format: %s", githubIssueURL)
+	}
+
+	repoOwner := matches[1]
+	repoName := matches[2]
+	issueNum := matches[3]
+	// Build full repo URL
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
+	// Run gh issue develop --list command
+	cmd := exec.Command("gh", "issue", "develop", "--list", "--repo", repoURL, issueNum)
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check linked branches: %w", err)
+	}
+
+	// Check if current branch exists in the output
+	if !strings.Contains(string(output), devBranchName) {
+		return fmt.Errorf("current branch %s is not linked to issue #%s", devBranchName, issueNum)
+	}
+
+	return nil
+}
+
+type ExpectedDevBranchNameStartsWith struct {
+	Prefix string
+}
+
+func (e ExpectedDevBranchNameStartsWith) Check(cloneRepoPath string) error {
+	// Open the repository
+	repo, err := git.PlainOpen(cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Get the current branch
+	head, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	// Check if the branch name starts with the expected prefix
+	if !strings.HasPrefix(head.Name().Short(), e.Prefix) {
+		return fmt.Errorf("branch name '%s' does not start with expected prefix '%s'", head.Name().Short(), e.Prefix)
 	}
 
 	return nil

@@ -57,7 +57,6 @@ func (st *SystemTest) createTestEnvironment() error {
 	// Setup upstream repo if needed
 	if st.cfg.UpstreamState != RemoteStateNull {
 		upstreamRepoURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, st.repoName)
-		//upstreamRepoURL := fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.UpstreamAccount, st.repoName)
 		if err := st.createUpstreamRepo(st.repoName, upstreamRepoURL); err != nil {
 			return err
 		}
@@ -66,7 +65,6 @@ func (st *SystemTest) createTestEnvironment() error {
 	// Setup fork repo if needed
 	if st.cfg.ForkState != RemoteStateNull {
 		forkRepoURL := buildRemoteURL(st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken, st.repoName)
-		//forkRepoURL := fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.ForkAccount, st.repoName)
 		if err := st.createForkRepo(st.repoName, forkRepoURL); err != nil {
 			return err
 		}
@@ -114,7 +112,45 @@ func (st *SystemTest) createTestEnvironment() error {
 		}
 	}
 
+	if st.cfg.CreateGHIssueForDevBranch {
+		issueURL, err := st.createGitHubIssueForDevBranch()
+		if err != nil {
+			return err
+		}
+		// Add the issue URL to the command args for the qs dev command
+		st.cfg.CommandConfig.Args = append(st.cfg.CommandConfig.Args, issueURL)
+	}
+
 	return nil
+}
+
+// createGitHubIssueForDevBranch creates a GitHub issue for the dev branch if configured
+func (st *SystemTest) createGitHubIssueForDevBranch() (string, error) {
+	if !st.cfg.CreateGHIssueForDevBranch {
+		return "", nil
+	}
+
+	// Create issue title based on test ID
+	issueTitle := fmt.Sprintf("Test automation issue for %s", st.cfg.TestID)
+	issueBody := fmt.Sprintf("Automated test issue created by QS system test framework")
+
+	// Run gh issue create command
+	cmd := exec.Command("gh", "issue", "create",
+		"--title", issueTitle,
+		"--body", issueBody,
+		"--repo", fmt.Sprintf("https://github.com/%s/%s", st.cfg.GHConfig.UpstreamAccount, st.repoName))
+
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to create GitHub issue: %w", err)
+	}
+
+	issueURL := strings.TrimSpace(string(output))
+
+	return issueURL, nil
 }
 
 func (st *SystemTest) checkoutOnBranch(branchName string) error {
