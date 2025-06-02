@@ -14,50 +14,27 @@ import (
 )
 
 const (
-	maxDevBranchName = 50
-	maxFileSize      = 100000
-	maxFileQty       = 200
-
 	utilityName = "qs"                //root command name
 	utilityDesc = "Quick git wrapper" //root command description
-	msymbol     = "-"
-	devider     = "\n------------------------------------------"
 
-	pushParam        = "u"
 	pushParamDesc    = "Upload sources to repo"
-	ignorehook       = "--ignore-hook"
-	pushConfirm      = "\n*** Changes shown above will be uploaded to repository(they are merged)"
-	pushFail         = "Ok, see you"
-	pushYes          = "y"
 	pushMessageWord  = "message"
 	pushMessageParam = "m"
 	pushMsgComment   = `Use the given string as the commit message. If multiple -m options are given
  their values are concatenated as separate paragraphs`
 
-	delBranchConfirm      = "\n*** Branches shown above will be deleted from your forked repository, 'y': agree>"
-	delBranchNothing      = "\n*** There are no remote branches to delete."
-	delLocalBranchConfirm = "\n*** Branches shown above are unused local branches. Delete them all? 'y': agree>"
-	delLocalBranchNothing = "\n*** There no unused local branches."
-
-	pullParam     = "d"
 	pullParamDesc = "Download sources from repo"
 
-	releaseParam     = "r"
 	releaseParamDesc = "Create a release"
 
-	guiParam     = "g"
 	guiParamDesc = "Show GUI"
 
 	verboseWord  = "verbose"
 	verboseParam = "v"
 	verboseDesc  = "verbose output"
 
-	forkParam     = "fork"
 	forkParamDesc = "Fork original repo"
 
-	devParam               = "dev"
-	upgradeParam           = "upgrade"
-	versionParam           = "version"
 	devDelParam            = "d"
 	devDelParamFull        = "delete"
 	ignorehookDelParam     = "i"
@@ -67,11 +44,7 @@ const (
 	noForkParam            = "n"
 	noForkParamFull        = "no-fork"
 
-	prParam        = "pr"
-	prParamDesc    = "Make pull request"
-	prMergeParam   = "merge"
-	errMsgPRUnkown = "Unknown pr arguments"
-	prConfirm      = "Pull request with title '$prname' will be created. Continue(y/n)?"
+	prParamDesc = "Make pull request"
 
 	devDelMsgComment        = "Deletes all merged branches from forked repository"
 	devIgnoreHookMsgComment = "Ignore creating local hook"
@@ -80,16 +53,6 @@ const (
 	devParamDesc            = "Create developer branch"
 	upgradeParamDesc        = "Print command to upgrade qs"
 	versionParamDesc        = "Print qs version"
-	devConfirm              = "Dev branch '$reponame' will be created. Continue(y/n)? "
-	errMsgModFiles          = "You have modified files. Please first commit & push them."
-
-	confMsgModFiles1      = "You have modified files: "
-	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
-	errMsgPRNotesNotFound = "Comments for Pull request not found. Please add comments manually:"
-
-	trueStr  = "true"
-	falseStr = "false"
-	oneSpace = " "
 )
 
 var verbose bool
@@ -129,7 +92,7 @@ func (cp *commandProcessor) setRootCmd() *commandProcessor {
 func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 	var cfgUpload vcs.CfgUpload
 	var uploadCmd = &cobra.Command{
-		Use:   pushParam,
+		Use:   commands.CommandNameU,
 		Short: pushParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.U(cp.cfgStatus, cfgUpload, args)
@@ -144,7 +107,7 @@ func (cp *commandProcessor) addUpdateCmd() *commandProcessor {
 func (cp *commandProcessor) addDownloadCmd() *commandProcessor {
 	var cfg vcs.CfgDownload
 	var cmd = &cobra.Command{
-		Use:   pullParam,
+		Use:   commands.CommandNameD,
 		Short: pullParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.D(cfg)
@@ -156,7 +119,7 @@ func (cp *commandProcessor) addDownloadCmd() *commandProcessor {
 
 func (cp *commandProcessor) addReleaseCmd() *commandProcessor {
 	var cmd = &cobra.Command{
-		Use:   releaseParam,
+		Use:   commands.CommandNameR,
 		Short: releaseParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.R()
@@ -168,7 +131,7 @@ func (cp *commandProcessor) addReleaseCmd() *commandProcessor {
 
 func (cp *commandProcessor) addGUICmd() *commandProcessor {
 	var cmd = &cobra.Command{
-		Use:   guiParam,
+		Use:   commands.CommandNameG,
 		Short: guiParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.G()
@@ -195,7 +158,7 @@ func (cp *commandProcessor) Execute() {
 
 func (cp *commandProcessor) addPr() *commandProcessor {
 	var cmd = &cobra.Command{
-		Use:   prParam,
+		Use:   commands.CommandNamePR,
 		Short: prParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.Pr(cmd, args)
@@ -208,7 +171,7 @@ func (cp *commandProcessor) addPr() *commandProcessor {
 
 func (cp *commandProcessor) addVersion() *commandProcessor {
 	var cmd = &cobra.Command{
-		Use:   versionParam,
+		Use:   commands.CommandNameVersion,
 		Short: versionParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.Version()
@@ -220,7 +183,7 @@ func (cp *commandProcessor) addVersion() *commandProcessor {
 
 func (cp *commandProcessor) addUpgrade() *commandProcessor {
 	var cmd = &cobra.Command{
-		Use:   upgradeParam,
+		Use:   commands.CommandNameUpgrade,
 		Short: upgradeParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.Upgrade()
@@ -232,7 +195,7 @@ func (cp *commandProcessor) addUpgrade() *commandProcessor {
 
 func (cp *commandProcessor) addDevBranch() *commandProcessor {
 	var cmd = &cobra.Command{
-		Use:   devParam,
+		Use:   commands.CommandNameDev,
 		Short: devParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.Dev(cmd, args)
@@ -248,7 +211,7 @@ func (cp *commandProcessor) addDevBranch() *commandProcessor {
 
 func (cp *commandProcessor) addForkBranch() *commandProcessor {
 	var cmd = &cobra.Command{
-		Use:   forkParam,
+		Use:   commands.CommandNameFork,
 		Short: forkParamDesc,
 		Run: func(cmd *cobra.Command, args []string) {
 			commands.Fork()

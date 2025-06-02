@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	"github.com/atotto/clipboard"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/untillpro/qs/internal/commands"
 	"github.com/untillpro/qs/internal/systrun"
 )
 
-// TestForkExistingFork tests the case where a fork already exists
-func TestForkExistingFork(t *testing.T) {
+// TestForkOnExistingFork tests the case where a fork already exists
+func TestForkOnExistingFork(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -35,12 +36,12 @@ func TestForkExistingFork(t *testing.T) {
 
 }
 
-// TestForkNonExistingFork tests the case where a fork does not exist yet
-func TestForkNonExistingFork(t *testing.T) {
+// TestFork tests the case where a fork does not exist yet
+func TestFork(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "fork-non-existing",
+		TestID:   "fork",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "fork",
@@ -80,34 +81,59 @@ func TestForkNoOriginRemote(t *testing.T) {
 	require.Error(err)
 }
 
-// TestDevNewBranch tests creating a new dev branch when it doesn't exist
-func TestDevNewBranch(t *testing.T) {
+// TestDevCustomName tests creating a new dev branch when it doesn't exist
+func TestDevCustomName(t *testing.T) {
 	require := require.New(t)
 
 	branchName := "branch-name"
-	err := clipboard.WriteAll(branchName)
-	require.NoError(err)
-
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-new-branch",
+		TestID:   "dev-custom-name",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
 			Args:    []string{},
 			Stdin:   "y",
 		},
-		UpstreamState: systrun.RemoteStateOK,
-		ForkState:     systrun.RemoteStateOK,
+		ClipboardContent: branchName,
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
 		Expectations: []systrun.IExpectation{
 			systrun.ExpectedDevBranch{
-				Exists:     true,
 				BranchName: branchName,
 			},
 		},
 	}
 
 	sysTest := systrun.New(t, testConfig)
-	err = sysTest.Run()
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestDevCustomName tests creating a new dev branch when it doesn't exist
+func TestDevNoForkCustomName(t *testing.T) {
+	require := require.New(t)
+
+	branchName := "branch-name"
+	testConfig := &systrun.TestConfig{
+		TestID:   "dev-custom-name",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"--no-fork"},
+			Stdin:   "y",
+		},
+		ClipboardContent: branchName,
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		Expectations: []systrun.IExpectation{
+			systrun.ExpectedDevBranch{
+				BranchName: branchName,
+			},
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
 	require.NoError(err)
 }
 
@@ -127,11 +153,10 @@ func TestDevExistingBranch(t *testing.T) {
 			Args:    []string{branchName},
 			Stdin:   "y",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		DevBranchExists:  true,
-		CheckoutOnBranch: "main",
-		ExpectedStdout:   fmt.Sprintf("dev branch '%s' already exists", branchName),
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
+		Branches:       []string{branchName},
+		ExpectedStdout: fmt.Sprintf("dev branch '%s' already exists", branchName),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -139,26 +164,28 @@ func TestDevExistingBranch(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestDevNoUpstream tests creating a dev branch when upstream remote doesn't exist
-func TestDevNoUpstreamLinkToIssue(t *testing.T) {
+// TODO: Add same test for case when both exist upstream and fork remotes
+// TestDevNoForkExistingIssue tests creating a dev branch when upstream remote doesn't exist
+func TestDevNoForkExistingIssue(t *testing.T) {
 	require := require.New(t)
 
 	ghConfig := getGithubConfig(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-upstream-link-to-issue",
+		TestID:   "dev-no-fork-existing-issue",
 		GHConfig: ghConfig,
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
-		UpstreamState:             systrun.RemoteStateOK,
-		ForkState:                 systrun.RemoteStateNull,
-		CreateGHIssueForDevBranch: true,
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
+		UseNewGithubIssue: true,
 		Expectations: []systrun.IExpectation{
 			systrun.ExpectedBranchLinkedToIssue{
-				IssueID: "1",
+				// Get issue URL from RuntimeEnvironment
+				// IssueID: "1",
 			},
 		},
 	}
@@ -168,8 +195,63 @@ func TestDevNoUpstreamLinkToIssue(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestDevNoUpstreamJiraTicketURL tests creating a dev branch with a valid JIRA ticket URL
-func TestDevNoUpstreamJiraTicketURL(t *testing.T) {
+// TODO: Add same test for case when both exist upstream and fork remotes
+// TestDevNoForkExistingIssue tests creating a dev branch when upstream remote doesn't exist
+func TestDevNoForkNonExistingIssue(t *testing.T) {
+	require := require.New(t)
+
+	ghConfig := getGithubConfig(t)
+
+	nonExistingIssueURL := fmt.Sprintf("https://github.com/%s/%s/issues/abc", ghConfig.UpstreamAccount, uuid.New().String())
+	testConfig := &systrun.TestConfig{
+		TestID:   "dev-no-fork-non-existing-issue",
+		GHConfig: ghConfig,
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"--no-fork"},
+			Stdin:   "y",
+		},
+		ClipboardContent: nonExistingIssueURL,
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateNull,
+		ExpectedStderr:   "Issue not found",
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TODO: Add same test for case when both exist upstream and fork remotes
+// TestDevNoForkForeignIssue tests creating a dev branch when upstream remote doesn't exist
+func TestDevNoForkForeignIssue(t *testing.T) {
+	require := require.New(t)
+
+	ghConfig := getGithubConfig(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   "dev-no-fork-foreign-issue",
+		GHConfig: ghConfig,
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"--no-fork"},
+			Stdin:   "y",
+		},
+		UpstreamState:                    systrun.RemoteStateOK,
+		ForkState:                        systrun.RemoteStateNull,
+		UseNewGithubIssueFromForeignRepo: true,
+		Expectations: []systrun.IExpectation{
+			systrun.ExpectedBranchLinkedToIssue{},
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestDevNoForkJiraTicketURL tests creating a dev branch with a valid JIRA ticket URL
+func TestDevNoForkJiraTicketURL(t *testing.T) {
 	require := require.New(t)
 
 	jiraTicketURL := os.Getenv("JIRA_TICKET_URL")
@@ -183,7 +265,7 @@ func TestDevNoUpstreamJiraTicketURL(t *testing.T) {
 	}
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-upstream-jira-ticket-url",
+		TestID:   "dev-no-fork-jira-ticket-url",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
@@ -193,7 +275,7 @@ func TestDevNoUpstreamJiraTicketURL(t *testing.T) {
 		UpstreamState: systrun.RemoteStateOK,
 		ForkState:     systrun.RemoteStateNull,
 		Expectations: []systrun.IExpectation{
-			systrun.ExpectedDevBranchNameStartsWith{
+			systrun.ExpectedCurrentBranchHasPrefix{
 				Prefix: jiraTicketID,
 			},
 		},

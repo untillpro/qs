@@ -10,11 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/untillpro/qs/internal/commands"
 )
 
 // checkPrerequisites ensures all required tools are available
@@ -45,7 +47,11 @@ func (st *SystemTest) checkPrerequisites() error {
 // checkCommand validates the command to be executed
 func (st *SystemTest) checkCommand() error {
 	switch st.cfg.CommandConfig.Command {
-	case "fork", "dev", "pr", "d", "u":
+	case commands.CommandNameFork,
+		commands.CommandNameDev,
+		commands.CommandNamePR,
+		commands.CommandNameD,
+		commands.CommandNameU:
 		return nil
 	default:
 		return fmt.Errorf("unknown command: %s", st.cfg.CommandConfig)
@@ -53,12 +59,18 @@ func (st *SystemTest) checkCommand() error {
 }
 
 // createTestEnvironment sets up the test repositories based on configuration
-func (st *SystemTest) createTestEnvironment() error {
+// Returns:
+// - RuntimeEnvironment with fields populated for the test
+func (st *SystemTest) createTestEnvironment() (*RuntimeEnvironment, error) {
+	re := &RuntimeEnvironment{
+		cloneRepoPath: st.cloneRepoPath,
+	}
+
 	// Setup upstream repo if needed
 	if st.cfg.UpstreamState != RemoteStateNull {
 		upstreamRepoURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, st.repoName)
 		if err := st.createUpstreamRepo(st.repoName, upstreamRepoURL); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -66,7 +78,7 @@ func (st *SystemTest) createTestEnvironment() error {
 	if st.cfg.ForkState != RemoteStateNull {
 		forkRepoURL := buildRemoteURL(st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken, st.repoName)
 		if err := st.createForkRepo(st.repoName, forkRepoURL); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -84,49 +96,48 @@ func (st *SystemTest) createTestEnvironment() error {
 		cloneURL = fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.UpstreamAccount, st.repoName)
 		authToken = st.cfg.GHConfig.UpstreamToken
 	default:
-		return fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
+		return nil, fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
 	}
 
 	// Need some time to ensure the repo is created
 	// TODO: add check in loop with deadline instead of sleep
 	time.Sleep(time.Millisecond * 2000)
 	if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Configure remotes based on test scenario
 	if err := st.configureRemotes(st.repoName); err != nil {
-		return err
+		return nil, err
 	}
 
-	// Setup dev branch if needed
-	if st.cfg.DevBranchExists {
-		if err := st.setupDevBranch(); err != nil {
-			return err
-		}
+	// Create branches if needed
+	if err := st.createBranches(); err != nil {
+		return nil, err
 	}
 
-	if st.cfg.CheckoutOnBranch != "" {
-		if err := st.checkoutOnBranch(st.cfg.CheckoutOnBranch); err != nil {
-			return fmt.Errorf("failed to checkout branch %s: %w", st.cfg.CheckoutOnBranch, err)
-		}
+	// Checkout on branch if specified
+	if err := st.checkoutOnBranch(st.cfg.CurrentBranch); err != nil {
+		return nil, fmt.Errorf("failed to checkout branch %s: %w", st.cfg.CurrentBranch, err)
 	}
 
-	if st.cfg.CreateGHIssueForDevBranch {
-		issueURL, err := st.createGitHubIssueForDevBranch()
+	if st.cfg.UseNewGithubIssue {
+		issueURL, err := st.createGitHubIssue()
 		if err != nil {
-			return err
+			return nil, err
 		}
+
+		re.createdGithubIssueURL = issueURL
 		// Add the issue URL to the command args for the qs dev command
 		st.cfg.CommandConfig.Args = append(st.cfg.CommandConfig.Args, issueURL)
 	}
 
-	return nil
+	return re, nil
 }
 
-// createGitHubIssueForDevBranch creates a GitHub issue for the dev branch if configured
-func (st *SystemTest) createGitHubIssueForDevBranch() (string, error) {
-	if !st.cfg.CreateGHIssueForDevBranch {
+// createGitHubIssue creates a GitHub issue for the dev branch if configured
+func (st *SystemTest) createGitHubIssue() (string, error) {
+	if !st.cfg.UseNewGithubIssue {
 		return "", nil
 	}
 
@@ -154,6 +165,10 @@ func (st *SystemTest) createGitHubIssueForDevBranch() (string, error) {
 }
 
 func (st *SystemTest) checkoutOnBranch(branchName string) error {
+	if branchName == "" {
+		return nil
+	}
+
 	repo, err := git.PlainOpen(st.cloneRepoPath)
 	if err != nil {
 		fmt.Println("Failed to open repo:", err)
@@ -480,55 +495,54 @@ func (st *SystemTest) configureRemotes(repoName string) error {
 	return nil
 }
 
-// setupDevBranch creates and configures the dev branch
-func (st *SystemTest) setupDevBranch() error {
-	// Open the repository
-	repo, err := git.PlainOpen(st.cloneRepoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
+// createBranches creates and configures the dev branch
+func (st *SystemTest) createBranches() error {
+	for _, branchName := range st.cfg.Branches {
+		// Open the repository
+		repo, err := git.PlainOpen(st.cloneRepoPath)
+		if err != nil {
+			return fmt.Errorf("failed to open cloned repository: %w", err)
+		}
 
-	// Get worktree
-	wt, err := repo.Worktree()
-	if err != nil {
-		return fmt.Errorf("failed to get worktree: %w", err)
-	}
+		// Get worktree
+		wt, err := repo.Worktree()
+		if err != nil {
+			return fmt.Errorf("failed to get worktree: %w", err)
+		}
 
-	// Create dev branch from HEAD
-	headRef, err := repo.Head()
-	if err != nil {
-		return fmt.Errorf("failed to get HEAD: %w", err)
-	}
+		// Create dev branch from HEAD
+		headRef, err := repo.Head()
+		if err != nil {
+			return fmt.Errorf("failed to get HEAD: %w", err)
+		}
 
-	// Create local dev branch
-	branchRef := plumbing.NewBranchReferenceName("dev")
-	ref := plumbing.NewHashReference(branchRef, headRef.Hash())
-	if err := repo.Storer.SetReference(ref); err != nil {
-		return fmt.Errorf("failed to create dev branch: %w", err)
-	}
+		// Create local dev branch
+		branchRef := plumbing.NewBranchReferenceName(branchName)
+		ref := plumbing.NewHashReference(branchRef, headRef.Hash())
+		if err := repo.Storer.SetReference(ref); err != nil {
+			return fmt.Errorf("failed to create dev branch: %w", err)
+		}
 
-	// Checkout the dev branch
-	err = wt.Checkout(&git.CheckoutOptions{
-		Branch: branchRef,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to checkout dev branch: %w", err)
-	}
+		// Checkout the dev branch
+		if err = wt.Checkout(&git.CheckoutOptions{Branch: branchRef}); err != nil {
+			return fmt.Errorf("failed to checkout on branch '%s' branch: %w", branchName, err)
+		}
 
-	// Push dev branch to remote (if fork exists)
-	if st.cfg.ForkState != RemoteStateNull {
-		err = repo.Push(&git.PushOptions{
-			RemoteName: "origin",
-			Auth: &http.BasicAuth{
-				Username: "x-access-token",
-				Password: st.cfg.GHConfig.ForkToken,
-			},
-			RefSpecs: []config.RefSpec{
-				config.RefSpec(fmt.Sprintf("refs/heads/dev:refs/heads/dev")),
-			},
-		})
-		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-			return fmt.Errorf("failed to push dev branch to fork: %w", err)
+		// Push dev branch to remote (if fork exists)
+		if st.cfg.ForkState != RemoteStateNull {
+			err = repo.Push(&git.PushOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: "x-access-token",
+					Password: st.cfg.GHConfig.ForkToken,
+				},
+				RefSpecs: []config.RefSpec{
+					config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", branchName, branchName)),
+				},
+			})
+			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return fmt.Errorf("failed to push dev branch to fork: %w", err)
+			}
 		}
 	}
 
@@ -592,9 +606,9 @@ func (st *SystemTest) validateOutput(stdout, stderr string) error {
 }
 
 // checkExpectations checks expectations after command execution
-func (st *SystemTest) checkExpectations() error {
+func (st *SystemTest) checkExpectations(re *RuntimeEnvironment) error {
 	for _, expectation := range st.cfg.Expectations {
-		if err := expectation.Check(st.cloneRepoPath); err != nil {
+		if err := expectation.Check(re); err != nil {
 			return fmt.Errorf("validation failed: %w", err)
 		}
 	}
@@ -615,8 +629,15 @@ func (st *SystemTest) Run() error {
 	}
 
 	// Create test environment
-	if err := st.createTestEnvironment(); err != nil {
+	re, err := st.createTestEnvironment()
+	if err != nil {
 		return err
+	}
+
+	if st.cfg.ClipboardContent != "" {
+		if err := clipboard.WriteAll(st.cfg.ClipboardContent); err != nil {
+			return fmt.Errorf("failed to write to clipboard: %w", err)
+		}
 	}
 
 	// Run the command
@@ -631,7 +652,7 @@ func (st *SystemTest) Run() error {
 	}
 
 	// Check expectations
-	if err := st.checkExpectations(); err != nil {
+	if err := st.checkExpectations(re); err != nil {
 		return err
 	}
 

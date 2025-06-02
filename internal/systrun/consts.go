@@ -19,13 +19,15 @@ type SyncState int
 const (
 	// RemoteStateOK means that remote of the clone repo is configured correctly
 	RemoteStateOK RemoteState = iota
-	// RemoteStateMisconfigured means that the remote of the clone repo is not configured correctly
+	// RemoteStateMisconfigured means that the remote of the clone repo is not configured correctly,
+	// e.g. `qs u` should fail on permission error on `git push` (now it does not fail)
 	RemoteStateMisconfigured
 	// RemoteStateNull means that the remote of the clone repo is null
 	RemoteStateNull
 )
 
 const (
+	SyncStateUnspecified SyncState = iota
 	// SyncStateSynchronized means that the clone repo and fork/upstream repos are in sync
 	SyncStateSynchronized SyncState = iota
 	// SyncStateForkChanged means that the fork repo has changes that are not in the clone repo

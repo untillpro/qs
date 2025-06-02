@@ -1,7 +1,6 @@
 package systrun
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -23,24 +22,36 @@ type SystemTest struct {
 
 // TestConfig contains all configuration for a system test
 type TestConfig struct {
-	TestID                    string
-	GHConfig                  GithubConfig
-	CommandConfig             CommandConfig
-	UpstreamState             RemoteState
-	ForkState                 RemoteState
-	SyncState                 SyncState
-	DevBranchExists           bool
-	CreateGHIssueForDevBranch bool
-	CheckoutOnBranch          string
-	ExpectedStderr            string
-	ExpectedStdout            string
-	Expectations              []IExpectation
+	TestID        string
+	GHConfig      GithubConfig
+	CommandConfig CommandConfig
+	UpstreamState RemoteState
+	ForkState     RemoteState
+	// TODO: if not 0 then run `qs dev` command, make modifications in files and run `qs u` command and then implement specified sync state
+	// e.g. if SyncState is SyncStateSynchronized then do nothing more
+	// e.g. if SyncStateForkChanged then additionally one push from another clone
+	SyncState SyncState
+	// Create using go-git library and do not push to origin
+	Branches                         []string
+	UseNewGithubIssue                bool
+	UseNewGithubIssueFromForeignRepo bool   // Create and use a foreign repo to create a new issue
+	ClipboardContent                 string // Content to be set in clipboard before running the test
+	CurrentBranch                    string
+	// If ExpectedStderr is not empty then check exit code of qs it must be != 0
+	ExpectedStderr string
+	ExpectedStdout string
+	Expectations   []IExpectation
 }
 
 type CommandConfig struct {
 	Command string
 	Args    []string
 	Stdin   string
+}
+
+type RuntimeEnvironment struct {
+	createdGithubIssueURL string // URL of the created GitHub issue
+	cloneRepoPath         string // Path to the cloned repository
 }
 
 // GithubConfig holds GitHub account and token information
@@ -54,12 +65,11 @@ type GithubConfig struct {
 // ExpectedDevBranch represents the expected state of the branch
 type ExpectedDevBranch struct {
 	BranchName string
-	Exists     bool
 }
 
-func (e ExpectedDevBranch) Check(cloneRepoPath string) error {
+func (e ExpectedDevBranch) Check(re *RuntimeEnvironment) error {
 	// Open the repository
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -94,7 +104,7 @@ type ExpectedRemoteState struct {
 	ForkRemoteState     RemoteState
 }
 
-func (e ExpectedRemoteState) Check(cloneRepoPath string) error {
+func (e ExpectedRemoteState) Check(_ *RuntimeEnvironment) error {
 	// Implement the logic to check the remote state
 
 	return nil
@@ -108,9 +118,9 @@ type ExpectedPullRequest struct {
 	UpstreamAccount string
 }
 
-func (e ExpectedPullRequest) Check(cloneRepoPath string) error {
+func (e ExpectedPullRequest) Check(re *RuntimeEnvironment) error {
 	// Open the repository
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -145,9 +155,9 @@ func (e ExpectedPullRequest) Check(cloneRepoPath string) error {
 type ExpectedDownloadResult struct {
 }
 
-func (e ExpectedDownloadResult) Check(cloneRepoPath string) error {
+func (e ExpectedDownloadResult) Check(re *RuntimeEnvironment) error {
 	// Compare local and remote branches to ensure they're in sync
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -185,9 +195,9 @@ func (e ExpectedDownloadResult) Check(cloneRepoPath string) error {
 type ExpectedUploadResult struct {
 }
 
-func (e ExpectedUploadResult) Check(cloneRepoPath string) error {
+func (e ExpectedUploadResult) Check(re *RuntimeEnvironment) error {
 	// Similar to download but checks if the changes were pushed to remote
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -236,17 +246,17 @@ func (e ExpectedUploadResult) Check(cloneRepoPath string) error {
 type ExpectedForkExists struct {
 }
 
-func (e ExpectedForkExists) Check(cloneRepoPath string) error {
+func (e ExpectedForkExists) Check(re *RuntimeEnvironment) error {
 	// Implement the logic to check if the fork exists
 	// get remotes of the local repo and check if remote, called origin, exists
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
 
 	// Check if the remote named "origin" exists
 	if _, err := repo.Remote("origin"); err != nil {
-		return fmt.Errorf("origin remote not found after fork command: %w", err)
+		return fmt.Errorf("origixn remote not found after fork command: %w", err)
 	}
 
 	// Check if the remote URL accessible
@@ -260,18 +270,26 @@ func (e ExpectedForkExists) Check(cloneRepoPath string) error {
 
 // ExpectedBranchLinkedToIssue represents the expected state of a branch linked to a GitHub issue
 type ExpectedBranchLinkedToIssue struct {
-	IssueID string
 }
 
 // Check verifies if the branch is linked to a GitHub issue
-func (e ExpectedBranchLinkedToIssue) Check(cloneRepoPath string) error {
-	// Check if the branch linked to issue via `gh issue develop --list` command contains the issue number
-
+func (e ExpectedBranchLinkedToIssue) Check(re *RuntimeEnvironment) error {
 	// Get current branch from the repo
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
+
+	// extract repo and issue number from e.createdGithubIssueURL using regex
+	regExp := regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+)/issues/(\d+)`)
+	matches := regExp.FindStringSubmatch(re.createdGithubIssueURL)
+	if matches == nil {
+		return fmt.Errorf("invalid GitHub issue URL format: %s", re.createdGithubIssueURL)
+	}
+	// Extract repo owner, repo name, and issue number from the matches
+	repoOwner := matches[1]
+	repoName := matches[2]
+	issueNum := matches[3]
 
 	branches, err := repo.Branches()
 	if err != nil {
@@ -282,7 +300,7 @@ func (e ExpectedBranchLinkedToIssue) Check(cloneRepoPath string) error {
 	devBranchName := ""
 	err = branches.ForEach(func(ref *plumbing.Reference) error {
 		branchName := ref.Name().Short()
-		if strings.HasPrefix(branchName, e.IssueID) {
+		if strings.HasPrefix(branchName, issueNum) {
 			devBranchName = branchName
 		}
 
@@ -293,44 +311,9 @@ func (e ExpectedBranchLinkedToIssue) Check(cloneRepoPath string) error {
 	}
 
 	if devBranchName == "" {
-		return fmt.Errorf("no branch found for issue ID %s", e.IssueID)
+		return fmt.Errorf("no branch found for issue ID %s", issueNum)
 	}
 
-	// Find upstream remote URL or fork remote to build GitHub issue URL
-	upstreamRemote, err := repo.Remote("upstream")
-	var repoGitURL string
-	if err != nil {
-		if !errors.Is(err, git.ErrRemoteNotFound) {
-			return fmt.Errorf("failed to get upstream remote: %w", err)
-		}
-
-		originRemote, err := repo.Remote("origin")
-		if err != nil && !errors.Is(err, git.ErrRemoteNotFound) {
-			return fmt.Errorf("failed to get fork remote: %w", err)
-		}
-
-		repoGitURL = originRemote.Config().URLs[0]
-	}
-
-	if repoGitURL == "" {
-		if upstreamRemote == nil {
-			return fmt.Errorf("no upstream or fork remote found")
-		}
-		repoGitURL = upstreamRemote.Config().URLs[0]
-	}
-
-	// Build GitHub issue URL
-	githubIssueURL := strings.TrimSuffix(repoGitURL, ".git") + "/issues/" + e.IssueID
-	// extract repo and issue number from e.GithubIssueURL using regex
-	re := regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+)/issues/(\d+)`)
-	matches := re.FindStringSubmatch(githubIssueURL)
-	if matches == nil {
-		return fmt.Errorf("invalid GitHub issue URL format: %s", githubIssueURL)
-	}
-
-	repoOwner := matches[1]
-	repoName := matches[2]
-	issueNum := matches[3]
 	// Build full repo URL
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 	// Run gh issue develop --list command
@@ -348,13 +331,13 @@ func (e ExpectedBranchLinkedToIssue) Check(cloneRepoPath string) error {
 	return nil
 }
 
-type ExpectedDevBranchNameStartsWith struct {
+type ExpectedCurrentBranchHasPrefix struct {
 	Prefix string
 }
 
-func (e ExpectedDevBranchNameStartsWith) Check(cloneRepoPath string) error {
+func (e ExpectedCurrentBranchHasPrefix) Check(re *RuntimeEnvironment) error {
 	// Open the repository
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
