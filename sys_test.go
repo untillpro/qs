@@ -7,6 +7,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/require"
+	"github.com/untillpro/qs/internal/commands"
 	"github.com/untillpro/qs/internal/systrun"
 )
 
@@ -138,23 +139,64 @@ func TestDevExistingBranch(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestDevNoFork tests creating a dev branch when fork doesn't exist
-func TestDevNoFork(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
+// TestDevNoUpstream tests creating a dev branch when upstream remote doesn't exist
+func TestDevNoUpstreamLinkToIssue(t *testing.T) {
 	require := require.New(t)
 
+	ghConfig := getGithubConfig(t)
+
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-fork",
+		TestID:   "dev-no-upstream-link-to-issue",
+		GHConfig: ghConfig,
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"--no-fork"},
+			Stdin:   "y",
+		},
+		UpstreamState:             systrun.RemoteStateOK,
+		ForkState:                 systrun.RemoteStateNull,
+		CreateGHIssueForDevBranch: true,
+		Expectations: []systrun.IExpectation{
+			systrun.ExpectedBranchLinkedToIssue{
+				IssueID: "1",
+			},
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestDevNoUpstreamJiraTicketURL tests creating a dev branch with a valid JIRA ticket URL
+func TestDevNoUpstreamJiraTicketURL(t *testing.T) {
+	require := require.New(t)
+
+	jiraTicketURL := os.Getenv("JIRA_TICKET_URL")
+	if jiraTicketURL == "" {
+		t.Skip("JIRA_TICKET_URL environment variable not set, skipping test")
+	}
+
+	jiraTicketID, ok := commands.GetJiraTicketIDFromArgs(jiraTicketURL)
+	if !ok {
+		t.Fatalf("Invalid JIRA ticket URL: %s", jiraTicketURL)
+	}
+
+	testConfig := &systrun.TestConfig{
+		TestID:   "dev-no-upstream-jira-ticket-url",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
-			Args:    []string{},
+			Args:    []string{"--no-fork", jiraTicketURL},
+			Stdin:   "y",
 		},
-		UpstreamState:   systrun.RemoteStateOK,
-		ForkState:       systrun.RemoteStateNull,
-		DevBranchExists: false,
-		ExpectedStdout:  "Creating dev branch in upstream repo",
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateNull,
+		Expectations: []systrun.IExpectation{
+			systrun.ExpectedDevBranchNameStartsWith{
+				Prefix: jiraTicketID,
+			},
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)

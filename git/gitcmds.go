@@ -511,15 +511,15 @@ func GetIssuerepoFromUrl(url string) (reponame string) {
 	return
 }
 
-// Dev issue branch
-func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
+// DevIssue
+func DevIssue(githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string) {
 	repo, org := GetRepoAndOrgName()
 	if len(repo) == 0 {
 		fmt.Println(repoNotFound)
 		os.Exit(1)
 	}
 
-	strissuenum := strconv.Itoa(issueNumber)
+	strIssueNum := strconv.Itoa(issueNumber)
 	myrepo := org + slash + repo
 	parentrepo := GetParentRepoName()
 	if len(args) > 0 {
@@ -536,7 +536,7 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 	ExitIfError(err)
 
 	stdouts, stderr, err := new(exec.PipedExec).
-		Command("gh", "issue", "develop", strissuenum, "--issue-repo="+parentrepo, "--repo", myrepo).
+		Command("gh", "issue", "develop", strIssueNum, "--issue-repo="+parentrepo, "--repo", myrepo).
 		RunToStrings()
 	if err != nil {
 		fmt.Println(stderr)
@@ -554,12 +554,13 @@ func DevIssue(issueNumber int, args ...string) (branch string, notes []string) {
 		return
 	}
 
-	issuename := GetIssueNameByNumber(strissuenum, parentrepo)
-	comment := IssuePRTtilePrefix + " '" + issuename + "' "
+	issueName := GetIssueNameByNumber(strIssueNum, parentrepo)
+	comment := IssuePRTtilePrefix + " '" + issueName + "' "
 	body := ""
-	if len(issuename) > 0 {
-		body = IssueSign + strissuenum + oneSpace + issuename
+	if len(issueName) > 0 {
+		body = IssueSign + strIssueNum + oneSpace + issueName
 	}
+
 	return branch, []string{comment, body}
 }
 
@@ -575,8 +576,12 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 	return strings.TrimSpace(stdouts)
 }
 
-// Dev branch
-func Dev(branch string, comments []string, branchinfork bool) {
+// Dev creates dev branch and pushes it to origin
+// Parameters:
+// branch - branch name
+// comments - comments for branch
+// branchIsInFork - if true, then branch is in forked repo
+func Dev(branch string, comments []string, branchIsInFork bool) {
 	mainbrach := GetMainBranch()
 	_, chExist := ChangedFilesExist()
 	var err error
@@ -593,8 +598,14 @@ func Dev(branch string, comments []string, branchinfork bool) {
 
 	pullOrigin()
 
+	// If branch is not in fork, then pull from origin/main
+	remote := "origin"
+	if branchIsInFork {
+		// otherwise pull from upstream/main
+		remote = "upstream"
+	}
 	err = new(exec.PipedExec).
-		Command(git, pull, "--rebase", "upstream", mainbrach, "--no-edit").
+		Command(git, pull, "--rebase", remote, mainbrach, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
@@ -612,7 +623,7 @@ func Dev(branch string, comments []string, branchinfork bool) {
 	}
 	ExitIfError(err)
 
-	if branchinfork {
+	if branchIsInFork {
 		err = new(exec.PipedExec).
 			Command(git, pull, "-p", "upstream", mainbrach).
 			Run(os.Stdout, os.Stdout)
