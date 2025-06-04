@@ -14,6 +14,8 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/fatih/color"
+	gitPkg "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/git"
@@ -67,7 +69,6 @@ func Dev(cmd *cobra.Command, args []string) {
 		fmt.Println("Switch to main branch before running 'qs dev'")
 		return
 	}
-	// TODO: add checking for already existing dev branch
 
 	issueNum, githubIssueURL, ok := argContainsGithubIssueLink(args...)
 	if ok { // github issue
@@ -87,6 +88,21 @@ func Dev(cmd *cobra.Command, args []string) {
 		fmt.Print(devMsg)
 		fmt.Scanln(&response)
 	}
+
+	exists, err := branchExists(branch)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error checking branch existence:", err)
+		os.Exit(1)
+
+		return
+	}
+	if exists {
+		fmt.Fprintf(os.Stderr, "dev branch '%s' already exists", branch)
+		os.Exit(1)
+
+		return
+	}
+
 	switch response {
 	case pushYes:
 		// Remote developer branch, linked to issue is created
@@ -118,6 +134,39 @@ func Dev(cmd *cobra.Command, args []string) {
 		setPreCommitHook()
 	}
 
+}
+
+// branchExists checks if a branch with the given name already exists in the current git repository.
+func branchExists(branchName string) (bool, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return false, fmt.Errorf("error getting current working directory: %s", err)
+	}
+
+	repo, err := gitPkg.PlainOpen(wd)
+	if err != nil {
+		return false, fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	branches, err := repo.Branches()
+	if err != nil {
+		return false, fmt.Errorf("failed to get branches: %w", err)
+	}
+
+	// Find development branch name that starts with the issue ID
+	exists := false
+	_ = branches.ForEach(func(ref *plumbing.Reference) error {
+		nextBranchName := ref.Name().Short()
+		if nextBranchName == branchName {
+			exists = true
+
+			return nil
+		}
+
+		return nil
+	})
+
+	return exists, nil
 }
 
 func getArgStringFromClipboard() string {

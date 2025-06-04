@@ -149,8 +149,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		DevBranchState: systrun.DevBranchStateExistsButNotCurrent,
-		// TODO: ExpectedStderr: "dev branch already exists",
-		ExpectedStdout: fmt.Sprintf("dev branch '%s' already exists", branchName),
+		ExpectedStderr: fmt.Sprintf("dev branch '%s' already exists", branchName),
 	}
 
 	sysTest := systrun.New(t, testConfig)
