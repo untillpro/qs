@@ -650,6 +650,11 @@ func Dev(branch string, comments []string, branchIsInFork bool) {
 
 	// Add empty commit to create commit object and link notes to it
 	addNotes(comments)
+	// Push notes to origin
+	err = new(exec.PipedExec).
+		Command(git, push, origin, "ref/notes/*").
+		Run(os.Stdout, os.Stdout)
+	ExitIfError(err)
 
 	err = new(exec.PipedExec).
 		Command(git, push, "-u", origin, branch).

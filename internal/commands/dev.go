@@ -92,13 +92,13 @@ func Dev(cmd *cobra.Command, args []string) {
 
 	exists, err := branchExists(branch)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error checking branch existence:", err)
+		_, _ = fmt.Fprintln(os.Stderr, "error checking branch existence:", err)
 		os.Exit(1)
 
 		return
 	}
 	if exists {
-		fmt.Fprintf(os.Stderr, "dev branch '%s' already exists", branch)
+		_, _ = fmt.Fprintf(os.Stderr, "dev branch '%s' already exists", branch)
 		os.Exit(1)
 
 		return
