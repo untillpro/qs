@@ -21,7 +21,8 @@ func Fork() {
 
 	repo, err := git.Fork()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 
 		return
 	}

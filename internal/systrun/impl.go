@@ -135,7 +135,7 @@ func (st *SystemTest) processClipboardContent(re *RuntimeEnvironment) error {
 		return nil
 	case ClipboardContentCustom:
 		clipboardContent = st.getCustomClipboardContent()
-		re.branchName = clipboardContent
+		re.customBranchName = clipboardContent
 	case ClipboardContentUnavailableGithubIssue:
 		clipboardContent = fmt.Sprintf("https://github.com/%s/%s/issues/abc",
 			st.cfg.GHConfig.UpstreamAccount,
@@ -562,7 +562,7 @@ func (st *SystemTest) setupDevBranch() error {
 	}
 
 	// Checkout the dev branch if it should be current
-	if st.cfg.DevBranchState == DevBranchStateExistsAndCurrent {
+	if st.cfg.DevBranchState == DevBranchStateExistsAndCheckedOut {
 		err = wt.Checkout(&git.CheckoutOptions{
 			Branch: branchRef,
 		})

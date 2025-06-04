@@ -11,11 +11,11 @@ import (
 )
 
 // TestForkOnExistingFork tests the case where a fork already exists
-func TestForkOnExistingFork(t *testing.T) {
+func TestFork_OnExistingFork(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "fork-existing",
+		TestID:   "fork-on-existing-fork",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "fork",
@@ -61,11 +61,11 @@ func TestFork(t *testing.T) {
 }
 
 // TestForkNoRemotes tests the case where there is no origin remote
-func TestForkNoRemotes(t *testing.T) {
+func TestFork_NoRemotes(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "fork-no-origin",
+		TestID:   "fork-no-remotes",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "fork",
@@ -81,7 +81,7 @@ func TestForkNoRemotes(t *testing.T) {
 }
 
 // TestDevCustomName tests creating a new dev branch when it doesn't exist
-func TestDevCustomName(t *testing.T) {
+func TestDev_CustomName(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -148,7 +148,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 		},
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
-		DevBranchState: systrun.DevBranchStateExistsButNotCurrent,
+		DevBranchState: systrun.DevBranchStateExistsButNotCheckedOut,
 		ExpectedStderr: fmt.Sprintf("dev branch '%s' already exists", branchName),
 	}
 
@@ -211,7 +211,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 }
 
 // TestDevNoForkJiraTicketURL tests creating a dev branch with a valid JIRA ticket URL
-func TestDevNoForkJiraTicketURL(t *testing.T) {
+func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -222,8 +222,9 @@ func TestDevNoForkJiraTicketURL(t *testing.T) {
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
-		UpstreamState: systrun.RemoteStateOK,
-		ForkState:     systrun.RemoteStateNull,
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateNull,
+		ClipboardContent: systrun.ClipboardContentJiraTicket,
 		Expectations: []systrun.IExpectation{
 			systrun.ExpectedCurrentBranchHasPrefix{},
 		},

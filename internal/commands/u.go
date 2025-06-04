@@ -50,16 +50,16 @@ func U(cfgStatus vcs.CfgStatus, cfgUpload vcs.CfgUpload, args []string) {
 					fmt.Println("Empty commit. Please enter commit manually:")
 					scanner := bufio.NewScanner(os.Stdin)
 					scanner.Scan()
-					prcommit := scanner.Text()
-					prcommit = strings.TrimSpace(prcommit)
-					if len(prcommit) < 5 {
+					prCommit := scanner.Text()
+					prCommit = strings.TrimSpace(prCommit)
+					if len(prCommit) < 5 {
 						fmt.Println("----  Too short comment not allowed! ---")
 						return
 					}
-					cfgUpload.Message[0] = prcommit
+					cfgUpload.Message[0] = prCommit
 				}
 			} else {
-				cfgUpload.Message = []string{"misc"}
+				cfgUpload.Message = []string{git.PushDefaultMsg}
 			}
 		}
 	}

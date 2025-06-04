@@ -61,7 +61,7 @@ const (
 	// Dev branch does not exist
 	DevBranchStateNotExists DevBranchState = iota
 	// Dev branch exists and it is the current branch
-	DevBranchStateExistsAndCurrent
+	DevBranchStateExistsAndCheckedOut
 	// Dev branch exists but it is not the current branch
-	DevBranchStateExistsButNotCurrent
+	DevBranchStateExistsButNotCheckedOut
 )

@@ -20,6 +20,7 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/internal/commands/helper"
+	"github.com/untillpro/qs/internal/notes"
 )
 
 func Dev(cmd *cobra.Command, args []string) {
@@ -243,7 +244,7 @@ func argContainsGithubIssueLink(args ...string) (issueNum int, issueURL string, 
 	url := args[0]
 	if strings.Contains(url, "/issues") {
 		if err := checkIssueLink(url); err != nil {
-			fmt.Fprintln(os.Stderr, "Error: Invalid GitHub issue link:", err)
+			_, _ = fmt.Fprintln(os.Stderr, "Invalid GitHub issue link:", err)
 			os.Exit(1)
 
 			return
@@ -284,6 +285,10 @@ func getJiraBranchName(args ...string) (branch string, comments []string) {
 			if issuename == "" {
 				branch, _ = getBranchName(false, args...)
 			} else {
+				jiraTicketURL := matches[0] // Full JIRA ticket URL
+				// Prepare new notes
+				newNotes := notes.Serialize("", jiraTicketURL, notes.BranchTypeDev)
+				comments = append(comments, newNotes)
 				brname, _ = getBranchName(false, issuename)
 				branch = issueKey + "-" + brname
 			}

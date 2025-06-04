@@ -14,6 +14,7 @@ import (
 	survey "github.com/AlecAivazis/survey/v2"
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
 	"github.com/untillpro/qs/vcs"
 )
@@ -50,7 +51,7 @@ const (
 	ErrTimer40Sec           = "time out 40 seconds"
 	ErrSomethigWrong        = "something went wrong"
 	ErrUnknowGHResponse     = "unknown response from gh"
-	PushDefaultMsg          = "misc"
+	PushDefaultMsg          = "dev"
 	mainBrachName           = "main"
 
 	IssuePRTtilePrefix = "Resolves issue"
@@ -560,8 +561,10 @@ func DevIssue(githubIssueURL string, issueNumber int, args ...string) (branch st
 	if len(issueName) > 0 {
 		body = IssueSign + strIssueNum + oneSpace + issueName
 	}
+	// Prepare new notes
+	newNotes := notesPkg.Serialize(githubIssueURL, "", notesPkg.BranchTypeDev)
 
-	return branch, []string{comment, body}
+	return branch, []string{comment, body, newNotes}
 }
 
 func GetIssueNameByNumber(issueNum string, parentrepo string) string {

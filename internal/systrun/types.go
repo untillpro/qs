@@ -50,8 +50,8 @@ type RuntimeEnvironment struct {
 	createdGithubIssueURL string
 	// Path to the cloned repository
 	cloneRepoPath string
-	// Name of the branch created during the test
-	branchName string
+	// Custom name of the branch created during the test
+	customBranchName string
 	// Prefix for the branch name, used to check if the branch is created correctly
 	branchPrefix string
 }
@@ -76,10 +76,10 @@ func (e ExpectedCurrentBranch) Check(re *RuntimeEnvironment) error {
 	}
 
 	// Check if dev branch exists
-	devRef := plumbing.NewBranchReferenceName(re.branchName)
+	devRef := plumbing.NewBranchReferenceName(re.customBranchName)
 	_, err = repo.Reference(devRef, true)
 	if err != nil {
-		return fmt.Errorf("%s branch not found after dev command: %w", re.branchName, err)
+		return fmt.Errorf("%s branch not found after dev command: %w", re.customBranchName, err)
 	}
 
 	// Check if the local branch is tracking the remote branch
@@ -88,12 +88,12 @@ func (e ExpectedCurrentBranch) Check(re *RuntimeEnvironment) error {
 		return fmt.Errorf("failed to get repo config: %w", err)
 	}
 
-	if branch, ok := cfg.Branches[re.branchName]; ok {
+	if branch, ok := cfg.Branches[re.customBranchName]; ok {
 		if branch.Remote != "origin" {
-			return fmt.Errorf("%s branch is not tracking origin remote: %s", re.branchName, branch.Remote)
+			return fmt.Errorf("%s branch is not tracking origin remote: %s", re.customBranchName, branch.Remote)
 		}
 	} else {
-		return fmt.Errorf("%s branch configuration not found", re.branchName)
+		return fmt.Errorf("%s branch configuration not found", re.customBranchName)
 	}
 
 	return nil
