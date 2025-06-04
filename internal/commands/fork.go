@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/internal/commands/helper"
@@ -20,7 +21,8 @@ func Fork() {
 
 	repo, err := git.Fork()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
+
 		return
 	}
 	git.MakeUpstream(repo)

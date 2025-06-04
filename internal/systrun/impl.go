@@ -16,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/google/uuid"
 	"github.com/untillpro/qs/internal/commands"
 )
 
@@ -111,36 +112,70 @@ func (st *SystemTest) createTestEnvironment() (*RuntimeEnvironment, error) {
 		return nil, err
 	}
 
-	// Create branches if needed
-	if err := st.createBranches(); err != nil {
+	// Setup dev branch if needed
+	if err := st.setupDevBranch(); err != nil {
 		return nil, err
 	}
 
-	// Checkout on branch if specified
-	if err := st.checkoutOnBranch(st.cfg.CurrentBranch); err != nil {
-		return nil, fmt.Errorf("failed to checkout branch %s: %w", st.cfg.CurrentBranch, err)
-	}
-
-	if st.cfg.UseNewGithubIssue {
-		issueURL, err := st.createGitHubIssue()
-		if err != nil {
-			return nil, err
-		}
-
-		re.createdGithubIssueURL = issueURL
-		// Add the issue URL to the command args for the qs dev command
-		st.cfg.CommandConfig.Args = append(st.cfg.CommandConfig.Args, issueURL)
+	if err := st.processClipboardContent(re); err != nil {
+		return nil, fmt.Errorf("failed to process clipboard content: %w", err)
 	}
 
 	return re, nil
 }
 
-// createGitHubIssue creates a GitHub issue for the dev branch if configured
-func (st *SystemTest) createGitHubIssue() (string, error) {
-	if !st.cfg.UseNewGithubIssue {
-		return "", nil
+func (st *SystemTest) processClipboardContent(re *RuntimeEnvironment) error {
+	var (
+		clipboardContent string
+		err              error
+	)
+
+	switch st.cfg.ClipboardContent {
+	case ClipboardContentEmpty:
+		return nil
+	case ClipboardContentCustom:
+		clipboardContent = st.getCustomClipboardContent()
+		re.branchName = clipboardContent
+	case ClipboardContentUnavailableGithubIssue:
+		clipboardContent = fmt.Sprintf("https://github.com/%s/%s/issues/abc",
+			st.cfg.GHConfig.UpstreamAccount,
+			uuid.New().String(),
+		)
+	case ClipboardContentGithubIssue:
+		clipboardContent, err = st.createGitHubIssue()
+		if err != nil {
+			return err
+		}
+		re.createdGithubIssueURL = clipboardContent
+	case ClipboardContentJiraTicket:
+		clipboardContent = os.Getenv("JIRA_TICKET_URL")
+		if clipboardContent == "" {
+			return errors.New("JIRA_TICKET_URL environment variable not set, skipping test")
+		}
+
+		jiraTicketID, ok := commands.GetJiraTicketIDFromArgs(clipboardContent)
+		if !ok {
+			return fmt.Errorf("invalid JIRA ticket URL: %s", clipboardContent)
+		}
+
+		re.branchPrefix = jiraTicketID
+	default:
+		return fmt.Errorf("unknown clipboard content type: %s", st.cfg.ClipboardContent)
 	}
 
+	if err := clipboard.WriteAll(clipboardContent); err != nil {
+		return fmt.Errorf("failed to write custom clipboard content: %w", err)
+	}
+
+	return nil
+}
+
+func (st *SystemTest) getCustomClipboardContent() string {
+	return "my-cool-clipboard-content"
+}
+
+// createGitHubIssue creates a GitHub issue for the dev branch if configured
+func (st *SystemTest) createGitHubIssue() (string, error) {
 	// Create issue title based on test ID
 	issueTitle := fmt.Sprintf("Test automation issue for %s", st.cfg.TestID)
 	issueBody := fmt.Sprintf("Automated test issue created by QS system test framework")
@@ -495,54 +530,61 @@ func (st *SystemTest) configureRemotes(repoName string) error {
 	return nil
 }
 
-// createBranches creates and configures the dev branch
-func (st *SystemTest) createBranches() error {
-	for _, branchName := range st.cfg.Branches {
-		// Open the repository
-		repo, err := git.PlainOpen(st.cloneRepoPath)
+// setupDevBranch creates and configures the dev branch
+func (st *SystemTest) setupDevBranch() error {
+	if st.cfg.DevBranchState == DevBranchStateNotExists {
+		return nil // No dev branch needed
+	}
+
+	// Open the repository
+	repo, err := git.PlainOpen(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Get worktree
+	wt, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Create dev branch from HEAD
+	headRef, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	// Create local dev branch
+	branchRef := plumbing.NewBranchReferenceName("dev")
+	ref := plumbing.NewHashReference(branchRef, headRef.Hash())
+	if err := repo.Storer.SetReference(ref); err != nil {
+		return fmt.Errorf("failed to create dev branch: %w", err)
+	}
+
+	// Checkout the dev branch if it should be current
+	if st.cfg.DevBranchState == DevBranchStateExistsAndCurrent {
+		err = wt.Checkout(&git.CheckoutOptions{
+			Branch: branchRef,
+		})
 		if err != nil {
-			return fmt.Errorf("failed to open cloned repository: %w", err)
+			return fmt.Errorf("failed to checkout dev branch: %w", err)
 		}
+	}
 
-		// Get worktree
-		wt, err := repo.Worktree()
-		if err != nil {
-			return fmt.Errorf("failed to get worktree: %w", err)
-		}
-
-		// Create dev branch from HEAD
-		headRef, err := repo.Head()
-		if err != nil {
-			return fmt.Errorf("failed to get HEAD: %w", err)
-		}
-
-		// Create local dev branch
-		branchRef := plumbing.NewBranchReferenceName(branchName)
-		ref := plumbing.NewHashReference(branchRef, headRef.Hash())
-		if err := repo.Storer.SetReference(ref); err != nil {
-			return fmt.Errorf("failed to create dev branch: %w", err)
-		}
-
-		// Checkout the dev branch
-		if err = wt.Checkout(&git.CheckoutOptions{Branch: branchRef}); err != nil {
-			return fmt.Errorf("failed to checkout on branch '%s' branch: %w", branchName, err)
-		}
-
-		// Push dev branch to remote (if fork exists)
-		if st.cfg.ForkState != RemoteStateNull {
-			err = repo.Push(&git.PushOptions{
-				RemoteName: "origin",
-				Auth: &http.BasicAuth{
-					Username: "x-access-token",
-					Password: st.cfg.GHConfig.ForkToken,
-				},
-				RefSpecs: []config.RefSpec{
-					config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", branchName, branchName)),
-				},
-			})
-			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-				return fmt.Errorf("failed to push dev branch to fork: %w", err)
-			}
+	// Push dev branch to remote (if fork exists)
+	if st.cfg.ForkState != RemoteStateNull {
+		err = repo.Push(&git.PushOptions{
+			RemoteName: "origin",
+			Auth: &http.BasicAuth{
+				Username: "x-access-token",
+				Password: st.cfg.GHConfig.ForkToken,
+			},
+			RefSpecs: []config.RefSpec{
+				config.RefSpec(fmt.Sprintf("refs/heads/dev:refs/heads/dev")),
+			},
+		})
+		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return fmt.Errorf("failed to push dev branch to fork: %w", err)
 		}
 	}
 
@@ -584,8 +626,7 @@ func (st *SystemTest) runCommand() (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
-// validateOutput checks the command output against expected values
-func (st *SystemTest) validateOutput(stdout, stderr string) error {
+func (st *SystemTest) validateStdout(stdout string) error {
 	// Check stdout if specified
 	if st.cfg.ExpectedStdout != "" {
 		if !strings.Contains(stdout, st.cfg.ExpectedStdout) {
@@ -594,6 +635,10 @@ func (st *SystemTest) validateOutput(stdout, stderr string) error {
 		}
 	}
 
+	return nil
+}
+
+func (st *SystemTest) validateStderr(stderr string) error {
 	// Check stderr if specified
 	if st.cfg.ExpectedStderr != "" {
 		if !strings.Contains(stderr, st.cfg.ExpectedStderr) {
@@ -634,20 +679,18 @@ func (st *SystemTest) Run() error {
 		return err
 	}
 
-	if st.cfg.ClipboardContent != "" {
-		if err := clipboard.WriteAll(st.cfg.ClipboardContent); err != nil {
-			return fmt.Errorf("failed to write to clipboard: %w", err)
-		}
-	}
-
 	// Run the command
 	stdout, stderr, err := st.runCommand()
 	if err != nil {
+		if err := st.validateStderr(stderr); err != nil {
+			return err
+		}
+
 		return err
 	}
 
-	// Validate output
-	if err := st.validateOutput(stdout, stderr); err != nil {
+	// Validate stdout
+	if err := st.validateStdout(stdout); err != nil {
 		return err
 	}
 

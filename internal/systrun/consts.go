@@ -15,6 +15,8 @@ const (
 
 type RemoteState int
 type SyncState int
+type ClipboardContentType int
+type DevBranchState int
 
 const (
 	// RemoteStateOK means that remote of the clone repo is configured correctly
@@ -40,4 +42,26 @@ const (
 	SyncStateBothChangedConflict
 	// SyncStateDoesntTrackOrigin means that the dev branch does not track the origin
 	SyncStateDoesntTrackOrigin
+)
+
+const (
+	// Empty clipboard content before running the test command
+	ClipboardContentEmpty ClipboardContentType = iota
+	// GitHub issue content to be set in the clipboard before running the test command
+	ClipboardContentGithubIssue
+	// Unavailable GitHub issue content to be set in the clipboard before running the test command
+	ClipboardContentUnavailableGithubIssue
+	// Jira ticket content to be set in the clipboard before running the test command
+	ClipboardContentJiraTicket
+	// Custom content to be set in the clipboard before running the test command
+	ClipboardContentCustom
+)
+
+const (
+	// Dev branch does not exist
+	DevBranchStateNotExists DevBranchState = iota
+	// Dev branch exists and it is the current branch
+	DevBranchStateExistsAndCurrent
+	// Dev branch exists but it is not the current branch
+	DevBranchStateExistsButNotCurrent
 )

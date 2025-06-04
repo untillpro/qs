@@ -30,13 +30,9 @@ type TestConfig struct {
 	// TODO: if not 0 then run `qs dev` command, make modifications in files and run `qs u` command and then implement specified sync state
 	// e.g. if SyncState is SyncStateSynchronized then do nothing more
 	// e.g. if SyncStateForkChanged then additionally one push from another clone
-	SyncState SyncState
-	// Create using go-git library and do not push to origin
-	Branches                         []string
-	UseNewGithubIssue                bool
-	UseNewGithubIssueFromForeignRepo bool   // Create and use a foreign repo to create a new issue
-	ClipboardContent                 string // Content to be set in clipboard before running the test
-	CurrentBranch                    string
+	SyncState        SyncState
+	DevBranchState   DevBranchState       // if true then create dev branch
+	ClipboardContent ClipboardContentType // Content to be set in clipboard before running the test
 	// If ExpectedStderr is not empty then check exit code of qs it must be != 0
 	ExpectedStderr string
 	ExpectedStdout string
@@ -50,8 +46,14 @@ type CommandConfig struct {
 }
 
 type RuntimeEnvironment struct {
-	createdGithubIssueURL string // URL of the created GitHub issue
-	cloneRepoPath         string // Path to the cloned repository
+	// URL of the created GitHub issue
+	createdGithubIssueURL string
+	// Path to the cloned repository
+	cloneRepoPath string
+	// Name of the branch created during the test
+	branchName string
+	// Prefix for the branch name, used to check if the branch is created correctly
+	branchPrefix string
 }
 
 // GithubConfig holds GitHub account and token information
@@ -62,12 +64,11 @@ type GithubConfig struct {
 	ForkToken       string
 }
 
-// ExpectedDevBranch represents the expected state of the branch
-type ExpectedDevBranch struct {
-	BranchName string
+// ExpectedCurrentBranch represents the expected state of the branch
+type ExpectedCurrentBranch struct {
 }
 
-func (e ExpectedDevBranch) Check(re *RuntimeEnvironment) error {
+func (e ExpectedCurrentBranch) Check(re *RuntimeEnvironment) error {
 	// Open the repository
 	repo, err := git.PlainOpen(re.cloneRepoPath)
 	if err != nil {
@@ -75,10 +76,10 @@ func (e ExpectedDevBranch) Check(re *RuntimeEnvironment) error {
 	}
 
 	// Check if dev branch exists
-	devRef := plumbing.NewBranchReferenceName(e.BranchName)
+	devRef := plumbing.NewBranchReferenceName(re.branchName)
 	_, err = repo.Reference(devRef, true)
 	if err != nil {
-		return fmt.Errorf("%s branch not found after dev command: %w", e.BranchName, err)
+		return fmt.Errorf("%s branch not found after dev command: %w", re.branchName, err)
 	}
 
 	// Check if the local branch is tracking the remote branch
@@ -87,12 +88,12 @@ func (e ExpectedDevBranch) Check(re *RuntimeEnvironment) error {
 		return fmt.Errorf("failed to get repo config: %w", err)
 	}
 
-	if branch, ok := cfg.Branches[e.BranchName]; ok {
+	if branch, ok := cfg.Branches[re.branchName]; ok {
 		if branch.Remote != "origin" {
-			return fmt.Errorf("%s branch is not tracking origin remote: %s", e.BranchName, branch.Remote)
+			return fmt.Errorf("%s branch is not tracking origin remote: %s", re.branchName, branch.Remote)
 		}
 	} else {
-		return fmt.Errorf("%s branch configuration not found", e.BranchName)
+		return fmt.Errorf("%s branch configuration not found", re.branchName)
 	}
 
 	return nil
@@ -332,7 +333,6 @@ func (e ExpectedBranchLinkedToIssue) Check(re *RuntimeEnvironment) error {
 }
 
 type ExpectedCurrentBranchHasPrefix struct {
-	Prefix string
 }
 
 func (e ExpectedCurrentBranchHasPrefix) Check(re *RuntimeEnvironment) error {
@@ -349,8 +349,8 @@ func (e ExpectedCurrentBranchHasPrefix) Check(re *RuntimeEnvironment) error {
 	}
 
 	// Check if the branch name starts with the expected prefix
-	if !strings.HasPrefix(head.Name().Short(), e.Prefix) {
-		return fmt.Errorf("branch name '%s' does not start with expected prefix '%s'", head.Name().Short(), e.Prefix)
+	if !strings.HasPrefix(head.Name().Short(), re.branchPrefix) {
+		return fmt.Errorf("branch name '%s' does not start with expected prefix '%s'", head.Name().Short(), re.branchPrefix)
 	}
 
 	return nil

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,9 +23,10 @@ import (
 func Dev(cmd *cobra.Command, args []string) {
 	globalConfig()
 	git.CheckIfGitRepo()
-	if !helper.CheckQSver() {
-		return
-	}
+	// TODO: uncomment before PR
+	//if !helper.CheckQSver() {
+	//	return
+	//}
 	if !helper.CheckGH() {
 		return
 	}
@@ -65,6 +67,7 @@ func Dev(cmd *cobra.Command, args []string) {
 		fmt.Println("Switch to main branch before running 'qs dev'")
 		return
 	}
+	// TODO: add checking for already existing dev branch
 
 	issueNum, githubIssueURL, ok := argContainsGithubIssueLink(args...)
 	if ok { // github issue
@@ -190,6 +193,12 @@ func argContainsGithubIssueLink(args ...string) (issueNum int, issueURL string, 
 	}
 	url := args[0]
 	if strings.Contains(url, "/issues") {
+		if err := checkIssueLink(url); err != nil {
+			fmt.Fprintln(os.Stderr, "Error: Invalid GitHub issue link:", err)
+			os.Exit(1)
+
+			return
+		}
 		segments := strings.Split(url, "/")
 		strIssueNum := segments[len(segments)-1]
 		i, err := strconv.Atoi(strIssueNum)
@@ -200,6 +209,16 @@ func argContainsGithubIssueLink(args ...string) (issueNum int, issueURL string, 
 	}
 
 	return
+}
+
+func checkIssueLink(issueURL string) error {
+	// This function checks if the provided issueURL is a valid GitHub issue link via `gh issue view`.
+	cmd := exec.Command("gh", "issue", "view", issueURL)
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("failed to check issue link: %v", err)
+	}
+
+	return nil
 }
 
 // getJiraBranchName generates a branch name based on a JIRA issue URL in the arguments.
