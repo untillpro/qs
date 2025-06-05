@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"testing"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -14,7 +13,6 @@ import (
 
 // SystemTest represents a single system test for the qs utility
 type SystemTest struct {
-	t             *testing.T
 	cfg           *TestConfig
 	cloneRepoPath string
 	repoName      string

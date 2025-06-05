@@ -668,38 +668,40 @@ func (st *SystemTest) getRepoName() string {
 
 // Run executes the complete system test
 func (st *SystemTest) Run() error {
-	// Check prerequisites
+	var (
+		err error
+		re  *RuntimeEnvironment
+	)
+
 	if err := st.checkPrerequisites(); err != nil {
 		return err
 	}
 
-	// Create test environment
-	re, err := st.createTestEnvironment()
+	re, err = st.createTestEnvironment()
 	if err != nil {
 		return err
 	}
 
-	// Run the command
 	stdout, stderr, err := st.runCommand()
 	if err != nil {
 		if err := st.validateStderr(stderr); err != nil {
 			return err
 		}
-
-		return err
 	}
 
-	// Validate stdout
 	if err := st.validateStdout(stdout); err != nil {
 		return err
 	}
 
-	// Check expectations
 	if err := st.checkExpectations(re); err != nil {
 		return err
 	}
 
-	return st.cleanupTestEnvironment()
+	if err := st.cleanupTestEnvironment(); err != nil {
+		return err
+	}
+
+	return err
 }
 
 func (st *SystemTest) cleanupTestEnvironment() error {
@@ -709,13 +711,13 @@ func (st *SystemTest) cleanupTestEnvironment() error {
 	}
 
 	// Optionally remove the upstream and fork repositories
-	if st.cfg.UpstreamState != RemoteStateNull {
+	if st.cfg.UpstreamState == RemoteStateOK {
 		if err := st.removeRepo(st.repoName, st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken); err != nil {
 			return fmt.Errorf("failed to remove upstream repository: %w", err)
 		}
 	}
 
-	if st.cfg.ForkState != RemoteStateNull {
+	if st.cfg.ForkState == RemoteStateOK {
 		if err := st.removeRepo(st.repoName, st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken); err != nil {
 			return fmt.Errorf("failed to remove fork repository: %w", err)
 		}

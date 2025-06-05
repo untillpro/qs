@@ -15,7 +15,6 @@ func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 	repoName := fmt.Sprintf("%s-%s", testConfig.TestID, timestamp)
 
 	return &SystemTest{
-		t:             t,
 		cfg:           testConfig,
 		repoName:      repoName,
 		cloneRepoPath: filepath.Join(TestDataDir, repoName),

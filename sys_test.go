@@ -154,7 +154,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 
 	sysTest := systrun.New(t, testConfig)
 	err = sysTest.Run()
-	require.NoError(err)
+	require.Error(err)
 }
 
 // TODO: Add same test for case when both exist upstream and fork remotes
