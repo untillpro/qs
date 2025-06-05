@@ -66,7 +66,8 @@ func Dev(cmd *cobra.Command, args []string) {
 	if !isMain {
 		fmt.Println("--------------------------------------------------------")
 		fmt.Println("You are in")
-		color.New(color.FgHiCyan).Println(curBranch)
+		repo, org := git.GetRepoAndOrgName()
+		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
 		fmt.Println("Switch to main branch before running 'qs dev'")
 		return
 	}
@@ -110,7 +111,7 @@ func Dev(cmd *cobra.Command, args []string) {
 		var response string
 		parentrepo := git.GetParentRepoName()
 		if len(parentrepo) > 0 {
-			if git.UpstreamNotExist(parentrepo) {
+			if git.UpstreamNotExist() {
 				fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
 				fmt.Scanln(&response)
 				if response != pushYes {

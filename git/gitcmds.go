@@ -316,12 +316,52 @@ func Upload(cfg vcs.CfgUpload) {
 	ExitIfError(err)
 }
 
+func HaveUncommittedChanges() bool {
+	output, _, err := new(exec.PipedExec).
+		Command(git, "status", "--porcelain").
+		RunToStrings()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to check if there are uncommitted changes: %w", err)
+		os.Exit(1)
+
+		return false
+	}
+
+	return len(output) > 0
+}
+
 // Download sources from git repo
 func Download(cfg vcs.CfgDownload) {
-	err := new(exec.PipedExec).
-		Command(git, pull).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	uncommittedChanges := HaveUncommittedChanges()
+	if uncommittedChanges {
+		_, _ = fmt.Fprintln(os.Stderr, "There are uncommitted changes in the repository.")
+		os.Exit(1)
+
+		return
+	}
+
+	branchName, isMain := IamInMainBranch()
+	// pull from origin for dev branch
+	if !isMain {
+		err := new(exec.PipedExec).
+			Command(git, pull, "origin").
+			Run(os.Stdout, os.Stdout)
+		ExitIfError(err)
+
+		return
+	}
+
+	// pull from upstream if exists and current branch is main
+	if !UpstreamNotExist() {
+		err := new(exec.PipedExec).
+			Command(git, pull, "upstream", branchName).
+			Run(os.Stdout, os.Stdout)
+		ExitIfError(err)
+
+		return
+	}
+
+	return
 }
 
 // Gui shows gui
@@ -1089,14 +1129,6 @@ func runPRChecksChecks(parentrepo string, prurl string, c chan *gchResponse) {
 	c <- &gchResponse{stdout, stderr, err}
 }
 
-func GetCurrentBranchName() string {
-	stdout, _, _ := new(exec.PipedExec).
-		Command(git, branch).
-		Command("sed", "-n", "/\\* /s///p").
-		RunToStrings()
-	return strings.TrimSpace(stdout)
-}
-
 // getRemotes shows list of names of all remotes
 func getRemotes() []string {
 	stdout, _, _ := new(exec.PipedExec).
@@ -1332,9 +1364,9 @@ func fillPreCommitFile(myfilepath string) {
 	ExitIfError(err)
 }
 
-func UpstreamNotExist(repo string) bool {
-	remotelist := getRemotes()
-	return len(remotelist) < 2
+func UpstreamNotExist() bool {
+	remoteList := getRemotes()
+	return len(remoteList) < 2
 }
 
 func PRAhead() bool {
@@ -1559,15 +1591,19 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) {
 	}
 }
 
-// Is current Git branch is main ?
-func IamInMainBranch() (string, bool) {
-	stdouts, _, err := new(exec.PipedExec).
+func GetCurrentBranchName() string {
+	branchName, _, err := new(exec.PipedExec).
 		Command(git, branch, "--show-current").
 		RunToStrings()
 	ExitIfError(err)
 
-	curBr := strings.TrimSpace(stdouts)
-	stdouts, _, err = new(exec.PipedExec).
+	return branchName
+}
+
+// Is current Git branch is main ?
+func IamInMainBranch() (string, bool) {
+	curBr := GetCurrentBranchName()
+	stdouts, _, err := new(exec.PipedExec).
 		Command(git, "for-each-ref", "--format=%(upstream:short)", "refs/heads/"+curBr).
 		Command("gawk", "-F/", "{print $2}").
 		RunToStrings()
@@ -1575,8 +1611,7 @@ func IamInMainBranch() (string, bool) {
 	curBrOrigin := strings.TrimSpace(stdouts)
 	mainbr := GetMainBranch()
 
-	repo, org := GetRepoAndOrgName()
-	return org + "/" + repo + "/" + curBr, strings.EqualFold(curBrOrigin, mainbr)
+	return curBr, strings.EqualFold(curBrOrigin, mainbr)
 }
 
 func pullOrigin() {

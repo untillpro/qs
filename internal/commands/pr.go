@@ -47,7 +47,7 @@ func Pr(cmd *cobra.Command, args []string) {
 	}
 
 	var response string
-	if git.UpstreamNotExist(parentrepo) {
+	if git.UpstreamNotExist() {
 		fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
 		fmt.Scanln(&response)
 		if response != pushYes {
