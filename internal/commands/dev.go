@@ -39,10 +39,6 @@ func Dev(cmd *cobra.Command, args []string) {
 		deleteBranches()
 		return
 	}
-	var needAskHook bool = true
-	if cmd.Flag(ignorehookDelParamFull).Value.String() == trueStr {
-		needAskHook = false
-	}
 	// qs dev is running
 	var branch string
 	var notes []string
@@ -70,6 +66,18 @@ func Dev(cmd *cobra.Command, args []string) {
 		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
 		fmt.Println("Switch to main branch before running 'qs dev'")
 		return
+	}
+
+	// check if there are uncommitted changes and stash them
+	stashedUncommittedChanges := false
+	if git.HaveUncommittedChanges() {
+		if err := git.Stash(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, "error stashing changes:", err)
+			os.Exit(1)
+
+			return
+		}
+		stashedUncommittedChanges = true
 	}
 
 	issueNum, githubIssueURL, ok := argContainsGithubIssueLink(args...)
@@ -129,13 +137,21 @@ func Dev(cmd *cobra.Command, args []string) {
 		}
 	default:
 		fmt.Print(pushFail)
+
+		return
 	}
 
 	// Create pre-commit hook to control committing file size
-	if needAskHook {
-		setPreCommitHook()
-	}
+	setPreCommitHook()
+	// Unstash uncommited changes If needed
+	if stashedUncommittedChanges {
+		if err := git.Unstash(); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, "error unstashing changes:", err)
+			os.Exit(1)
 
+			return
+		}
+	}
 }
 
 // branchExists checks if a branch with the given name already exists in the current git repository.

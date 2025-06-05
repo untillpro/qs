@@ -316,6 +316,35 @@ func Upload(cfg vcs.CfgUpload) {
 	ExitIfError(err)
 }
 
+// Stash stashes uncommitted changes
+func Stash() error {
+	_, stderr, err := new(exec.PipedExec).
+		Command("git", "stash").
+		RunToStrings()
+	if err != nil {
+		return fmt.Errorf("git stash failed: %v - %s", err, stderr)
+	}
+
+	return nil
+}
+
+// Unstash pops the latest stash
+func Unstash() error {
+	stdout, stderr, err := new(exec.PipedExec).
+		Command("git", "stash", "pop").
+		RunToStrings()
+	if err != nil {
+		const msg = "No stash entries found"
+		if strings.Contains(stdout, msg) || strings.Contains(stderr, msg) {
+			return nil // No stash to pop, return nil
+		}
+
+		return fmt.Errorf("git stash pop failed: %v", err)
+	}
+
+	return nil
+}
+
 func HaveUncommittedChanges() bool {
 	output, _, err := new(exec.PipedExec).
 		Command(git, "status", "--porcelain").
