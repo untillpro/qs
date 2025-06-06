@@ -15,6 +15,7 @@ import (
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	notesPkg "github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/internal/types"
 	"github.com/untillpro/qs/utils"
 	"github.com/untillpro/qs/vcs"
 )
@@ -238,15 +239,15 @@ func Release() {
 	}
 }
 
-// Upload upload sources to git repo
-func Upload(cfg vcs.CfgUpload) {
+// Upload uploads sources to git repo
+func Upload(commitMessageParts []string) {
 	err := new(exec.PipedExec).
 		Command(git, "add", ".").
 		Run(os.Stdout, os.Stdout)
 	ExitIfError(err)
 
 	params := []string{"commit", "-a"}
-	for _, m := range cfg.Message {
+	for _, m := range commitMessageParts {
 		params = append(params, mimm, m)
 	}
 	_, sterr, err := new(exec.PipedExec).
@@ -267,6 +268,17 @@ func Upload(cfg vcs.CfgUpload) {
 			Run(os.Stdout, os.Stdout)
 	}
 	ExitIfError(err)
+
+	// make pull before push
+	_, _, err = new(exec.PipedExec).
+		Command(git, pull).
+		RunToStrings()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error pulling before push: %v", err)
+		os.Exit(1)
+
+		return
+	}
 
 	for i := 0; i < 2; i++ {
 		_, sterr, err := new(exec.PipedExec).
@@ -631,9 +643,45 @@ func DevIssue(githubIssueURL string, issueNumber int, args ...string) (branch st
 		body = IssueSign + strIssueNum + oneSpace + issueName
 	}
 	// Prepare new notes
-	newNotes := notesPkg.Serialize(githubIssueURL, "", notesPkg.BranchTypeDev)
+	newNotes := notesPkg.Serialize(githubIssueURL, "", types.BranchTypeDev)
 
 	return branch, []string{comment, body, newNotes}
+}
+
+// getBranchTypeByName returns branch type based on branch name
+func getBranchTypeByName(branchName string) types.BranchType {
+	if strings.HasSuffix(branchName, "-dev") {
+		return types.BranchTypeDev
+	}
+	if strings.HasSuffix(branchName, "-pr") {
+		return types.BranchTypePr
+	}
+
+	return types.BranchTypeUnknown
+}
+
+// GetBranchType returns branch type based on notes or branch name
+func GetBranchType() (types.BranchType, error) {
+	notes, ok := GetNotes()
+	if ok {
+		newNotes, err := notesPkg.Deserialize(notes)
+		if err != nil {
+			return getBranchTypeByName(GetCurrentBranchName()), nil
+		}
+
+		if newNotes != nil {
+			switch newNotes.BranchType {
+			case int(types.BranchTypeDev):
+				return types.BranchTypeDev, nil
+			case int(types.BranchTypePr):
+				return types.BranchTypePr, nil
+			default:
+				return types.BranchTypeUnknown, nil
+			}
+		}
+	}
+
+	return getBranchTypeByName(GetCurrentBranchName()), nil
 }
 
 func GetIssueNameByNumber(issueNum string, parentrepo string) string {

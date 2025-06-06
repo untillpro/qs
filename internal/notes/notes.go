@@ -6,19 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/pkg/errors"
+	"github.com/untillpro/qs/internal/types"
 )
 
 // current version of the Notes struct
 // This version is used to track changes in the Notes structure and ensure compatibility.
 // It should be updated whenever there are changes to the structure or its fields.
 var version = "1.0"
-
-type BranchType string
-
-const (
-	BranchTypeDev BranchType = "dev"
-	BranchTypePr             = "pr"
-)
 
 // Notes represents the structure for storing metadata related to branch.
 type Notes struct {
@@ -28,7 +25,7 @@ type Notes struct {
 	GithubIssueURL string `json:"github_issue_url"`
 	// JiraTicketURL is the URL of the Jira ticket associated with the branch.
 	JiraTicketURL string `json:"jira_ticket_url"`
-	BranchType    string `json:"branch_type"` // Optional field to specify the type of branch (e.g., feature, bugfix)
+	BranchType    int    `json:"branch_type"` // Optional field to specify the type of branch (`dev` or `pr`)
 }
 
 // Serialize is a function for serializing given notes field into a JSON string representation.
@@ -36,13 +33,13 @@ type Notes struct {
 func Serialize(
 	githubIssueURL string,
 	jiraTicketURL string,
-	branchType BranchType,
+	branchType types.BranchType,
 ) string {
 	n := Notes{
 		Version:        version,
 		GithubIssueURL: githubIssueURL,
 		JiraTicketURL:  jiraTicketURL,
-		BranchType:     string(branchType),
+		BranchType:     int(branchType),
 	}
 
 	bytes, err := json.Marshal(n)
@@ -55,14 +52,40 @@ func Serialize(
 	return string(bytes)
 }
 
-// Deserialize fetches the first valid Notes structure from a slice of strings.
-func Deserialize(notes []string) *Notes {
+// Deserialize fetches JSON string object and tries to unmarshal it into Notes structure.
+// Parameters:
+// - notes: a slice of strings
+// Returns:
+// - a pointer to Notes structure if successful
+// - an error if unmarshalling fails
+func Deserialize(notes []string) (*Notes, error) {
+	jsonString := strings.Builder{}
+	jsonStringStarted := false
 	for _, note := range notes {
-		var n Notes
-		if err := json.Unmarshal([]byte(note), &n); err == nil {
-			return &n
+		i := 0
+		if !jsonStringStarted {
+			i = strings.Index(note, "{")
+			if i >= 0 {
+				jsonStringStarted = true
+			}
 		}
+
+		if jsonStringStarted {
+			j := strings.LastIndex(note, "}")
+			if j >= 0 {
+				jsonString.WriteString(note[i : j+1])
+				break
+			} else {
+				jsonString.WriteString(note[i:])
+			}
+		}
+
 	}
 
-	return nil
+	var n Notes
+	if err := json.Unmarshal([]byte(jsonString.String()), &n); err == nil {
+		return &n, nil
+	}
+
+	return nil, errors.New("failed to unmarshal notes")
 }

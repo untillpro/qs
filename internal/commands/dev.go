@@ -21,6 +21,7 @@ import (
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/internal/commands/helper"
 	"github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/internal/types"
 )
 
 func Dev(cmd *cobra.Command, args []string) {
@@ -98,6 +99,9 @@ func Dev(cmd *cobra.Command, args []string) {
 		fmt.Print(devMsg)
 		fmt.Scanln(&response)
 	}
+
+	// Add suffix `-dev` for a dev branch
+	branch = branch + "-dev"
 
 	exists, err := branchExists(branch)
 	if err != nil {
@@ -304,7 +308,7 @@ func getJiraBranchName(args ...string) (branch string, comments []string) {
 			} else {
 				jiraTicketURL := matches[0] // Full JIRA ticket URL
 				// Prepare new notes
-				newNotes := notes.Serialize("", jiraTicketURL, notes.BranchTypeDev)
+				newNotes := notes.Serialize("", jiraTicketURL, types.BranchTypeDev)
 				comments = append(comments, newNotes)
 				brname, _ = getBranchName(false, issuename)
 				branch = issueKey + "-" + brname

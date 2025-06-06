@@ -9,6 +9,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.16.0
 	github.com/google/uuid v1.6.0
+	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.10.0
 	github.com/untillpro/goutils v0.0.0-20231201170327-3c33c6010100
