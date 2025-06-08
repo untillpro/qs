@@ -69,7 +69,7 @@ func Dev(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// check if there are uncommitted changes and stash them
+	// Stash current changes if needed
 	stashedUncommittedChanges := false
 	if git.HaveUncommittedChanges() {
 		if err := git.Stash(); err != nil {
@@ -147,7 +147,7 @@ func Dev(cmd *cobra.Command, args []string) {
 
 	// Create pre-commit hook to control committing file size
 	setPreCommitHook()
-	// Unstash uncommited changes If needed
+	// Unstash changes
 	if stashedUncommittedChanges {
 		if err := git.Unstash(); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, "error unstashing changes:", err)
@@ -228,12 +228,13 @@ func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 		if ignoreEmptyArg {
 			return "", []string{}
 		}
-		fmt.Println("Need branch name for dev")
+		_, _ = fmt.Fprintln(os.Stderr, "Need branch name for dev")
 		os.Exit(1)
 	}
 
 	newargs := splitQuotedArgs(args...)
-	comments = newargs
+	comments = make([]string, 0, len(newargs)+1) // 1 for json notes
+	comments = append(comments, newargs...)
 	for i, arg := range newargs {
 		arg = strings.TrimSpace(arg)
 		if i == 0 {
@@ -254,6 +255,10 @@ func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 		branch = branch + "-" + arg
 	}
 	branch = cleanArgfromSpecSymbols(branch)
+	// Prepare new notes
+	newNotes := notes.Serialize("", "", types.BranchTypeDev)
+	comments = append(comments, newNotes)
+
 	return branch, comments
 }
 
@@ -296,6 +301,7 @@ func checkIssueLink(issueURL string) error {
 // If a JIRA URL is found, it generates a branch name in the format "<ISSUE-KEY>-<cleaned-description>".
 // Additionally, it generates comments in the format "[<ISSUE-KEY>] <original-line>".
 func getJiraBranchName(args ...string) (branch string, comments []string) {
+	comments = make([]string, 0, len(args)+1) // 1 for json notes
 	re := regexp.MustCompile(`https://([a-zA-Z0-9-]+)\.atlassian\.net/browse/([A-Z]+-[A-Z0-9-]+)`)
 	for _, arg := range args {
 		if matches := re.FindStringSubmatch(arg); matches != nil {

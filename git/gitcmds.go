@@ -635,17 +635,10 @@ func DevIssue(githubIssueURL string, issueNumber int, args ...string) (branch st
 		os.Exit(1)
 		return
 	}
-
-	issueName := GetIssueNameByNumber(strIssueNum, parentrepo)
-	comment := IssuePRTtilePrefix + " '" + issueName + "' "
-	body := ""
-	if len(issueName) > 0 {
-		body = IssueSign + strIssueNum + oneSpace + issueName
-	}
 	// Prepare new notes
 	newNotes := notesPkg.Serialize(githubIssueURL, "", types.BranchTypeDev)
 
-	return branch, []string{comment, body, newNotes}
+	return branch, []string{newNotes}
 }
 
 // getBranchTypeByName returns branch type based on branch name
@@ -724,6 +717,7 @@ func Dev(branch string, comments []string, branchIsInFork bool) {
 		// otherwise pull from upstream/main
 		remote = "upstream"
 	}
+	// Pull from UpstreamRepo to MainBranch with rebase
 	err = new(exec.PipedExec).
 		Command(git, pull, "--rebase", remote, mainbrach, "--no-edit").
 		Run(os.Stdout, os.Stdout)
