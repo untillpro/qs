@@ -643,38 +643,38 @@ func DevIssue(githubIssueURL string, issueNumber int, args ...string) (branch st
 
 // getBranchTypeByName returns branch type based on branch name
 func getBranchTypeByName(branchName string) types.BranchType {
-	if strings.HasSuffix(branchName, "-dev") {
+	switch {
+	case strings.HasSuffix(branchName, "-dev"):
 		return types.BranchTypeDev
-	}
-	if strings.HasSuffix(branchName, "-pr") {
+	case strings.HasSuffix(branchName, "-pr"):
 		return types.BranchTypePr
+	default:
+		return types.BranchTypeUnknown
 	}
-
-	return types.BranchTypeUnknown
 }
 
 // GetBranchType returns branch type based on notes or branch name
-func GetBranchType() (types.BranchType, error) {
+func GetBranchType() types.BranchType {
 	notes, ok := GetNotes()
 	if ok {
 		newNotes, err := notesPkg.Deserialize(notes)
 		if err != nil {
-			return getBranchTypeByName(GetCurrentBranchName()), nil
+			return getBranchTypeByName(GetCurrentBranchName())
 		}
 
 		if newNotes != nil {
 			switch newNotes.BranchType {
 			case int(types.BranchTypeDev):
-				return types.BranchTypeDev, nil
+				return types.BranchTypeDev
 			case int(types.BranchTypePr):
-				return types.BranchTypePr, nil
+				return types.BranchTypePr
 			default:
-				return types.BranchTypeUnknown, nil
+				return types.BranchTypeUnknown
 			}
 		}
 	}
 
-	return getBranchTypeByName(GetCurrentBranchName()), nil
+	return getBranchTypeByName(GetCurrentBranchName())
 }
 
 func GetIssueNameByNumber(issueNum string, parentrepo string) string {

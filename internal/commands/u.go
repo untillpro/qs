@@ -25,14 +25,7 @@ func U(cfgStatus vcs.CfgStatus, cfgUpload vcs.CfgUpload, args []string) {
 	}
 
 	// find out type of the branch
-	branchType, err := git.GetBranchType()
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error getting branch type: %v", err)
-		os.Exit(1)
-
-		return
-	}
-
+	branchType := git.GetBranchType()
 	// if branch type is unknown, we cannot proceed
 	if branchType == types.BranchTypeUnknown {
 		_, _ = fmt.Fprintln(os.Stderr, "You must be on either a pr or dev branch")

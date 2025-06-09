@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/internal/commands/helper"
+	"github.com/untillpro/qs/internal/types"
 )
 
 func Pr(cmd *cobra.Command, args []string) {
@@ -32,6 +33,13 @@ func Pr(cmd *cobra.Command, args []string) {
 			prurl = args[1]
 		}
 		bDirectPR = false
+	}
+
+	// find out type of the branch
+	branchType := git.GetBranchType()
+	if branchType != types.BranchTypeDev {
+		_, _ = fmt.Fprintln(os.Stderr, "You must be on dev branch")
+		os.Exit(1)
 	}
 
 	parentrepo := git.GetParentRepoName()
