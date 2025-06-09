@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/internal/commands/helper"
 	"github.com/untillpro/qs/internal/types"
@@ -39,6 +40,13 @@ func Pr(cmd *cobra.Command, args []string) {
 	branchType := git.GetBranchType()
 	if branchType != types.BranchTypeDev {
 		_, _ = fmt.Fprintln(os.Stderr, "You must be on dev branch")
+		os.Exit(1)
+	}
+
+	// PR is not created yet
+	prExists := doesPrExist()
+	if prExists {
+		_, _ = fmt.Fprintln(os.Stderr, "Pull request already exists for this branch")
 		os.Exit(1)
 	}
 
@@ -138,6 +146,27 @@ func Pr(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		return
 	}
+}
+
+// doesPrExist checks if a pull request exists for the current branch.
+func doesPrExist() bool {
+	branchName := git.GetCurrentBranchName()
+	stdout, _, err := new(exec.PipedExec).
+		Command("gh", "pr", "list", "--head", branchName).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	if strings.Contains(stdout, "no pull requests match your search") {
+		return false
+	}
+
+	// Otherwise, assume PR exists
+	if stdout == "" {
+		// safety check: gh may sometimes return nothing at all
+		return false
+	}
+
+	return true
 }
 
 func issueNote(notes []string) bool {
