@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +10,7 @@ import (
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/internal/commands/helper"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/internal/types"
 )
 
@@ -22,18 +23,6 @@ func Pr(cmd *cobra.Command, args []string) {
 	}
 	if !helper.CheckGH() {
 		return
-	}
-	var prurl string
-	bDirectPR := true
-	if len(args) > 0 {
-		if args[0] != prMergeParam {
-			fmt.Println(errMsgPRUnkown)
-			return
-		}
-		if len(args) > 1 {
-			prurl = args[1]
-		}
-		bDirectPR = false
 	}
 
 	// find out type of the branch
@@ -85,67 +74,185 @@ func Pr(cmd *cobra.Command, args []string) {
 		git.MergeFromUpstreamRebase()
 	}
 
-	var err error
-	if bDirectPR {
-
-		if _, ok := git.ChangedFilesExist(); ok {
-			fmt.Println(errMsgModFiles)
-			return
-		}
-
-		notes, ok := git.GetNotes()
-		issueNum := ""
-		issueok := false
-		if !ok || issueNote(notes) {
-			issueNum, issueok = getIssueNumFromNotes(notes)
-			if !issueok {
-				issueNum, issueok = git.GetIssueNumFromBranchName(parentrepo, curBranch)
-			}
-		}
-		if !ok && issueok {
-			// Try to get github issue name by branch name
-			notes = git.GetIssuePRTitle(issueNum, parentrepo)
-			ok = true
-		}
-		if !ok {
-			// Ask PR title
-			fmt.Println(errMsgPRNotesNotFound)
-			scanner := bufio.NewScanner(os.Stdin)
-			scanner.Scan()
-
-			prnotes := scanner.Text()
-			prnotes = strings.TrimSpace(prnotes)
-			notes = append(notes, prnotes)
-		}
-		strnotes := git.GetBodyFromNotes(notes)
-		if len(strings.TrimSpace(strnotes)) > 0 {
-			strnotes = strings.ReplaceAll(strnotes, "Resolves ", "")
-		} else {
-			strnotes = GetCommentForPR(notes)
-		}
-		if len(strnotes) > 0 {
-			needDraft := false
-			if cmd.Flag(prdraftParamFull).Value.String() == trueStr {
-				needDraft = true
-			}
-			prMsg := strings.ReplaceAll(prConfirm, "$prname", strnotes)
-			fmt.Print(prMsg)
-			fmt.Scanln(&response)
-			switch response {
-			case pushYes:
-				err = git.MakePR(strnotes, notes, needDraft)
-			default:
-				fmt.Print(pushFail)
-			}
-			response = ""
-		}
-	} else {
-		err = git.MakePRMerge(prurl)
-	}
-	if err != nil {
-		fmt.Println(err)
+	// Check if there are any modified files in the current branch
+	if _, ok := git.ChangedFilesExist(); ok {
+		fmt.Println(errMsgModFiles)
 		return
 	}
+
+	// Create a new branch for the PR
+	prTitle := createPRBranch()
+	// Extract notes before any operations
+	notes, ok := git.GetNotes()
+	if !ok {
+		_, _ = fmt.Fprintln(os.Stderr, "Warning: No notes found in dev branch")
+		os.Exit(1)
+	}
+
+	// Ask for confirmation before creating the PR
+	needDraft := false
+	if cmd.Flag(prdraftParamFull).Value.String() == trueStr {
+		needDraft = true
+	}
+	prMsg := strings.ReplaceAll(prConfirm, "$prname", prTitle)
+	fmt.Print(prMsg)
+	_, _ = fmt.Scanln(&response)
+	switch response {
+	case pushYes:
+		err := git.MakePR(prTitle, notes, needDraft)
+		git.ExitIfError(err)
+	default:
+		fmt.Print(pushFail)
+	}
+}
+
+// getIssueDescription retrieves the title and body of a GitHub issue from its URL.
+func getIssueDescription(issueURL string) (string, error) {
+	// Extract issue number from URL
+	parts := strings.Split(issueURL, "/")
+	if len(parts) < 1 {
+		return "", fmt.Errorf("invalid issue URL format: %s", issueURL)
+	}
+	issueNumber := parts[len(parts)-1]
+
+	// Extract owner and repo from URL
+	repoURL, err := convertIssuesURLToRepoURL(issueURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse repo from issue URL: %w", err)
+	}
+
+	urlParts := strings.Split(repoURL, "/")
+	if len(urlParts) < 5 {
+		return "", fmt.Errorf("invalid GitHub URL format: %s", repoURL)
+	}
+	owner := urlParts[3]
+	repo := urlParts[4]
+
+	// Use gh CLI to get issue details in JSON format
+	stdout, stderr, err := new(exec.PipedExec).
+		Command("gh", "issue", "view", issueNumber, "--repo", fmt.Sprintf("%s/%s", owner, repo), "--json", "title,body").
+		RunToStrings()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get issue: %w, stderr: %s", err, stderr)
+	}
+
+	// Parse JSON response
+	var issueData struct {
+		Title string `json:"title"`
+		Body  string `json:"body"`
+	}
+
+	if err := json.Unmarshal([]byte(stdout), &issueData); err != nil {
+		return "", fmt.Errorf("failed to parse issue data: %w", err)
+	}
+
+	return issueData.Title, nil
+}
+
+// Helper function to convert issue URL to repository URL
+func convertIssuesURLToRepoURL(issueURL string) (string, error) {
+	// Remove trailing issue number
+	issuesParts := strings.Split(issueURL, "/issues/")
+	if len(issuesParts) < 2 {
+		return "", fmt.Errorf("invalid GitHub issue URL format: %s", issueURL)
+	}
+
+	repoURL := issuesParts[0]
+	return repoURL, nil
+}
+
+// createPRBranch creates a new branch for the pull request and checks out on it.
+// Returns:
+// - title of the pull request
+func createPRBranch() string {
+	// Save current branch name (dev branch)
+	devBranchName := git.GetCurrentBranchName()
+
+	// Extract notes before any operations
+	notes, ok := git.GetNotes()
+	if !ok {
+		_, _ = fmt.Fprintln(os.Stderr, "Warning: No notes found in dev branch")
+		os.Exit(1)
+	}
+
+	// checking out on main branch
+	mainBranch := git.GetMainBranch()
+	_, _, err := new(exec.PipedExec).
+		Command("git", "checkout", mainBranch).
+		Command("git", "pull", "origin", mainBranch).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	// building pr branch name
+	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
+
+	// creating new branch for PR from updated main
+	_, _, err = new(exec.PipedExec).
+		Command("git", "checkout", "-b", prBranchName).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	// Squash merge dev branch commits
+	_, _, err = new(exec.PipedExec).
+		Command("git", "merge", "--squash", devBranchName).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	// get json notes from dev branch
+	newNotes, err := notesPkg.Deserialize(notes)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error deserializing notes: %v\n", err)
+		os.Exit(1)
+	}
+
+	prTitle := newNotes.GithubIssueURL
+	// get issue description from notes for commit message
+	issueDescription, err := getIssueDescription(prTitle)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error retrieving issue description: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create commit with the squashed changes
+	_, _, err = new(exec.PipedExec).
+		Command("git", "commit", "-m", issueDescription).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	// Add empty commit to create commit object and link notes to it
+	err = new(exec.PipedExec).
+		Command("git", "commit", "--allow-empty", "-m", git.MsgCommitForNotes).
+		Run(os.Stdout, os.Stdout)
+	git.ExitIfError(err)
+
+	newNotes.BranchType = int(types.BranchTypePr)
+	// Add empty commit to create commit object and link notes to it
+	git.AddNotes([]string{newNotes.String()})
+
+	// Push notes to origin
+	err = new(exec.PipedExec).
+		Command("git", "push", "origin", "ref/notes/*").
+		Run(os.Stdout, os.Stdout)
+
+	// Push PR branch to origin
+	_, _, err = new(exec.PipedExec).
+		Command("git", "push", "-u", "origin", prBranchName).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	// Delete dev branch locally and remotely
+	_, _, err = new(exec.PipedExec).
+		Command("git", "branch", "-D", devBranchName).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	_, _, err = new(exec.PipedExec).
+		Command("git", "push", "origin", "--delete", devBranchName).
+		RunToStrings()
+	git.ExitIfError(err)
+
+	return prTitle
 }
 
 // doesPrExist checks if a pull request exists for the current branch.

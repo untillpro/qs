@@ -100,7 +100,7 @@ func Dev(cmd *cobra.Command, args []string) {
 		fmt.Scanln(&response)
 	}
 
-	// Add suffix `-dev` for a dev branch
+	// Add suffix "-dev" for a dev branch
 	branch = branch + "-dev"
 
 	exists, err := branchExists(branch)

@@ -30,6 +30,20 @@ type Notes struct {
 
 // Serialize is a function for serializing given notes field into a JSON string representation.
 // Returns a JSON string representation of the notes
+func (nt *Notes) String() string {
+	bytes, err := json.Marshal(nt)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "failed to marshal notes: %w", err)
+		os.Exit(1)
+
+		return ""
+	}
+
+	return string(bytes)
+}
+
+// Serialize is a function for serializing given notes field into a JSON string representation.
+// Returns a JSON string representation of the notes
 func Serialize(
 	githubIssueURL string,
 	jiraTicketURL string,

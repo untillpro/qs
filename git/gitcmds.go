@@ -78,7 +78,7 @@ type gchResponse struct {
 // ExitIfFalse s.e.
 func ExitIfFalse(cond bool, args ...interface{}) {
 	if !cond {
-		fmt.Fprintln(os.Stderr, args...)
+		_, err = fmt.Fprintln(os.Stderr, args...)
 		os.Exit(1)
 	}
 }
@@ -86,8 +86,8 @@ func ExitIfFalse(cond bool, args ...interface{}) {
 // ExitIfError s.e.
 func ExitIfError(err error, args ...interface{}) {
 	if nil != err {
-		fmt.Fprintln(os.Stderr, args...)
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, args...)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -760,7 +760,7 @@ func Dev(branch string, comments []string, branchIsInFork bool) {
 	ExitIfError(err)
 
 	// Add empty commit to create commit object and link notes to it
-	addNotes(comments)
+	AddNotes(comments)
 	// Push notes to origin
 	err = new(exec.PipedExec).
 		Command(git, push, origin, "ref/notes/*").
@@ -780,7 +780,7 @@ func Dev(branch string, comments []string, branchIsInFork bool) {
 	}
 }
 
-func addNotes(comments []string) {
+func AddNotes(comments []string) {
 	if len(comments) == 0 {
 		return
 	}
