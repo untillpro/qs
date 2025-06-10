@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,21 +25,25 @@ import (
 	"github.com/untillpro/qs/internal/types"
 )
 
-func Dev(cmd *cobra.Command, args []string) {
+func Dev(cmd *cobra.Command, args []string) error {
 	globalConfig()
-	git.CheckIfGitRepo()
-	// TODO: uncomment before PR
-	//if !helper.CheckQSver() {
-	//	return
-	//}
+	_, err := git.CheckIfGitRepo()
+	if err != nil {
+		return err
+	}
+
+	if !helper.CheckQsVer() {
+		return fmt.Errorf("qs version check failed")
+	}
 	if !helper.CheckGH() {
-		return
+		return fmt.Errorf("GitHub CLI check failed")
 	}
 
 	// qs dev -d is running
 	if cmd.Flag(devDelParamFull).Value.String() == trueStr {
 		deleteBranches()
-		return
+
+		return nil
 	}
 	// qs dev is running
 	var branch string
@@ -52,11 +57,11 @@ func Dev(cmd *cobra.Command, args []string) {
 	remoteURL := git.GetRemoteUpstreamURL()
 	noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == trueStr)
 	if !noForkAllowed {
-		parentrepo := git.GetParentRepoName()
-		if len(parentrepo) == 0 { // main repository, not forked
+		parentRepo := git.GetParentRepoName()
+		if len(parentRepo) == 0 { // main repository, not forked
 			repo, org := git.GetRepoAndOrgName()
-			fmt.Printf("You are in %s/%s repo\nExecute 'qs fork' first\n", org, repo)
-			return
+
+			return fmt.Errorf("You are in %s/%s repo\nExecute 'qs fork' first\n", org, repo)
 		}
 	}
 	curBranch, isMain := git.IamInMainBranch()
@@ -65,18 +70,15 @@ func Dev(cmd *cobra.Command, args []string) {
 		fmt.Println("You are in")
 		repo, org := git.GetRepoAndOrgName()
 		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
-		fmt.Println("Switch to main branch before running 'qs dev'")
-		return
+
+		return errors.New("Switch to main branch before running 'qs dev'")
 	}
 
 	// Stash current changes if needed
 	stashedUncommittedChanges := false
 	if git.HaveUncommittedChanges() {
 		if err := git.Stash(); err != nil {
-			_, _ = fmt.Fprintln(os.Stderr, "error stashing changes:", err)
-			os.Exit(1)
-
-			return
+			return fmt.Errorf("error stashing changes: %w", err)
 		}
 		stashedUncommittedChanges = true
 	}
@@ -84,7 +86,7 @@ func Dev(cmd *cobra.Command, args []string) {
 	issueNum, githubIssueURL, ok := argContainsGithubIssueLink(args...)
 	if ok { // github issue
 		fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response == pushYes {
 			// Remote developer branch, linked to issue is created
 			branch, notes = git.DevIssue(githubIssueURL, issueNum, args...)
@@ -97,7 +99,7 @@ func Dev(cmd *cobra.Command, args []string) {
 		}
 		devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 		fmt.Print(devMsg)
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 	}
 
 	// Add suffix "-dev" for a dev branch
@@ -105,16 +107,10 @@ func Dev(cmd *cobra.Command, args []string) {
 
 	exists, err := branchExists(branch)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "error checking branch existence:", err)
-		os.Exit(1)
-
-		return
+		return fmt.Errorf("error checking branch existence: %w", err)
 	}
 	if exists {
-		_, _ = fmt.Fprintf(os.Stderr, "dev branch '%s' already exists", branch)
-		os.Exit(1)
-
-		return
+		return fmt.Errorf("dev branch '%s' already exists", branch)
 	}
 
 	switch response {
@@ -125,37 +121,41 @@ func Dev(cmd *cobra.Command, args []string) {
 		if len(parentrepo) > 0 {
 			if git.UpstreamNotExist() {
 				fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
-				fmt.Scanln(&response)
+				_, _ = fmt.Scanln(&response)
 				if response != pushYes {
 					fmt.Print(pushFail)
-					return
+					return nil
 				}
 				response = ""
 				git.MakeUpstreamForBranch(parentrepo)
 			}
 		}
-		if len(remoteURL) == 0 {
-			git.Dev(branch, notes, false)
-		} else {
-			git.Dev(branch, notes, true)
+
+		branchIsFork := false
+		if len(remoteURL) > 0 {
+			branchIsFork = true
+		}
+		if err := git.Dev(branch, notes, branchIsFork); err != nil {
+			return err
 		}
 	default:
 		fmt.Print(pushFail)
 
-		return
+		return nil
 	}
 
 	// Create pre-commit hook to control committing file size
-	setPreCommitHook()
+	if err := setPreCommitHook(); err != nil {
+		logger.Verbose("Error setting pre-commit hook:", err)
+	}
 	// Unstash changes
 	if stashedUncommittedChanges {
 		if err := git.Unstash(); err != nil {
-			_, _ = fmt.Fprintln(os.Stderr, "error unstashing changes:", err)
-			os.Exit(1)
-
-			return
+			return fmt.Errorf("error unstashing changes: %w", err)
 		}
 	}
+
+	return nil
 }
 
 // branchExists checks if a branch with the given name already exists in the current git repository.
@@ -205,19 +205,20 @@ func getArgStringFromClipboard() string {
 	return newarg
 }
 
-func setPreCommitHook() {
+func setPreCommitHook() error {
 	var response string
 	if git.LocalPreCommitHookExist() {
-		return
+		return nil
 	}
 
 	fmt.Print("\nGit pre-commit hook, preventing commit large files does not exist.\nDo you want to set hook(y/n)?")
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
+
 	switch response {
 	case pushYes:
-		git.SetLocalPreCommitHook()
+		return git.SetLocalPreCommitHook()
 	default:
-		return
+		return nil
 	}
 }
 
@@ -501,11 +502,12 @@ func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
 }
 
 func globalConfig() {
+	logLevel := logger.LogLevelInfo
 	if verbose {
-		logger.SetLogLevel(logger.LogLevelVerbose)
-	} else {
-		logger.SetLogLevel(logger.LogLevelInfo)
+		logLevel = logger.LogLevelVerbose
 	}
+
+	logger.SetLogLevel(logLevel)
 }
 
 func deleteBranches() {

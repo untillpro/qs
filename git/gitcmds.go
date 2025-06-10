@@ -17,7 +17,6 @@ import (
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/internal/types"
 	"github.com/untillpro/qs/utils"
-	"github.com/untillpro/qs/vcs"
 )
 
 const (
@@ -78,7 +77,7 @@ type gchResponse struct {
 // ExitIfFalse s.e.
 func ExitIfFalse(cond bool, args ...interface{}) {
 	if !cond {
-		_, err = fmt.Fprintln(os.Stderr, args...)
+		_, _ = fmt.Fprintln(os.Stderr, args...)
 		os.Exit(1)
 	}
 }
@@ -92,8 +91,8 @@ func ExitIfError(err error, args ...interface{}) {
 	}
 }
 
-func CheckIfGitRepo() string {
-	stdouts, _, err := new(exec.PipedExec).
+func CheckIfGitRepo() (string, error) {
+	stdout, _, err := new(exec.PipedExec).
 		Command("git", "status", "-s").
 		RunToStrings()
 	if err != nil {
@@ -101,16 +100,16 @@ func CheckIfGitRepo() string {
 			err = errors.New("this is not a git repository")
 		}
 	}
-	ExitIfError(err)
-	return stdouts
+
+	return stdout, err
 }
 
 // ChangedFilesExist s.e.
-func ChangedFilesExist() (uncommitedFiles string, exist bool) {
-	files := CheckIfGitRepo()
-	uncommitedFiles = strings.TrimSpace(files)
-	exist = len(uncommitedFiles) > 0
-	return uncommitedFiles, exist
+func ChangedFilesExist() (string, bool, error) {
+	files, err := CheckIfGitRepo()
+	uncommitedFiles := strings.TrimSpace(files)
+
+	return uncommitedFiles, len(uncommitedFiles) > 0, err
 }
 
 // Stash entries exist ?
@@ -124,23 +123,29 @@ func stashEntiresExist() bool {
 }
 
 // Status shows git repo status
-func Status(cfg vcs.CfgStatus) {
-	stdout, _, err := new(exec.PipedExec).
+func Status() error {
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("git", "remote", "-v").
 		Command("grep", fetch).
 		Command("sed", "s/(fetch)//").
 		RunToStrings()
 	if err != nil {
+		if len(stderr) > 0 {
+			_, _ = fmt.Fprintln(os.Stderr, stderr)
+		}
 		if strings.Contains(err.Error(), err128) {
-			err = errors.New("this is not a git repository")
+			return errors.New("this is not a git repository")
 		}
 	}
-	ExitIfError(err)
-	fmt.Print(stdout)
-	err = new(exec.PipedExec).
+
+	if err != nil {
+		return fmt.Errorf("git remote -v failed: %w", err)
+	}
+	_, _ = fmt.Fprintln(os.Stdout, stdout)
+
+	return new(exec.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
 }
 
 /*
@@ -158,20 +163,26 @@ func Status(cfg vcs.CfgStatus) {
 */
 
 // Release current branch. Remove PreRelease, tag, bump version, push
-func Release() {
+func Release() error {
 
 	// *************************************************
 	logger.Info("Pulling")
 	err := new(exec.PipedExec).
 		Command("git", pull).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	// *************************************************
 	logger.Info("Reading current version")
 	currentVersion, err := utils.ReadVersion()
-	ExitIfError(err, "Error reading file 'version'")
-	ExitIfFalse(len(currentVersion.PreRelease) > 0, "pre-release part of version does not exist: "+currentVersion.String())
+	if err != nil {
+		return fmt.Errorf("Error reading file 'version': %w", err)
+	}
+	if len(currentVersion.PreRelease) <= 0 {
+		return errors.New("pre-release part of version does not exist: " + currentVersion.String())
+	}
 
 	// Calculate target version
 
@@ -180,12 +191,16 @@ func Release() {
 
 	fmt.Printf("Version %v will be tagged, bumped and pushed, agree? [y]", targetVersion)
 	var response string
-	fmt.Scanln(&response)
-	ExitIfFalse(response == "y")
+	_, _ = fmt.Scanln(&response)
+	if response != "y" {
+		return errors.New("release aborted by user")
+	}
 
 	// *************************************************
 	logger.Info("Updating 'version' file")
-	ExitIfError(targetVersion.Save())
+	if err := targetVersion.Save(); err != nil {
+		return fmt.Errorf("Error saving file 'version': %w", err)
+	}
 
 	// *************************************************
 	logger.Info("Committing target version")
@@ -194,7 +209,9 @@ func Release() {
 		err = new(exec.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
 
 	// *************************************************
@@ -206,7 +223,9 @@ func Release() {
 		err = new(exec.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
 
 	// *************************************************
@@ -215,7 +234,9 @@ func Release() {
 	{
 		newVersion.Minor++
 		newVersion.PreRelease = "SNAPSHOT"
-		ExitIfError(newVersion.Save())
+		if err := targetVersion.Save(); err != nil {
+			return fmt.Errorf("Error saving file 'version': %w", err)
+		}
 	}
 
 	// *************************************************
@@ -225,7 +246,9 @@ func Release() {
 		err = new(exec.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
 
 	// *************************************************
@@ -235,16 +258,22 @@ func Release() {
 		err = new(exec.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 // Upload uploads sources to git repo
-func Upload(commitMessageParts []string) {
+func Upload(commitMessageParts []string) error {
 	err := new(exec.PipedExec).
 		Command(git, "add", ".").
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	params := []string{"commit", "-a"}
 	for _, m := range commitMessageParts {
@@ -260,24 +289,23 @@ func Upload(commitMessageParts []string) {
 		fmt.Print("Do you want to commit anyway(y/n)?")
 		fmt.Scanln(&response)
 		if response != "y" {
-			return
+			return nil
 		}
 		params = append(params, "-n")
 		err = new(exec.PipedExec).
 			Command(git, params...).
 			Run(os.Stdout, os.Stdout)
 	}
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	// make pull before push
 	_, _, err = new(exec.PipedExec).
 		Command(git, pull).
 		RunToStrings()
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error pulling before push: %v", err)
-		os.Exit(1)
-
-		return
+		return fmt.Errorf("error pulling before push: %w", err)
 	}
 
 	for i := 0; i < 2; i++ {
@@ -288,15 +316,14 @@ func Upload(commitMessageParts []string) {
 			if strings.Contains(sterr, "has no upstream") {
 				remotelist := getRemotes()
 				if len(remotelist) == 0 {
-					fmt.Printf("\nRemote not found. It's somethig wrong with your repository\n ")
-					return
+					return errors.New("Remote not found. It's somethig wrong with your repository")
 				}
 				brName := GetCurrentBranchName() // Suggest to execute git push --set-upstream origin <branch-name>
 				var response string
 
 				if len(remotelist) == 1 {
 					fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]? ", brName)
-					fmt.Scanln(&response)
+					_, _ = fmt.Scanln(&response)
 					if response == pushYes {
 						setUpstreamBranch("origin", brName)
 						continue
@@ -311,13 +338,15 @@ func Upload(commitMessageParts []string) {
 				}
 				err := survey.AskOne(prompt, &choice)
 				if err != nil {
-					fmt.Println(err.Error())
+					return err
 				}
 
 				fmt.Printf("\nYour choice is %s.\nI am going to execute 'git push --set-upstream %s %s'.\nAgree[y/n]? ", choice, choice, brName)
 				fmt.Scanln(&response)
 				if response == pushYes {
-					setUpstreamBranch(choice, brName)
+					if err := setUpstreamBranch(choice, brName); err != nil {
+						return err
+					}
 					continue
 				}
 			}
@@ -325,7 +354,7 @@ func Upload(commitMessageParts []string) {
 		break
 	}
 
-	ExitIfError(err)
+	return err
 }
 
 // Stash stashes uncommitted changes
@@ -372,45 +401,35 @@ func HaveUncommittedChanges() bool {
 }
 
 // Download sources from git repo
-func Download(cfg vcs.CfgDownload) {
+func Download() error {
 	uncommittedChanges := HaveUncommittedChanges()
 	if uncommittedChanges {
-		_, _ = fmt.Fprintln(os.Stderr, "There are uncommitted changes in the repository.")
-		os.Exit(1)
-
-		return
+		return errors.New("There are uncommitted changes in the repository.")
 	}
 
 	branchName, isMain := IamInMainBranch()
 	// pull from origin for dev branch
 	if !isMain {
-		err := new(exec.PipedExec).
-			Command(git, pull, "origin").
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		err := new(exec.PipedExec).Command(git, pull, "origin").Run(os.Stdout, os.Stdout)
 
-		return
+		return err
 	}
 
 	// pull from upstream if exists and current branch is main
 	if !UpstreamNotExist() {
-		err := new(exec.PipedExec).
-			Command(git, pull, "upstream", branchName).
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		err := new(exec.PipedExec).Command(git, pull, "upstream", branchName).Run(os.Stdout, os.Stdout)
 
-		return
+		return err
 	}
 
-	return
+	return nil
 }
 
 // Gui shows gui
-func Gui() {
-	err := new(exec.PipedExec).
+func Gui() error {
+	return new(exec.PipedExec).
 		Command(git, "gui").
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
 }
 
 func getFullRepoAndOrgName() string {
@@ -446,37 +465,40 @@ func IsMainOrg() bool {
 }
 
 // Fork repo
-func Fork() (repo string, err error) {
+func Fork() (string, error) {
 	repo, org := GetRepoAndOrgName()
 	if len(repo) == 0 {
-		fmt.Println(repoNotFound)
-		os.Exit(1)
+		return "", errors.New(repoNotFound)
 	}
-	remoteurl := GetRemoteUpstreamURL()
-	if len(remoteurl) > 0 {
+
+	remoteURL := GetRemoteUpstreamURL()
+	if len(remoteURL) > 0 {
 		return repo, errors.New(ErrAlreadyForkedMsg)
 	}
 
 	if !IsMainOrg() {
 		return repo, errors.New(ErrAlreadyForkedMsg)
 	}
-	_, chExist := ChangedFilesExist()
+
+	_, chExist, err := ChangedFilesExist()
+	if err != nil {
+		return "", err
+	}
 	if chExist {
-		err = new(exec.PipedExec).
-			Command(git, "add", ".").
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
-		err = new(exec.PipedExec).
-			Command(git, "stash").
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err := new(exec.PipedExec).Command(git, "add", ".").Run(os.Stdout, os.Stdout); err != nil {
+			return repo, err
+		}
+
+		if err := new(exec.PipedExec).Command(git, "stash").Run(os.Stdout, os.Stdout); err != nil {
+			return repo, err
+		}
 	}
 
-	err = new(exec.PipedExec).
-		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
+	err = new(exec.PipedExec).Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
 		logger.Error("Fork error:", err)
+
 		return repo, err
 	}
 	logger.Info("Fork error:", err)
@@ -507,16 +529,19 @@ func GetRemoteUpstreamURL() string {
 	return strings.TrimSpace(stdouts)
 }
 
-func PopStashedFiles() {
+func PopStashedFiles() error {
 	if !stashEntiresExist() {
-		return
+		return nil
 	}
+
 	_, stderr, err := new(exec.PipedExec).
 		Command(git, "stash", "pop").
 		RunToStrings()
 	if err != nil {
-		logger.Error("PopStashedFiles error:", stderr)
+		return fmt.Errorf("PopStashedFiles error: %w", stderr)
 	}
+
+	return nil
 }
 
 func GetMainBranch() string {
@@ -539,40 +564,43 @@ func getUserName() string {
 	return strings.TrimSpace(stdouts)
 }
 
-func MakeUpstreamForBranch(parentrepo string) {
+func MakeUpstreamForBranch(parentRepo string) error {
 	_, _, err := new(exec.PipedExec).
-		Command(git, "remote", "add", "upstream", "https://github.com/"+parentrepo).
+		Command(git, "remote", "add", "upstream", "https://github.com/"+parentRepo).
 		RunToStrings()
-	ExitIfError(err)
+	return err
 }
 
 // MakeUpstream s.e.
-func MakeUpstream(repo string) {
-	user := getUserName()
+func MakeUpstream(repo string) error {
+	userName := getUserName()
 
-	if len(user) == 0 {
+	if len(userName) == 0 {
 		fmt.Println(userNotFound)
 		os.Exit(1)
 	}
 
-	mainbranch := GetMainBranch()
-	err := new(exec.PipedExec).
-		Command(git, "remote", "rename", "origin", "upstream").
+	mainBranch := GetMainBranch()
+	err := new(exec.PipedExec).Command(git, "remote", "rename", "origin", "upstream").Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return err
+	}
+
+	err = new(exec.PipedExec).Command(git, "remote", "add", "origin", "https://github.com/"+userName+slash+repo).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-	err = new(exec.PipedExec).
-		Command(git, "remote", "add", "origin", "https://github.com/"+user+slash+repo).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
+	// delay to ensure remote is added
 	time.Sleep(1 * time.Second)
-	err = new(exec.PipedExec).
-		Command(git, "fetch", "origin").
+
+	err = new(exec.PipedExec).Command(git, "fetch", "origin").Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return err
+	}
+
+	return new(exec.PipedExec).Command(git, branch, "--set-upstream-to", originSlash+mainBranch, mainBranch).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
-	err = new(exec.PipedExec).
-		Command(git, branch, "--set-upstream-to", originSlash+mainbranch, mainbranch).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
 }
 
 func GetIssuerepoFromUrl(url string) (reponame string) {
@@ -694,22 +722,31 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 // branch - branch name
 // comments - comments for branch
 // branchIsInFork - if true, then branch is in forked repo
-func Dev(branch string, comments []string, branchIsInFork bool) {
-	mainbrach := GetMainBranch()
-	_, chExist := ChangedFilesExist()
-	var err error
+func Dev(branch string, comments []string, branchIsInFork bool) error {
+	mainBranch := GetMainBranch()
+	_, chExist, err := ChangedFilesExist()
+	if err != nil {
+		return err
+	}
+
 	if chExist {
 		err = new(exec.PipedExec).
 			Command(git, "add", ".").
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 		err = new(exec.PipedExec).
 			Command(git, "stash").
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
 
-	pullOrigin()
+	if err := pullOrigin(); err != nil {
+		return err
+	}
 
 	// If branch is not in fork, then pull from origin/main
 	remote := "origin"
@@ -719,45 +756,56 @@ func Dev(branch string, comments []string, branchIsInFork bool) {
 	}
 	// Pull from UpstreamRepo to MainBranch with rebase
 	err = new(exec.PipedExec).
-		Command(git, pull, "--rebase", remote, mainbrach, "--no-edit").
+		Command(git, pull, "--rebase", remote, mainBranch, "--no-edit").
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	_, stderr, err := new(exec.PipedExec).
-		Command(git, "checkout", mainbrach).
+		Command(git, "checkout", mainBranch).
 		RunToStrings()
 
 	if err != nil {
 		if strings.Contains(err.Error(), err128) && strings.Contains(stderr, "matched multiple") {
-			err = new(exec.PipedExec).
-				Command(git, "checkout", "--track", originSlash+mainbrach).
+			err = new(exec.PipedExec).Command(git, "checkout", "--track", originSlash+mainBranch).
 				Run(os.Stdout, os.Stdout)
-			ExitIfError(err)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	if branchIsInFork {
+		err = new(exec.PipedExec).Command(git, pull, "-p", "upstream", mainBranch).Run(os.Stdout, os.Stdout)
+		if err != nil {
+			return err
+		}
 		err = new(exec.PipedExec).
-			Command(git, pull, "-p", "upstream", mainbrach).
+			Command(git, push, origin, mainBranch).
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
-		err = new(exec.PipedExec).
-			Command(git, push, origin, mainbrach).
-			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = new(exec.PipedExec).
 		Command(git, "checkout", "-B", branch).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	// Add empty commit to create commit object and link notes to it
 	err = new(exec.PipedExec).
 		Command(git, "commit", "--allow-empty", "-m", MsgCommitForNotes).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	// Add empty commit to create commit object and link notes to it
 	AddNotes(comments)
@@ -765,19 +813,27 @@ func Dev(branch string, comments []string, branchIsInFork bool) {
 	err = new(exec.PipedExec).
 		Command(git, push, origin, "ref/notes/*").
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	err = new(exec.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	if chExist {
 		err = new(exec.PipedExec).
 			Command(git, "stash", "pop").
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 func AddNotes(comments []string) {
@@ -797,14 +853,15 @@ func AddNotes(comments []string) {
 }
 
 func GetNotes() (notes []string, result bool) {
-	stdouts, _, err := new(exec.PipedExec).
+	stdout, _, err := new(exec.PipedExec).
 		Command(git, "log", "--pretty=format:%N", "HEAD", "^main").
 		RunToStrings()
 	if err != nil {
 		return notes, false
 	}
-	rawnotes := strings.Split(stdouts, caret)
-	for _, rawnote := range rawnotes {
+
+	rawNotes := strings.Split(stdout, caret)
+	for _, rawnote := range rawNotes {
 		note := strings.TrimSpace(rawnote)
 		if len(note) > 0 {
 			notes = append(notes, note)
@@ -813,6 +870,7 @@ func GetNotes() (notes []string, result bool) {
 	if len(notes) == 0 {
 		return notes, false
 	}
+
 	return notes, true
 }
 
@@ -1229,14 +1287,14 @@ func GetFilesForCommit() []string {
 	return strs
 }
 
-func setUpstreamBranch(repo string, branch string) {
+func setUpstreamBranch(repo string, branch string) error {
 	if branch == "" {
 		branch = mainBrachName
 	}
-	errupstream := new(exec.PipedExec).
+
+	return new(exec.PipedExec).
 		Command(git, "push", "--set-upstream", repo, branch).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(errupstream)
 }
 
 // GetCommitFileSizes returns quantity of cmmited files and their total sizes
@@ -1309,7 +1367,8 @@ func GlobalPreCommitHookExist() bool {
 	if _, err := os.Stat(filepath); os.IsNotExist(err) {
 		return false // File pre-commit does not exist
 	}
-	return largFileHookExist(filepath)
+
+	return largeFileHookExist(filepath)
 }
 
 // LocalPreCommitHookExist - s.e.
@@ -1319,44 +1378,51 @@ func LocalPreCommitHookExist() bool {
 	if _, err := os.Stat(filepath); os.IsNotExist(err) {
 		return false
 	}
-	return largFileHookExist(filepath)
+
+	return largeFileHookExist(filepath)
 }
 
-func largFileHookExist(filepath string) bool {
+func largeFileHookExist(filepath string) bool {
 	substring := "large-file-hook.sh"
+	_, _, err := new(exec.PipedExec).Command("grep", "-l", substring, filepath).RunToStrings()
 
-	_, _, err := new(exec.PipedExec).
-		Command("grep", "-l", substring, filepath).
-		RunToStrings()
 	return err == nil
 }
 
 // SetGlobalPreCommitHook - s.e.
-func SetGlobalPreCommitHook() {
+func SetGlobalPreCommitHook() error {
 	var err error
 	path := getGlobalHookFolder()
 
 	if len(path) == 0 {
 		rootUser, err := user.Current()
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
+
 		path = rootUser.HomeDir
 		path += "/.git/hooks"
-		err = os.MkdirAll(path, os.ModePerm)
-		ExitIfError(err)
+		if err = os.MkdirAll(path, os.ModePerm); err != nil {
+			return err
+		}
 	}
 
 	// Set global hooks folder
 	err = new(exec.PipedExec).
 		Command(git, "config", "--global", "core.hookspath", path).
 		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	if err != nil {
+		return err
+	}
 
 	filepath := path + "/pre-commit"
 	f := createOrOpenFile(filepath)
-	f.Close()
-	if !largFileHookExist(filepath) {
-		fillPreCommitFile(filepath)
+	_ = f.Close()
+	if !largeFileHookExist(filepath) {
+		return fillPreCommitFile(filepath)
 	}
+
+	return nil
 }
 
 func GetRootFolder() string {
@@ -1368,18 +1434,19 @@ func GetRootFolder() string {
 }
 
 // SetLocalPreCommitHook - s.e.
-func SetLocalPreCommitHook() {
+func SetLocalPreCommitHook() error {
 
 	// Turn off globa1 hooks
-
 	err := new(exec.PipedExec).
 		Command(git, "config", "--global", "--get", "core.hookspath").
 		Run(os.Stdout, os.Stdout)
-	if nil == err {
+	if err == nil {
 		err = new(exec.PipedExec).
 			Command(git, "config", "--global", "--unset", "core.hookspath").
 			Run(os.Stdout, os.Stdout)
-		ExitIfError(err)
+		if err != nil {
+			return err
+		}
 	}
 	dir := GetRootFolder()
 	filename := "/.git/hooks/pre-commit"
@@ -1387,11 +1454,15 @@ func SetLocalPreCommitHook() {
 
 	// Check if the file already exists
 	f := createOrOpenFile(filepath)
-	f.Close()
-
-	if !largFileHookExist(filepath) {
-		fillPreCommitFile(filepath)
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("error closing file %s: %w", filepath, err)
 	}
+
+	if !largeFileHookExist(filepath) {
+		return fillPreCommitFile(filepath)
+	}
+
+	return nil
 }
 
 func createOrOpenFile(filepath string) *os.File {
@@ -1409,30 +1480,30 @@ func createOrOpenFile(filepath string) *os.File {
 	return f
 }
 
-func fillPreCommitFile(myfilepath string) {
-	f := createOrOpenFile(myfilepath)
-	defer f.Close()
+func fillPreCommitFile(myFilePath string) error {
+	f := createOrOpenFile(myFilePath)
+	defer func() {
+		_ = f.Close()
+	}()
 
-	pathLaregFile := "https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh"
+	pathLargeFile := "https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh"
 
 	dir := GetRootFolder()
-	fname := "/.git/hooks/large-file-hook.sh"
-	lf := dir + fname
+	fName := "/.git/hooks/large-file-hook.sh"
+	lf := dir + fName
 
-	err := new(exec.PipedExec).
-		Command("curl", "-s", "-o", lf, pathLaregFile).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	err := new(exec.PipedExec).Command("curl", "-s", "-o", lf, pathLargeFile).Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return err
+	}
 
-	hookcode := "\n#Here is large files commit prevent is added by [qs]\n"
-	hookcode = hookcode + "bash " + lf + caret
-	_, err = f.WriteString(hookcode)
-	ExitIfError(err)
+	hookCode := "\n#Here is large files commit prevent is added by [qs]\n"
+	hookCode = hookCode + "bash " + lf + caret
+	if _, err := f.WriteString(hookCode); err != nil {
+		return err
+	}
 
-	err = new(exec.PipedExec).
-		Command("chmod", "+x", myfilepath).
-		Run(os.Stdout, os.Stdout)
-	ExitIfError(err)
+	return new(exec.PipedExec).Command("chmod", "+x", myFilePath).Run(os.Stdout, os.Stdout)
 }
 
 func UpstreamNotExist() bool {
@@ -1504,32 +1575,33 @@ func GHLoggedIn() bool {
 	return err == nil
 }
 
-func GetInstalledQSVersion() string {
+func GetInstalledQSVersion() (string, error) {
 	stdouts, stderr, err := new(exec.PipedExec).
 		Command("go", "env", "GOPATH").
 		RunToStrings()
 	if err != nil {
-		logger.Error("GetInstalledVersion error:", stderr)
+		return "", fmt.Errorf("GetInstalledVersion error: %s", stderr)
 	}
 
 	gopath := strings.TrimSpace(stdouts)
 	if len(gopath) == 0 {
-		logger.Error("GetInstalledVersion error:", errors.New("GOPATH is not defined"))
+		return "", errors.New("GetInstalledVersion error: \"GOPATH is not defined\"")
 	}
-	qsexe := "qs"
+	qsExe := "qs"
 	if runtime.GOOS == "windows" {
-		qsexe = "qs.exe"
+		qsExe = "qs.exe"
 	}
 
 	stdouts, stderr, err = new(exec.PipedExec).
-		Command("go", "version", "-m", gopath+"/bin/"+qsexe).
+		Command("go", "version", "-m", gopath+"/bin/"+qsExe).
 		Command("grep", "-i", "-h", "mod.*github.com/untillpro/qs").
 		Command("gawk", "{print $3}").
 		RunToStrings()
 	if err != nil {
-		logger.Error("GetInstalledQSVersion error:", stderr)
+		return "", fmt.Errorf("GetInstalledQSVersion error: %s", stderr)
 	}
-	return strings.TrimSpace(stdouts)
+
+	return strings.TrimSpace(stdouts), nil
 }
 
 func GetLastQSVersion() string {
@@ -1685,11 +1757,12 @@ func IamInMainBranch() (string, bool) {
 	return curBr, strings.EqualFold(curBrOrigin, mainbr)
 }
 
-func pullOrigin() {
+func pullOrigin() error {
 
 	mainbr := GetMainBranch()
 	_, _, err := new(exec.PipedExec).
 		Command(git, pull, origin, mainbr).
 		RunToStrings()
-	ExitIfError(err)
+
+	return err
 }

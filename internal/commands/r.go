@@ -2,7 +2,8 @@ package commands
 
 import "github.com/untillpro/qs/git"
 
-func R() {
+func R() error {
 	globalConfig()
-	git.Release()
+
+	return git.Release()
 }

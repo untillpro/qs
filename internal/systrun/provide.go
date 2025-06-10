@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/untillpro/qs/internal/cmdproc"
 )
 
 // New creates a new SystemTest instance
@@ -18,5 +20,6 @@ func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 		cfg:           testConfig,
 		repoName:      repoName,
 		cloneRepoPath: filepath.Join(TestDataDir, repoName),
+		qsExecRootCmd: cmdproc.ExecRootCmd,
 	}
 }

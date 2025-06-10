@@ -16,6 +16,7 @@ type SystemTest struct {
 	cfg           *TestConfig
 	cloneRepoPath string
 	repoName      string
+	qsExecRootCmd func(args []string) error
 }
 
 // TestConfig contains all configuration for a system test

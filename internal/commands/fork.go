@@ -2,43 +2,49 @@ package commands
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/git"
 	"github.com/untillpro/qs/internal/commands/helper"
 )
 
-func Fork() {
+func Fork() error {
 	globalConfig()
 
 	if !helper.CheckGH() {
-		return
+		return fmt.Errorf("GitHub CLI check failed")
 	}
 
-	if notCommitedRefused() {
-		return
+	if ok, err := notCommittedRefused(); ok || err != nil {
+		return fmt.Errorf("git refused to commit")
 	}
 
 	repo, err := git.Fork()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-
-		return
+		return err
 	}
-	git.MakeUpstream(repo)
-	git.PopStashedFiles()
+
+	if err := git.MakeUpstream(repo); err != nil {
+		logger.Verbose("Failed to set upstream: %v", err)
+	}
+
+	if err := git.PopStashedFiles(); err != nil {
+		logger.Verbose("Failed to pop stashed files: %v", err)
+	}
+
+	return nil
 }
 
-func notCommitedRefused() bool {
-	s, fileExists := git.ChangedFilesExist()
+func notCommittedRefused() (bool, error) {
+	s, fileExists, err := git.ChangedFilesExist()
 	if !fileExists {
-		return false
+		return false, err
 	}
 	fmt.Println(confMsgModFiles1)
 	fmt.Println("----   " + s)
 	fmt.Print(confMsgModFiles2)
 	var response string
-	fmt.Scanln(&response)
-	return response != pushYes
+	_, _ = fmt.Scanln(&response)
+
+	return response != pushYes, err
 }

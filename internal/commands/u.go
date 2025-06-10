@@ -1,8 +1,8 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/untillpro/qs/git"
@@ -10,28 +10,24 @@ import (
 	"github.com/untillpro/qs/vcs"
 )
 
-func U(cfgStatus vcs.CfgStatus, cfgUpload vcs.CfgUpload, args []string) {
+func U(cfgUpload vcs.CfgUpload) error {
 	var response string
 
 	globalConfig()
-	git.Status(cfgStatus)
+	if err := git.Status(); err != nil {
+		return fmt.Errorf("git status failed: %w", err)
+	}
 
 	files := git.GetFilesForCommit()
 	if len(files) == 0 {
-		_, _ = fmt.Fprintln(os.Stderr, "There is nothing to commit")
-		os.Exit(1)
-
-		return
+		return errors.New("There is nothing to commit")
 	}
 
 	// find out type of the branch
 	branchType := git.GetBranchType()
 	// if branch type is unknown, we cannot proceed
 	if branchType == types.BranchTypeUnknown {
-		_, _ = fmt.Fprintln(os.Stderr, "You must be on either a pr or dev branch")
-		os.Exit(1)
-
-		return
+		return errors.New("You must be on either a pr or dev branch")
 	}
 
 	// calculate total length of commit message parts
@@ -53,10 +49,7 @@ func U(cfgStatus vcs.CfgStatus, cfgUpload vcs.CfgUpload, args []string) {
 	case types.BranchTypePr:
 		// if commit message is not specified or is shorter than 8 characters
 		if totalLength < 8 {
-			_, _ = fmt.Fprintln(os.Stderr, "Commit message is missing or too short (minimum 8 characters)")
-			os.Exit(1)
-
-			return
+			return errors.New("Commit message is missing or too short (minimum 8 characters)")
 		}
 
 		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
@@ -69,10 +62,12 @@ func U(cfgStatus vcs.CfgStatus, cfgUpload vcs.CfgUpload, args []string) {
 	// handle user response
 	switch response {
 	case pushYes:
-		git.Upload(finalCommitMessages)
+		return git.Upload(finalCommitMessages)
 	case guiParam:
-		git.Gui()
+		return git.Gui()
 	default:
 		fmt.Print(pushFail)
+
+		return nil
 	}
 }

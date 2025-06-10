@@ -2,7 +2,8 @@ package commands
 
 import "github.com/untillpro/qs/git"
 
-func G() {
+func G() error {
 	globalConfig()
-	git.Gui()
+
+	return git.Gui()
 }

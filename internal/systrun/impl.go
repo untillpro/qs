@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -591,8 +593,9 @@ func (st *SystemTest) setupDevBranch() error {
 	return nil
 }
 
-// runCommand executes the specified qs command
-func (st *SystemTest) runCommand() (string, string, error) {
+// runCommandOld executes the specified qs command
+// deprecated: use runCommand instead
+func (st *SystemTest) runCommandOld() (string, string, error) {
 	qsArgs := make([]string, 0, len(st.cfg.CommandConfig.Args)+1)
 	qsArgs = append(qsArgs, st.cfg.CommandConfig.Command)
 	qsArgs = append(qsArgs, st.cfg.CommandConfig.Args...)
@@ -624,6 +627,75 @@ func (st *SystemTest) runCommand() (string, string, error) {
 	err := cmd.Run()
 
 	return stdout.String(), stderr.String(), err
+}
+
+// runCommand executes the specified qs command and captures stdout and stderr
+func (st *SystemTest) runCommand() (stdout string, stderr string, err error) {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	if err != nil {
+		// notestdept
+		return
+	}
+	stderrReader, stderrWriter, err := os.Pipe()
+	if err != nil {
+		// notestdept
+		return
+	}
+
+	{
+		origStdin := os.Stdin
+		os.Stdin = stdoutWriter
+		defer func() { os.Stdout = origStdin }()
+	}
+	{
+		origStdout := os.Stdout
+		os.Stdout = stdoutWriter
+		defer func() { os.Stdout = origStdout }()
+	}
+	{
+		origStderr := os.Stderr
+		os.Stderr = stderrWriter
+		defer func() { os.Stderr = origStderr }()
+	}
+
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		var b bytes.Buffer
+		defer wg.Done()
+		_, _ = io.Copy(&b, stdoutReader)
+		stdout = b.String()
+	}()
+	wg.Add(1)
+	go func() {
+		var b bytes.Buffer
+		defer wg.Done()
+		_, _ = io.Copy(&b, stderrReader)
+		stderr = b.String()
+	}()
+
+	// Prepare the qs command arguments
+	qsArgs := make([]string, 0, len(st.cfg.CommandConfig.Args)+1)
+	qsArgs = append(qsArgs, "qs")
+	qsArgs = append(qsArgs, st.cfg.CommandConfig.Command)
+	qsArgs = append(qsArgs, st.cfg.CommandConfig.Args...)
+
+	// run the qs command
+	err = st.qsExecRootCmd(qsArgs)
+
+	// if there is something to pass to command stdin
+	if st.cfg.CommandConfig.Stdin != "" {
+		if _, err = os.Stdin.WriteString(st.cfg.CommandConfig.Stdin); err != nil {
+			return "", "", fmt.Errorf("failed to write to command stdin: %w", err)
+		}
+	}
+
+	_ = stderrWriter.Close()
+	_ = stdoutWriter.Close()
+	wg.Wait()
+
+	return
 }
 
 func (st *SystemTest) validateStdout(stdout string) error {
