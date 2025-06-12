@@ -6,7 +6,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/assert"
-	"github.com/untillpro/qs/git"
+	"github.com/untillpro/qs/gitcmds"
 )
 
 func TestClipBoard(t *testing.T) {
@@ -24,6 +24,6 @@ func TestClipBoard(t *testing.T) {
 }
 
 func TestIssueRepoFromURL(t *testing.T) {
-	repo := git.GetIssuerepoFromUrl("https://github.com/untillpro/qs/issues/24")
+	repo := gitcmds.GetIssueRepoFromURL("https://github.com/untillpro/qs/issues/24")
 	assert.Equal(t, "untillpro/qs", repo)
 }

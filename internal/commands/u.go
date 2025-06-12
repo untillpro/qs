@@ -5,26 +5,26 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/untillpro/qs/git"
+	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/types"
 	"github.com/untillpro/qs/vcs"
 )
 
-func U(cfgUpload vcs.CfgUpload) error {
+func U(cfgUpload vcs.CfgUpload, wd string) error {
 	var response string
 
 	globalConfig()
-	if err := git.Status(); err != nil {
+	if err := gitcmds.Status(wd); err != nil {
 		return fmt.Errorf("git status failed: %w", err)
 	}
 
-	files := git.GetFilesForCommit()
+	files := gitcmds.GetFilesForCommit(wd)
 	if len(files) == 0 {
 		return errors.New("There is nothing to commit")
 	}
 
 	// find out type of the branch
-	branchType := git.GetBranchType()
+	branchType := gitcmds.GetBranchType(wd)
 	// if branch type is unknown, we cannot proceed
 	if branchType == types.BranchTypeUnknown {
 		return errors.New("You must be on either a pr or dev branch")
@@ -42,7 +42,7 @@ func U(cfgUpload vcs.CfgUpload) error {
 	case types.BranchTypeDev:
 		if totalLength == 0 {
 			// for dev branch default commit message is "dev"
-			finalCommitMessages = append(finalCommitMessages, git.PushDefaultMsg)
+			finalCommitMessages = append(finalCommitMessages, gitcmds.PushDefaultMsg)
 		} else {
 			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 		}
@@ -62,9 +62,9 @@ func U(cfgUpload vcs.CfgUpload) error {
 	// handle user response
 	switch response {
 	case pushYes:
-		return git.Upload(finalCommitMessages)
+		return gitcmds.Upload(wd, finalCommitMessages)
 	case guiParam:
-		return git.Gui()
+		return gitcmds.Gui(wd)
 	default:
 		fmt.Print(pushFail)
 

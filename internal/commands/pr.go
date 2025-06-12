@@ -9,15 +9,15 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/qs/git"
+	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/internal/types"
 )
 
-func Pr(cmd *cobra.Command) error {
+func Pr(cmd *cobra.Command, wd string) error {
 	globalConfig()
-	if _, err := git.CheckIfGitRepo(); err != nil {
+	if _, err := gitcmds.CheckIfGitRepo(wd); err != nil {
 		return err
 	}
 
@@ -29,29 +29,35 @@ func Pr(cmd *cobra.Command) error {
 	}
 
 	// find out type of the branch
-	branchType := git.GetBranchType()
+	branchType := gitcmds.GetBranchType(wd)
 	if branchType != types.BranchTypeDev {
 		return errors.New("You must be on dev branch")
 	}
 
 	// PR is not created yet
-	prExists := doesPrExist()
+	prExists, err := doesPrExist(wd)
+	if err != nil {
+		return err
+	}
 	if prExists {
 		return errors.New("Pull request already exists for this branch")
 	}
 
-	parentrepo := git.GetParentRepoName()
+	parentrepo, err := gitcmds.GetParentRepoName(wd)
+	if err != nil {
+		return err
+	}
 	if len(parentrepo) == 0 {
 		return errors.New("You are in trunk. PR is only allowed from forked branch.")
 	}
-	curBranch := git.GetCurrentBranchName()
+	curBranch := gitcmds.GetCurrentBranchName(wd)
 	isMainBranch := (curBranch == "main") || (curBranch == "master")
 	if isMainBranch {
 		return fmt.Errorf("Unable to create a pull request on branch '%s'. Use 'qs dev <branch_name>.", curBranch)
 	}
 
 	var response string
-	if git.UpstreamNotExist() {
+	if gitcmds.UpstreamNotExist(wd) {
 		fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
 		_, _ = fmt.Scanln(&response)
 		if response != pushYes {
@@ -59,12 +65,16 @@ func Pr(cmd *cobra.Command) error {
 			return nil
 		}
 		response = ""
-		if err := git.MakeUpstreamForBranch(parentrepo); err != nil {
+		if err := gitcmds.MakeUpstreamForBranch(wd, parentrepo); err != nil {
 			return fmt.Errorf("failed to set upstream: %w", err)
 		}
 	}
 
-	if git.PRAhead() {
+	ok, err := gitcmds.PRAhead(wd)
+	if err != nil {
+		return err
+	}
+	if ok {
 		fmt.Print("This branch is out-of-date. Merge automatically[y/n]?")
 		_, _ = fmt.Scanln(&response)
 		if response != pushYes {
@@ -72,11 +82,13 @@ func Pr(cmd *cobra.Command) error {
 			return nil
 		}
 		response = ""
-		git.MergeFromUpstreamRebase()
+		if err := gitcmds.MergeFromUpstreamRebase(wd); err != nil {
+			return err
+		}
 	}
 
 	// Check if there are any modified files in the current branch
-	if _, ok, err := git.ChangedFilesExist(); ok || err != nil {
+	if _, ok, err := gitcmds.ChangedFilesExist(wd); ok || err != nil {
 		if err != nil {
 			return err
 		}
@@ -85,12 +97,12 @@ func Pr(cmd *cobra.Command) error {
 	}
 
 	// Create a new branch for the PR
-	prTitle, err := createPRBranch()
+	prTitle, err := createPRBranch(wd)
 	if err != nil {
 		return fmt.Errorf("failed to create PR branch: %w", err)
 	}
 	// Extract notes before any operations
-	notes, ok := git.GetNotes()
+	notes, ok := gitcmds.GetNotes(wd)
 	if !ok {
 		return errors.New("Warning: No notes found in dev branch")
 	}
@@ -107,7 +119,7 @@ func Pr(cmd *cobra.Command) error {
 
 	switch response {
 	case pushYes:
-		err := git.MakePR(prTitle, notes, needDraft)
+		err := gitcmds.MakePR(wd, prTitle, notes, needDraft)
 		if err != nil {
 			return fmt.Errorf("failed to create PR: %w", err)
 		}
@@ -178,21 +190,23 @@ func convertIssuesURLToRepoURL(issueURL string) (string, error) {
 // Returns:
 // - title of the pull request
 // - error if any operation fails
-func createPRBranch() (string, error) {
+func createPRBranch(wd string) (string, error) {
 	// Save current branch name (dev branch)
-	devBranchName := git.GetCurrentBranchName()
+	devBranchName := gitcmds.GetCurrentBranchName(wd)
 
 	// Extract notes before any operations
-	notes, ok := git.GetNotes()
+	notes, ok := gitcmds.GetNotes(wd)
 	if !ok {
 		return "", errors.New("Warning: No notes found in dev branch")
 	}
 
 	// checking out on main branch
-	mainBranch := git.GetMainBranch()
+	mainBranch := gitcmds.GetMainBranch(wd)
 	_, _, err := new(exec.PipedExec).
 		Command("git", "checkout", mainBranch).
+		WorkingDir(wd).
 		Command("git", "pull", "origin", mainBranch).
+		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		return "", err
@@ -202,13 +216,19 @@ func createPRBranch() (string, error) {
 	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
 
 	// creating new branch for PR from updated main
-	_, _, err = new(exec.PipedExec).Command("git", "checkout", "-b", prBranchName).RunToStrings()
+	_, _, err = new(exec.PipedExec).
+		Command("git", "checkout", "-b", prBranchName).
+		WorkingDir(wd).
+		RunToStrings()
 	if err != nil {
 		return "", err
 	}
 
 	// Squash merge dev branch commits
-	_, _, err = new(exec.PipedExec).Command("git", "merge", "--squash", devBranchName).RunToStrings()
+	_, _, err = new(exec.PipedExec).
+		Command("git", "merge", "--squash", devBranchName).
+		WorkingDir(wd).
+		RunToStrings()
 	if err != nil {
 		return "", err
 	}
@@ -227,13 +247,18 @@ func createPRBranch() (string, error) {
 	}
 
 	// Create commit with the squashed changes
-	_, _, err = new(exec.PipedExec).Command("git", "commit", "-m", issueDescription).RunToStrings()
+	_, _, err = new(exec.PipedExec).
+		Command("git", "commit", "-m", issueDescription).
+		WorkingDir(wd).
+		RunToStrings()
 	if err != nil {
 		return "", err
 	}
 
 	// Add empty commit to create commit object and link notes to it
-	err = new(exec.PipedExec).Command("git", "commit", "--allow-empty", "-m", git.MsgCommitForNotes).
+	err = new(exec.PipedExec).
+		Command("git", "commit", "--allow-empty", "-m", gitcmds.MsgCommitForNotes).
+		WorkingDir(wd).
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
 		return "", err
@@ -241,23 +266,37 @@ func createPRBranch() (string, error) {
 
 	newNotes.BranchType = int(types.BranchTypePr)
 	// Add empty commit to create commit object and link notes to it
-	git.AddNotes([]string{newNotes.String()})
+	if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
+		return "", err
+	}
 
 	// Push notes to origin
-	err = new(exec.PipedExec).Command("git", "push", "origin", "ref/notes/*").Run(os.Stdout, os.Stdout)
+	err = new(exec.PipedExec).
+		Command("git", "push", "origin", "ref/notes/*").
+		WorkingDir(wd).
+		Run(os.Stdout, os.Stdout)
 	// Push PR branch to origin
-	_, _, err = new(exec.PipedExec).Command("git", "push", "-u", "origin", prBranchName).RunToStrings()
+	_, _, err = new(exec.PipedExec).
+		Command("git", "push", "-u", "origin", prBranchName).
+		WorkingDir(wd).
+		RunToStrings()
 	if err != nil {
 		return "", err
 	}
 
 	// Delete dev branch locally and remotely
-	_, _, err = new(exec.PipedExec).Command("git", "branch", "-D", devBranchName).RunToStrings()
+	_, _, err = new(exec.PipedExec).
+		Command("git", "branch", "-D", devBranchName).
+		WorkingDir(wd).
+		RunToStrings()
 	if err != nil {
 		return "", err
 	}
 
-	_, _, err = new(exec.PipedExec).Command("git", "push", "origin", "--delete", devBranchName).RunToStrings()
+	_, _, err = new(exec.PipedExec).
+		Command("git", "push", "origin", "--delete", devBranchName).
+		WorkingDir(wd).
+		RunToStrings()
 	if err != nil {
 		return "", err
 	}
@@ -266,24 +305,27 @@ func createPRBranch() (string, error) {
 }
 
 // doesPrExist checks if a pull request exists for the current branch.
-func doesPrExist() bool {
-	branchName := git.GetCurrentBranchName()
+func doesPrExist(wd string) (bool, error) {
+	branchName := gitcmds.GetCurrentBranchName(wd)
 	stdout, _, err := new(exec.PipedExec).
 		Command("gh", "pr", "list", "--head", branchName).
+		WorkingDir(wd).
 		RunToStrings()
-	git.ExitIfError(err)
+	if err != nil {
+		return false, err
+	}
 
 	if strings.Contains(stdout, "no pull requests match your search") {
-		return false
+		return false, nil
 	}
 
 	// Otherwise, assume PR exists
 	if stdout == "" {
 		// safety check: gh may sometimes return nothing at all
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
 func issueNote(notes []string) bool {
@@ -293,7 +335,7 @@ func issueNote(notes []string) bool {
 	for _, s := range notes {
 		s = strings.TrimSpace(s)
 		if len(s) > 0 {
-			if strings.Contains(s, git.IssueSign) {
+			if strings.Contains(s, gitcmds.IssueSign) {
 				return true
 			}
 		}
@@ -324,7 +366,7 @@ func getIssueNumFromNotes(notes []string) (string, bool) {
 	for _, s := range notes {
 		s = strings.TrimSpace(s)
 		if len(s) > 0 {
-			if strings.Contains(s, git.IssueSign) {
+			if strings.Contains(s, gitcmds.IssueSign) {
 				arr := strings.Split(s, oneSpace)
 				if len(arr) > 1 {
 					num := arr[1]

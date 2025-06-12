@@ -4,39 +4,39 @@ import (
 	"fmt"
 
 	"github.com/untillpro/goutils/logger"
-	"github.com/untillpro/qs/git"
+	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands/helper"
 )
 
-func Fork() error {
+func Fork(wd string) error {
 	globalConfig()
 
 	if !helper.CheckGH() {
 		return fmt.Errorf("GitHub CLI check failed")
 	}
 
-	if ok, err := notCommittedRefused(); ok || err != nil {
+	if ok, err := notCommittedRefused(wd); ok || err != nil {
 		return fmt.Errorf("git refused to commit")
 	}
 
-	repo, err := git.Fork()
+	repo, err := gitcmds.Fork(wd)
 	if err != nil {
 		return err
 	}
 
-	if err := git.MakeUpstream(repo); err != nil {
+	if err := gitcmds.MakeUpstream(wd, repo); err != nil {
 		logger.Verbose("Failed to set upstream: %v", err)
 	}
 
-	if err := git.PopStashedFiles(); err != nil {
+	if err := gitcmds.PopStashedFiles(wd); err != nil {
 		logger.Verbose("Failed to pop stashed files: %v", err)
 	}
 
 	return nil
 }
 
-func notCommittedRefused() (bool, error) {
-	s, fileExists, err := git.ChangedFilesExist()
+func notCommittedRefused(wd string) (bool, error) {
+	s, fileExists, err := gitcmds.ChangedFilesExist(wd)
 	if !fileExists {
 		return false, err
 	}

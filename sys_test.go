@@ -21,9 +21,8 @@ func TestFork_OnExistingFork(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "fork",
 		},
-		UpstreamState: systrun.RemoteStateOK,
-		ForkState:     systrun.RemoteStateOK,
-		// TODO: Must be in stderr
+		UpstreamState:  systrun.RemoteStateOK,
+		ForkState:      systrun.RemoteStateOK,
 		ExpectedStderr: "you are in fork already",
 		Expectations: []systrun.IExpectation{
 			systrun.ExpectedForkExists{},
@@ -106,12 +105,12 @@ func TestDev_CustomName(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestDev_NoUpstream_CustomBranchName tests creating a new dev branch when it doesn't exist
-func TestDev_NoUpstream_CustomBranchName(t *testing.T) {
+// TestDev_NoUpstream_CustomName tests creating a new dev branch when it doesn't exist
+func TestDev_NoUpstream_CustomName(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-upstream-custom-branch-name",
+		TestID:   "dev-no-upstream-custom-name",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",

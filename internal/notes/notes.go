@@ -43,12 +43,12 @@ func (nt *Notes) String() string {
 }
 
 // Serialize is a function for serializing given notes field into a JSON string representation.
-// Returns a JSON string representation of the notes
+// Returns a JSON string representation of the notes and an error if serialization fails.
 func Serialize(
 	githubIssueURL string,
 	jiraTicketURL string,
 	branchType types.BranchType,
-) string {
+) (string, error) {
 	n := Notes{
 		Version:        version,
 		GithubIssueURL: githubIssueURL,
@@ -58,12 +58,10 @@ func Serialize(
 
 	bytes, err := json.Marshal(n)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to marshal notes: %w", err)
-		os.Exit(1)
-		return ""
+		return "", fmt.Errorf("failed to marshal notes: %w", err)
 	}
 
-	return string(bytes)
+	return string(bytes), nil
 }
 
 // Deserialize fetches JSON string object and tries to unmarshal it into Notes structure.

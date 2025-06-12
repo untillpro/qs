@@ -2,6 +2,7 @@ package systrun
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -15,11 +16,15 @@ func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 
 	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
 	repoName := fmt.Sprintf("%s-%s", testConfig.TestID, timestamp)
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
 
 	return &SystemTest{
 		cfg:           testConfig,
 		repoName:      repoName,
-		cloneRepoPath: filepath.Join(TestDataDir, repoName),
+		cloneRepoPath: filepath.Join(wd, TestDataDir, repoName),
 		qsExecRootCmd: cmdproc.ExecRootCmd,
 	}
 }

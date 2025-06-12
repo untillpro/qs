@@ -4,16 +4,16 @@ import (
 	"fmt"
 
 	"github.com/untillpro/goutils/logger"
-	"github.com/untillpro/qs/git"
+	"github.com/untillpro/qs/gitcmds"
 )
 
 func CheckGH() bool {
-	if !git.GHInstalled() {
+	if !gitcmds.GHInstalled() {
 		fmt.Print("\nGithub cli utility 'gh' is not installed.\nTo install visit page https://cli.github.com/\n")
 
 		return false
 	}
-	if !git.GHLoggedIn() {
+	if !gitcmds.GHLoggedIn() {
 		fmt.Print("\nGH utility is not logged in\n")
 
 		return false
@@ -23,13 +23,13 @@ func CheckGH() bool {
 }
 
 func CheckQsVer() bool {
-	installedVer, err := git.GetInstalledQSVersion()
+	installedVer, err := gitcmds.GetInstalledQSVersion()
 	if err != nil {
 		logger.Verbose("Error getting installed qs version: %s\n", err)
 
 		return false
 	}
-	lastQSVersion := git.GetLastQSVersion()
+	lastQSVersion := gitcmds.GetLastQSVersion()
 
 	if installedVer != lastQSVersion {
 		fmt.Printf("Installed qs version %s is too old (last version is %s)\n", installedVer, lastQSVersion)

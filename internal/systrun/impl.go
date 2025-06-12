@@ -137,7 +137,7 @@ func (st *SystemTest) processClipboardContent(re *RuntimeEnvironment) error {
 		return nil
 	case ClipboardContentCustom:
 		clipboardContent = st.getCustomClipboardContent()
-		re.customBranchName = clipboardContent
+		re.customBranchName = clipboardContent + "-dev"
 	case ClipboardContentUnavailableGithubIssue:
 		clipboardContent = fmt.Sprintf("https://github.com/%s/%s/issues/abc",
 			st.cfg.GHConfig.UpstreamAccount,
@@ -642,21 +642,30 @@ func (st *SystemTest) runCommand() (stdout string, stderr string, err error) {
 		return
 	}
 
-	{
-		origStdin := os.Stdin
-		os.Stdin = stdoutWriter
-		defer func() { os.Stdout = origStdin }()
+	// Create pipe for stdin if needed
+	var stdinReader, stdinWriter *os.File
+	if st.cfg.CommandConfig.Stdin != "" {
+		stdinReader, stdinWriter, err = os.Pipe()
+		if err != nil {
+			return "", "", fmt.Errorf("failed to create stdin pipe: %w", err)
+		}
 	}
-	{
-		origStdout := os.Stdout
-		os.Stdout = stdoutWriter
-		defer func() { os.Stdout = origStdout }()
+
+	origStdin := os.Stdin
+	origStdout := os.Stdout
+	origStderr := os.Stderr
+
+	// Set up new stdin if needed
+	if stdinReader != nil {
+		os.Stdin = stdinReader
+		defer func() { os.Stdin = origStdin }()
 	}
-	{
-		origStderr := os.Stderr
-		os.Stderr = stderrWriter
-		defer func() { os.Stderr = origStderr }()
-	}
+
+	os.Stdout = stdoutWriter
+	defer func() { os.Stdout = origStdout }()
+
+	os.Stderr = stderrWriter
+	defer func() { os.Stderr = origStderr }()
 
 	wg := sync.WaitGroup{}
 
@@ -675,24 +684,35 @@ func (st *SystemTest) runCommand() (stdout string, stderr string, err error) {
 		stderr = b.String()
 	}()
 
+	// Handle stdin if needed
+	if st.cfg.CommandConfig.Stdin != "" {
+		go func() {
+			_, _ = stdinWriter.WriteString(st.cfg.CommandConfig.Stdin)
+			stdinWriter.Close()
+		}()
+	}
+
 	// Prepare the qs command arguments
 	qsArgs := make([]string, 0, len(st.cfg.CommandConfig.Args)+1)
 	qsArgs = append(qsArgs, "qs")
 	qsArgs = append(qsArgs, st.cfg.CommandConfig.Command)
+	qsArgs = append(qsArgs, "-C", st.cloneRepoPath)
 	qsArgs = append(qsArgs, st.cfg.CommandConfig.Args...)
 
 	// run the qs command
 	err = st.qsExecRootCmd(qsArgs)
 
-	// if there is something to pass to command stdin
-	if st.cfg.CommandConfig.Stdin != "" {
-		if _, err = os.Stdin.WriteString(st.cfg.CommandConfig.Stdin); err != nil {
-			return "", "", fmt.Errorf("failed to write to command stdin: %w", err)
-		}
-	}
-
+	//// if there is something to pass to command stdin
+	//if st.cfg.CommandConfig.Stdin != "" {
+	//	if _, err = os.Stdin.WriteString(st.cfg.CommandConfig.Stdin); err != nil {
+	//		return "", "", fmt.Errorf("failed to write to command stdin: %w", err)
+	//	}
+	//}
+	//
 	_ = stderrWriter.Close()
 	_ = stdoutWriter.Close()
+
+	// Wait for all output to be captured
 	wg.Wait()
 
 	return
