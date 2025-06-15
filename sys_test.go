@@ -224,11 +224,33 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 }
 
 // TestPR tests creating a basic PR
-func TestPR(t *testing.T) {
+func TestPR_Synchronized(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "pr",
+		TestID:   "pr-synchronized",
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "pr",
+			Stdin:   "y",
+		},
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		SyncState:        systrun.SyncStateSynchronized,
+		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestPR_ForkChanged(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   "pr-fork-changed",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
@@ -237,7 +259,7 @@ func TestPR(t *testing.T) {
 		},
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateSynchronized,
+		SyncState:        systrun.SyncStateForkChanged,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
 		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
 	}

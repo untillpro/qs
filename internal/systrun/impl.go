@@ -578,7 +578,9 @@ func createRemote(wd, remote, account, repoName string, isUpstream bool) error {
 	}
 
 	if err = repo.DeleteRemote(remote); err != nil {
-		return fmt.Errorf("failed to delete %s remote: %w", remote, err)
+		if !errors.Is(err, git.ErrRemoteNotFound) {
+			return fmt.Errorf("failed to delete %s remote: %w", remote, err)
+		}
 	}
 
 	remoteURL := buildRemoteURL(account, repoName, isUpstream)
