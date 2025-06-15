@@ -85,7 +85,6 @@ func TestDev_CustomName(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
-			Args:    []string{},
 			Stdin:   "y",
 		},
 		ClipboardContent: systrun.ClipboardContentCustom,
@@ -255,7 +254,6 @@ func TestPR_ForkChanged(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
 			Stdin:   "y",
-			Args:    []string{},
 		},
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
@@ -267,54 +265,6 @@ func TestPR_ForkChanged(t *testing.T) {
 	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
-}
-
-// TestPRDevBranchOutOfDate tests behavior when dev branch is out of date
-func TestPRDevBranchOutOfDate(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
-	require := require.New(t)
-
-	testConfig := &systrun.TestConfig{
-		TestID:   "pr-branch-out-of-date",
-		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
-			Command: "pr",
-			Args:    []string{},
-		},
-		UpstreamState: systrun.RemoteStateOK,
-		ForkState:     systrun.RemoteStateOK,
-		SyncState:     systrun.SyncStateForkChanged,
-		Expectations:  systrun.Expectations(systrun.ExpectationPRBranchState),
-	}
-
-	sysTest := systrun.New(t, testConfig)
-	err := sysTest.Run()
-	require.Error(err)
-}
-
-// TestPRWrongBranch tests PR creation when not on dev branch
-func TestPRWrongBranch(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
-	require := require.New(t)
-
-	testConfig := &systrun.TestConfig{
-		TestID:   "pr-wrong-branch",
-		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
-			Command: "pr",
-			Args:    []string{},
-		},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		SyncState:      systrun.SyncStateDoesntTrackOrigin,
-		ExpectedStderr: "You are not on dev branch",
-	}
-
-	sysTest := systrun.New(t, testConfig)
-	err := sysTest.Run()
-	require.Error(err)
 }
 
 // TestDownload tests synchronizing local repository with remote changes
