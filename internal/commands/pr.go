@@ -119,8 +119,11 @@ func Pr(cmd *cobra.Command, wd string) error {
 
 	switch response {
 	case pushYes:
-		err := gitcmds.MakePR(wd, prTitle, notes, needDraft)
+		stdout, stderr, err := gitcmds.MakePR(wd, prTitle, notes, needDraft)
 		if err != nil {
+			_, _ = fmt.Fprintf(os.Stdout, stdout)
+			_, _ = fmt.Fprintf(os.Stderr, stderr)
+
 			return fmt.Errorf("failed to create PR: %w", err)
 		}
 	default:
@@ -200,6 +203,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", errors.New("Warning: No notes found in dev branch")
 	}
 
+	//
 	// checking out on main branch
 	mainBranch := gitcmds.GetMainBranch(wd)
 	_, _, err := new(exec.PipedExec).
@@ -239,9 +243,8 @@ func createPRBranch(wd string) (string, error) {
 		return "", fmt.Errorf("Error deserializing notes: %w", err)
 	}
 
-	prTitle := newNotes.GithubIssueURL
 	// get issue description from notes for commit message
-	issueDescription, err := getIssueDescription(prTitle)
+	issueDescription, err := getIssueDescription(newNotes.GithubIssueURL)
 	if err != nil {
 		return "", fmt.Errorf("Error retrieving issue description: %w", err)
 	}
@@ -255,26 +258,36 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	// Add empty commit to create commit object and link notes to it
-	err = new(exec.PipedExec).
-		Command("git", "commit", "--allow-empty", "-m", gitcmds.MsgCommitForNotes).
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
-	if err != nil {
-		return "", err
-	}
-
 	newNotes.BranchType = int(types.BranchTypePr)
 	// Add empty commit to create commit object and link notes to it
 	if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
 		return "", err
 	}
 
+	//// Add empty commit to create commit object and link notes to it
+	//err = new(exec.PipedExec).
+	//	Command("git", "commit", "--allow-empty", "-m", gitcmds.MsgCommitForNotes).
+	//	WorkingDir(wd).
+	//	Run(os.Stdout, os.Stdout)
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//newNotes.BranchType = int(types.BranchTypePr)
+	//// Add empty commit to create commit object and link notes to it
+	//if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
+	//	return "", err
+	//}
+
 	// Push notes to origin
 	err = new(exec.PipedExec).
 		Command("git", "push", "origin", "ref/notes/*").
 		WorkingDir(wd).
 		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return "", err
+	}
+
 	// Push PR branch to origin
 	_, _, err = new(exec.PipedExec).
 		Command("git", "push", "-u", "origin", prBranchName).
@@ -301,7 +314,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	return prTitle, nil
+	return issueDescription, nil
 }
 
 // doesPrExist checks if a pull request exists for the current branch.

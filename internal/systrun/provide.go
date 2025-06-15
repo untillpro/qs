@@ -1,6 +1,7 @@
 package systrun
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 	}
 
 	return &SystemTest{
+		ctx:           context.Background(),
 		cfg:           testConfig,
 		repoName:      repoName,
 		cloneRepoPath: filepath.Join(wd, TestDataDir, repoName),

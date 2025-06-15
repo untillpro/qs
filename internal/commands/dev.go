@@ -107,7 +107,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		_, _ = fmt.Scanln(&response)
 		if response == pushYes {
 			// Remote developer branch, linked to issue is created
-			branch, notes, err = gitcmds.DevIssue(wd, githubIssueURL, issueNum, args...)
+			branch, notes, err = gitcmds.DevIssue(cmd, wd, githubIssueURL, issueNum, args...)
 			if err != nil {
 				return err
 			}

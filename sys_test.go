@@ -24,9 +24,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		ExpectedStderr: "you are in fork already",
-		Expectations: []systrun.IExpectation{
-			systrun.ExpectedForkExists{},
-		},
+		Expectations:   systrun.Expectations(systrun.ExpectationForkExists),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -47,12 +45,7 @@ func TestFork(t *testing.T) {
 		},
 		UpstreamState: systrun.RemoteStateOK,
 		ForkState:     systrun.RemoteStateNull,
-		Expectations: []systrun.IExpectation{
-			systrun.ExpectedRemoteState{
-				UpstreamRemoteState: systrun.RemoteStateOK,
-				ForkRemoteState:     systrun.RemoteStateOK,
-			},
-		},
+		Expectations:  systrun.Expectations(systrun.ExpectationRemoteState),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -95,9 +88,7 @@ func TestDev_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
-		Expectations: []systrun.IExpectation{
-			systrun.ExpectedCurrentBranch{},
-		},
+		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranch),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -120,9 +111,7 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
-		Expectations: []systrun.IExpectation{
-			systrun.ExpectedCurrentBranch{},
-		},
+		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranch),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -175,9 +164,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations: []systrun.IExpectation{
-			systrun.ExpectedBranchLinkedToIssue{},
-		},
+		Expectations:     systrun.Expectations(systrun.ExpectationBranchLinkedToIssue),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -225,9 +212,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
 		ClipboardContent: systrun.ClipboardContentJiraTicket,
-		Expectations: []systrun.IExpectation{
-			systrun.ExpectedCurrentBranchHasPrefix{},
-		},
+		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranchHasPrefix),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -235,23 +220,23 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestPRBasic tests creating a basic PR
-func TestPRBasic(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
+// TestPR tests creating a basic PR
+func TestPR(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "pr-basic",
+		TestID:   "pr",
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
+			Stdin:   "y",
 			Args:    []string{},
 		},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		SyncState:      systrun.SyncStateSynchronized,
-		ExpectedStdout: "Creating pull request",
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		SyncState:        systrun.SyncStateSynchronized,
+		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
 	}
 
 	sysTest := systrun.New(t, testConfig)

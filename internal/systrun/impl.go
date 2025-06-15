@@ -2,9 +2,15 @@ package systrun
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/untillpro/goutils/logger"
+	"github.com/untillpro/qs/gitcmds"
+	contextPkg "github.com/untillpro/qs/internal/context"
 	"io"
+	netHttp "net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,26 +68,32 @@ func (st *SystemTest) checkCommand() error {
 }
 
 // createTestEnvironment sets up the test repositories based on configuration
-// Returns:
-// - RuntimeEnvironment with fields populated for the test
-func (st *SystemTest) createTestEnvironment() (*RuntimeEnvironment, error) {
-	re := &RuntimeEnvironment{
-		cloneRepoPath: st.cloneRepoPath,
-	}
+func (st *SystemTest) createTestEnvironment() error {
+	st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyCloneRepoPath, st.cloneRepoPath)
 
 	// Setup upstream repo if needed
 	if st.cfg.UpstreamState != RemoteStateNull {
-		upstreamRepoURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, st.repoName)
+		upstreamRepoURL := buildRemoteURL(
+			st.cfg.GHConfig.UpstreamAccount,
+			st.cfg.GHConfig.UpstreamToken,
+			st.repoName,
+			true,
+		)
 		if err := st.createUpstreamRepo(st.repoName, upstreamRepoURL); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	// Setup fork repo if needed
 	if st.cfg.ForkState != RemoteStateNull {
-		forkRepoURL := buildRemoteURL(st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken, st.repoName)
+		forkRepoURL := buildRemoteURL(
+			st.cfg.GHConfig.ForkAccount,
+			st.cfg.GHConfig.ForkToken,
+			st.repoName,
+			false,
+		)
 		if err := st.createForkRepo(st.repoName, forkRepoURL); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -99,34 +111,136 @@ func (st *SystemTest) createTestEnvironment() (*RuntimeEnvironment, error) {
 		cloneURL = fmt.Sprintf(remoteGithubRepoURLTemplate, st.cfg.GHConfig.UpstreamAccount, st.repoName)
 		authToken = st.cfg.GHConfig.UpstreamToken
 	default:
-		return nil, fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
+		return fmt.Errorf("cannot create test environment: both upstream and fork repos are null")
 	}
 
 	// Need some time to ensure the repo is created
 	// TODO: add check in loop with deadline instead of sleep
 	time.Sleep(time.Millisecond * 2000)
 	if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Configure remotes based on test scenario
 	if err := st.configureRemotes(st.repoName); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Setup dev branch if needed
 	if err := st.setupDevBranch(); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := st.processClipboardContent(re); err != nil {
-		return nil, fmt.Errorf("failed to process clipboard content: %w", err)
+	if err := st.configureCollaboration(); err != nil {
+		return err
 	}
 
-	return re, nil
+	if err := st.processClipboardContent(); err != nil {
+		return fmt.Errorf("failed to process clipboard content: %w", err)
+	}
+
+	if err := st.processSyncState(); err != nil {
+		return fmt.Errorf("failed to process sync state: %w", err)
+	}
+
+	return nil
 }
 
-func (st *SystemTest) processClipboardContent(re *RuntimeEnvironment) error {
+func (st *SystemTest) configureCollaboration() error {
+	if err := inviteCollaborator(
+		st.cfg.GHConfig.UpstreamAccount,
+		st.repoName,
+		st.cfg.GHConfig.ForkAccount,
+		st.cfg.GHConfig.UpstreamToken,
+	); err != nil {
+		return err
+	}
+
+	time.Sleep(2 * time.Second)
+
+	if err := acceptPendingInvitations(st.cfg.GHConfig.ForkToken); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func inviteCollaborator(owner, repo, username, token string) error {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/collaborators/%s", owner, repo, username)
+
+	// Request body
+	body := map[string]string{
+		"permission": "push", // Or "pull", "admin"
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	req, err := netHttp.NewRequest("PUT", url, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := netHttp.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+		logger.Verbose("Invitation sent successfully.")
+	} else {
+		return fmt.Errorf("failed to invite: status %s", resp.Status)
+	}
+	return nil
+}
+
+func acceptPendingInvitations(token string) error {
+	url := "https://api.github.com/user/repository_invitations"
+
+	req, _ := netHttp.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := netHttp.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var invitations []struct {
+		ID int `json:"id"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&invitations); err != nil {
+		return err
+	}
+
+	for _, invite := range invitations {
+		acceptURL := fmt.Sprintf("https://api.github.com/user/repository_invitations/%d", invite.ID)
+		acceptReq, _ := netHttp.NewRequest("PATCH", acceptURL, nil)
+		acceptReq.Header.Set("Authorization", "token "+token)
+		acceptReq.Header.Set("Accept", "application/vnd.github+json")
+
+		acceptResp, err := netHttp.DefaultClient.Do(acceptReq)
+		if err != nil {
+			return err
+		}
+		defer acceptResp.Body.Close()
+
+		if acceptResp.StatusCode == 204 {
+			logger.Verbose("Accepted invitation ID %d\n", invite.ID)
+		} else {
+			fmt.Printf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status)
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return nil
+}
+
+func (st *SystemTest) processClipboardContent() error {
 	var (
 		clipboardContent string
 		err              error
@@ -137,7 +251,8 @@ func (st *SystemTest) processClipboardContent(re *RuntimeEnvironment) error {
 		return nil
 	case ClipboardContentCustom:
 		clipboardContent = st.getCustomClipboardContent()
-		re.customBranchName = clipboardContent + "-dev"
+
+		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyCustomBranchName, clipboardContent+"-dev")
 	case ClipboardContentUnavailableGithubIssue:
 		clipboardContent = fmt.Sprintf("https://github.com/%s/%s/issues/abc",
 			st.cfg.GHConfig.UpstreamAccount,
@@ -148,7 +263,8 @@ func (st *SystemTest) processClipboardContent(re *RuntimeEnvironment) error {
 		if err != nil {
 			return err
 		}
-		re.createdGithubIssueURL = clipboardContent
+
+		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyCreatedGithubIssueURL, clipboardContent)
 	case ClipboardContentJiraTicket:
 		clipboardContent = os.Getenv("JIRA_TICKET_URL")
 		if clipboardContent == "" {
@@ -160,7 +276,7 @@ func (st *SystemTest) processClipboardContent(re *RuntimeEnvironment) error {
 			return fmt.Errorf("invalid JIRA ticket URL: %s", clipboardContent)
 		}
 
-		re.branchPrefix = jiraTicketID
+		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyBranchPrefix, jiraTicketID)
 	default:
 		return fmt.Errorf("unknown clipboard content type: %s", st.cfg.ClipboardContent)
 	}
@@ -223,33 +339,6 @@ func (st *SystemTest) checkoutOnBranch(branchName string) error {
 		Create: false, // true if the branch doesn't exist locally
 		Force:  false, // true to override uncommitted changes
 	})
-}
-
-func ghAuthLogin(token string) error {
-	// Connect stdin to pass the token to the gh process
-	cmd := exec.Command("gh", "auth", "login", "--with-token")
-
-	// Important: Connect stdout and stderr too
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stdin pipe: %w", err)
-	}
-
-	// Write token immediately
-	_, err = stdin.Write([]byte(token))
-	if err != nil {
-		return fmt.Errorf("failed to write token to stdin: %w", err)
-	}
-
-	// Start the command first!
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start gh auth login: %w", err)
-	}
-
-	return stdin.Close() // IMPORTANT: Close stdin immediately after writing
 }
 
 // createUpstreamRepo creates the upstream repository
@@ -327,11 +416,15 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 		// Push changes
 		err = repo.Push(&git.PushOptions{
 			RemoteName: "origin",
-			Auth: &http.BasicAuth{
-				Username: "x-access-token",
-				Password: st.cfg.GHConfig.UpstreamToken,
-			},
 		})
+		//err = repo.Push(&git.PushOptions{
+		//	RemoteName: "origin",
+		//	Auth:       &http.TokenAuth{Token: st.cfg.GHConfig.UpstreamToken},
+		//	//Auth: &http.BasicAuth{
+		//	//	Username: "x-access-token",
+		//	//	Password: st.cfg.GHConfig.UpstreamToken,
+		//	//},
+		//})
 		if err != nil {
 			return fmt.Errorf("failed to push changes: %w", err)
 		}
@@ -435,10 +528,10 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 			// Push changes
 			err = repo.Push(&git.PushOptions{
 				RemoteName: "origin",
-				Auth: &http.BasicAuth{
-					Username: "x-access-token",
-					Password: st.cfg.GHConfig.ForkToken,
-				},
+				//Auth: &http.BasicAuth{
+				//	Username: "x-access-token",
+				//	Password: st.cfg.GHConfig.ForkToken,
+				//},
 			})
 			if err != nil {
 				return fmt.Errorf("failed to push changes: %w", err)
@@ -472,8 +565,14 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 	return nil
 }
 
-func buildRemoteURL(account, token, repoName string) string {
-	return "https://" + account + ":" + token + "@github.com/" + account + "/" + repoName + ".git"
+func buildRemoteURL(account, token, repoName string, isUpstream bool) string {
+	//return "https://" + account + ":" + token + "@github.com/" + account + "/" + repoName + ".git"
+	remoteType := "upstream"
+	if !isUpstream {
+		remoteType = "origin"
+	}
+
+	return "git@github-" + remoteType + ":" + account + "/" + repoName + ".git"
 }
 
 // configureRemotes sets up the remote configuration in the cloned repository
@@ -488,23 +587,38 @@ func (st *SystemTest) configureRemotes(repoName string) error {
 	switch {
 	case st.cfg.ForkState != RemoteStateNull && st.cfg.UpstreamState != RemoteStateNull:
 		// Both upstream and fork exist, configure both remotes
-		_, err := repo.Remote("origin")
+		//_, err := repo.Remote("origin")
+		//if err != nil {
+		// Add origin remote pointing to fork
+		err = repo.DeleteRemote("origin")
 		if err != nil {
-			// Add origin remote pointing to fork
-			forkURL := buildRemoteURL(st.cfg.GHConfig.ForkAccount, st.cfg.GHConfig.ForkToken, repoName)
-			_, err = repo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{forkURL},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create origin remote: %w", err)
-			}
+			return fmt.Errorf("failed to delete origin remote: %w", err)
 		}
+
+		forkURL := buildRemoteURL(
+			st.cfg.GHConfig.ForkAccount,
+			st.cfg.GHConfig.ForkToken,
+			repoName,
+			false,
+		)
+		_, err = repo.CreateRemote(&config.RemoteConfig{
+			Name: "origin",
+			URLs: []string{forkURL},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create origin remote: %w", err)
+		}
+		//}
 
 		_, err = repo.Remote("upstream")
 		if err != nil {
 			// Add upstream remote
-			upstreamURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, repoName)
+			upstreamURL := buildRemoteURL(
+				st.cfg.GHConfig.UpstreamAccount,
+				st.cfg.GHConfig.UpstreamToken,
+				repoName,
+				true,
+			)
 			_, err = repo.CreateRemote(&config.RemoteConfig{
 				Name: "upstream",
 				URLs: []string{upstreamURL},
@@ -518,7 +632,12 @@ func (st *SystemTest) configureRemotes(repoName string) error {
 		// Only upstream exists, make sure origin points to upstream
 		_, err := repo.Remote("origin")
 		if err != nil {
-			upstreamURL := buildRemoteURL(st.cfg.GHConfig.UpstreamAccount, st.cfg.GHConfig.UpstreamToken, repoName)
+			upstreamURL := buildRemoteURL(
+				st.cfg.GHConfig.UpstreamAccount,
+				st.cfg.GHConfig.UpstreamToken,
+				repoName,
+				true,
+			)
 			_, err = repo.CreateRemote(&config.RemoteConfig{
 				Name: "origin",
 				URLs: []string{upstreamURL},
@@ -593,44 +712,8 @@ func (st *SystemTest) setupDevBranch() error {
 	return nil
 }
 
-// runCommandOld executes the specified qs command
-// deprecated: use runCommand instead
-func (st *SystemTest) runCommandOld() (string, string, error) {
-	qsArgs := make([]string, 0, len(st.cfg.CommandConfig.Args)+1)
-	qsArgs = append(qsArgs, st.cfg.CommandConfig.Command)
-	qsArgs = append(qsArgs, st.cfg.CommandConfig.Args...)
-	// Prepare command
-	cmd := exec.Command("qs", qsArgs...)
-
-	// if there is something to pass to command stdin
-	if st.cfg.CommandConfig.Stdin != "" {
-		stdin, err := cmd.StdinPipe()
-		if err != nil {
-			return "", "", fmt.Errorf("failed to get stdin pipe: %w", err)
-		}
-
-		_, err = stdin.Write([]byte(st.cfg.CommandConfig.Stdin))
-		if err != nil {
-			return "", "", fmt.Errorf("failed to write to command stdin: %w", err)
-		}
-
-		stdin.Close()
-	}
-
-	// Capture stdout and stderr
-	var stdout, stderr bytes.Buffer
-	cmd.Dir = st.cloneRepoPath
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// Run the command
-	err := cmd.Run()
-
-	return stdout.String(), stderr.String(), err
-}
-
 // runCommand executes the specified qs command and captures stdout and stderr
-func (st *SystemTest) runCommand() (stdout string, stderr string, err error) {
+func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr string, err error) {
 	stdoutReader, stdoutWriter, err := os.Pipe()
 	if err != nil {
 		// notestdept
@@ -644,7 +727,7 @@ func (st *SystemTest) runCommand() (stdout string, stderr string, err error) {
 
 	// Create pipe for stdin if needed
 	var stdinReader, stdinWriter *os.File
-	if st.cfg.CommandConfig.Stdin != "" {
+	if cmdCfg.Stdin != "" {
 		stdinReader, stdinWriter, err = os.Pipe()
 		if err != nil {
 			return "", "", fmt.Errorf("failed to create stdin pipe: %w", err)
@@ -685,30 +768,23 @@ func (st *SystemTest) runCommand() (stdout string, stderr string, err error) {
 	}()
 
 	// Handle stdin if needed
-	if st.cfg.CommandConfig.Stdin != "" {
+	if cmdCfg.Stdin != "" {
 		go func() {
-			_, _ = stdinWriter.WriteString(st.cfg.CommandConfig.Stdin)
-			stdinWriter.Close()
+			_, _ = stdinWriter.WriteString(cmdCfg.Stdin)
+			_ = stdinWriter.Close()
 		}()
 	}
 
 	// Prepare the qs command arguments
-	qsArgs := make([]string, 0, len(st.cfg.CommandConfig.Args)+1)
+	qsArgs := make([]string, 0, len(cmdCfg.Args)+1)
 	qsArgs = append(qsArgs, "qs")
-	qsArgs = append(qsArgs, st.cfg.CommandConfig.Command)
+	qsArgs = append(qsArgs, cmdCfg.Command)
+	qsArgs = append(qsArgs, cmdCfg.Args...)
 	qsArgs = append(qsArgs, "-C", st.cloneRepoPath)
-	qsArgs = append(qsArgs, st.cfg.CommandConfig.Args...)
 
 	// run the qs command
-	err = st.qsExecRootCmd(qsArgs)
+	st.ctx, err = st.qsExecRootCmd(st.ctx, qsArgs)
 
-	//// if there is something to pass to command stdin
-	//if st.cfg.CommandConfig.Stdin != "" {
-	//	if _, err = os.Stdin.WriteString(st.cfg.CommandConfig.Stdin); err != nil {
-	//		return "", "", fmt.Errorf("failed to write to command stdin: %w", err)
-	//	}
-	//}
-	//
 	_ = stderrWriter.Close()
 	_ = stdoutWriter.Close()
 
@@ -742,10 +818,82 @@ func (st *SystemTest) validateStderr(stderr string) error {
 	return nil
 }
 
+func (st *SystemTest) processSyncState() error {
+	// Handle sync state based on configuration
+	switch st.cfg.SyncState {
+	case SyncStateSynchronized:
+		return st.installSyncStateSynchronized()
+	default:
+		return fmt.Errorf("not supported yet sync state: %s", st.cfg.SyncState)
+	}
+}
+
+// installSyncStateSynchronized installs the synchronized state for the dev branch
+func (st *SystemTest) installSyncStateSynchronized() error {
+	if st.cfg.SyncState != SyncStateSynchronized {
+		return nil // No custom dev branch state needed
+	}
+
+	// Set the expected dev branch name that will be used later for PR
+	createdGithubIssueURL := st.ctx.Value(contextPkg.CtxKeyCreatedGithubIssueURL).(string)
+	if createdGithubIssueURL == "" {
+		return errors.New("failed to determine github issue URL. Use ClipboardContentGithubIssue")
+	}
+
+	// Run "qs dev custom-branch-name" using st.runCommand
+	stdout, stderr, err := st.runCommand(CommandConfig{
+		Command: "dev",
+		Stdin:   "y",
+		Args:    []string{},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to run qs dev command: %w, stderr: %s", err, stderr)
+	}
+
+	logger.Verbose(stdout)
+
+	// Create 3 commits with different files
+	for i := 1; i <= 3; i++ {
+		fileName := fmt.Sprintf("%d.txt", i)
+		filePath := filepath.Join(st.cloneRepoPath, fileName)
+		fileContent := fmt.Sprintf("Content of file %d", i)
+
+		// Create the file
+		if err := os.WriteFile(filePath, []byte(fileContent), 0644); err != nil {
+			return fmt.Errorf("failed to create file %s: %w", fileName, err)
+		}
+
+		// Add file to git
+		addCmd := exec.Command("git", "-C", st.cloneRepoPath, "add", fileName)
+		if err := addCmd.Run(); err != nil {
+			return fmt.Errorf("failed to git add %s: %w", fileName, err)
+		}
+
+		// Commit the file
+		commitCmd := exec.Command("git", "-C", st.cloneRepoPath, "commit", "-m", fmt.Sprintf("Add %s", fileName))
+		if err := commitCmd.Run(); err != nil {
+			return fmt.Errorf("failed to commit %s: %w", fileName, err)
+		}
+	}
+
+	devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
+
+	// Push the dev branch to the remote
+	pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
+	pushOutput, err := pushCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to push dev branch: %w, output: %s", err, pushOutput)
+	}
+
+	time.Sleep(2 * time.Second)
+
+	return nil
+}
+
 // checkExpectations checks expectations after command execution
-func (st *SystemTest) checkExpectations(re *RuntimeEnvironment) error {
+func (st *SystemTest) checkExpectations() error {
 	for _, expectation := range st.cfg.Expectations {
-		if err := expectation.Check(re); err != nil {
+		if err := expectation.Check(st.ctx); err != nil {
 			return fmt.Errorf("validation failed: %w", err)
 		}
 	}
@@ -760,21 +908,15 @@ func (st *SystemTest) getRepoName() string {
 
 // Run executes the complete system test
 func (st *SystemTest) Run() error {
-	var (
-		err error
-		re  *RuntimeEnvironment
-	)
-
 	if err := st.checkPrerequisites(); err != nil {
 		return err
 	}
 
-	re, err = st.createTestEnvironment()
-	if err != nil {
+	if err := st.createTestEnvironment(); err != nil {
 		return err
 	}
 
-	stdout, stderr, err := st.runCommand()
+	stdout, stderr, err := st.runCommand(st.cfg.CommandConfig)
 	if err != nil {
 		if err := st.validateStderr(stderr); err != nil {
 			return err
@@ -785,7 +927,7 @@ func (st *SystemTest) Run() error {
 		return err
 	}
 
-	if err := st.checkExpectations(re); err != nil {
+	if err := st.checkExpectations(); err != nil {
 		return err
 	}
 
@@ -796,6 +938,14 @@ func (st *SystemTest) Run() error {
 	return err
 }
 
+//	func (st *SystemTest) preRunCommand() error {
+//		// authenticate with GitHub using the fork token
+//		if err := utils.GhAuthLogin(st.cfg.GHConfig.ForkToken); err != nil {
+//			return fmt.Errorf("failed to authenticate with GitHub: %w", err)
+//		}
+//
+//		return nil
+//	}
 func (st *SystemTest) cleanupTestEnvironment() error {
 	// Remove the cloned repository
 	if err := os.RemoveAll(st.cloneRepoPath); err != nil {

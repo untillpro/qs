@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -10,7 +11,7 @@ import (
 func main() {
 	checkPrerequisites()
 
-	if err := cmdproc.ExecRootCmd(os.Args); err != nil {
+	if _, err := cmdproc.ExecRootCmd(context.Background(), os.Args); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

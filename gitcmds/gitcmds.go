@@ -1,10 +1,16 @@
 package gitcmds
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/spf13/cobra"
+	contextPkg "github.com/untillpro/qs/internal/context"
+	"net/url"
 	"os"
+	osExec "os/exec"
 	"os/user"
 	"regexp"
 	"runtime"
@@ -485,16 +491,55 @@ func GetRepoAndOrgName(wd string) (repo string, org string, err error) {
 		return "", "", err
 	}
 
-	arr := strings.Split(repoURL, slash)
-	if len(arr) > 0 {
-		repo = arr[len(arr)-1]
-	}
-
-	if len(arr) > 1 {
-		org = arr[len(arr)-2]
+	org, repo, err = ParseGitRemoteURL(repoURL)
+	if err != nil {
+		return "", "", err
 	}
 
 	return
+}
+
+// ParseGitRemoteURL extracts account and repository name from a git remote URL.
+// Handles SSH format (git@github.com:account/repo.git), custom SSH hosts,
+// and HTTPS format (https://github.com/account/repo.git)
+func ParseGitRemoteURL(remoteURL string) (account, repo string, err error) {
+	// Trim any trailing .git suffix
+	remoteURL = strings.TrimSuffix(remoteURL, ".git")
+
+	// Handle SSH format: git@host:account/repo
+	if strings.HasPrefix(remoteURL, "git@") {
+		parts := strings.Split(remoteURL, ":")
+		if len(parts) != 2 {
+			return "", "", fmt.Errorf("invalid SSH git URL format: %s", remoteURL)
+		}
+
+		pathParts := strings.Split(parts[1], "/")
+		if len(pathParts) < 2 {
+			return "", "", fmt.Errorf("invalid repository path in URL: %s", remoteURL)
+		}
+
+		return pathParts[0], pathParts[1], nil
+	}
+
+	// Handle HTTPS format: https://github.com/account/repo
+	if strings.HasPrefix(remoteURL, "http") {
+		u, err := url.Parse(remoteURL)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to parse URL: %w", err)
+		}
+
+		// Remove leading '/' if any
+		path := strings.TrimPrefix(u.Path, "/")
+		pathParts := strings.Split(path, "/")
+
+		if len(pathParts) < 2 {
+			return "", "", fmt.Errorf("invalid repository path in URL: %s", remoteURL)
+		}
+
+		return pathParts[0], pathParts[1], nil
+	}
+
+	return "", "", fmt.Errorf("unsupported git URL format: %s", remoteURL)
 }
 
 func IsMainOrg(wd string) (bool, error) {
@@ -697,7 +742,7 @@ func GetIssueRepoFromURL(url string) (repoName string) {
 }
 
 // DevIssue
-func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
+func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
 	repo, org, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
@@ -734,14 +779,19 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 	if err != nil {
 		return "", nil, err
 	}
+	// put branch name to command context
+	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyDevBranchName, branchName))
 
-	stdout, _, err := new(exec.PipedExec).
-		Command("gh", "issue", "develop", strIssueNum, "--issue-repo="+parentrepo, "--repo", myrepo, "--name", branchName).
+	stdout, stderr, err := new(exec.PipedExec).
+		Command("gh", "issue", "develop", strIssueNum, "--repo="+parentrepo, "--name", branchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
 		return "", nil, err
 	}
+	// delay to ensure branch is created
+	time.Sleep(2 * time.Second)
 
 	branch = strings.TrimSpace(stdout)
 	segments := strings.Split(branch, slash)
@@ -945,6 +995,8 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 		if err != nil {
 			return err
 		}
+
+		time.Sleep(2 * time.Second)
 	}
 
 	err = new(exec.PipedExec).
@@ -976,14 +1028,20 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	if err != nil {
 		return err
 	}
+	time.Sleep(2 * time.Second)
 
-	err = new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, push, "-u", origin, branch).
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
 		return err
 	}
+	logger.Verbose(stdout)
+
+	time.Sleep(2 * time.Second)
 
 	if chExist {
 		err = new(exec.PipedExec).
@@ -1304,11 +1362,11 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-// MakePR s.e.
-func MakePR(wd, title string, notes []string, asDraft bool) (err error) {
+func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
-		return errors.New(ErrMsgPRNotesImpossible)
+		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
+
 	var strnotes string
 	var url string
 	strnotes, url = GetNoteAndURL(notes)
@@ -1319,23 +1377,142 @@ func MakePR(wd, title string, notes []string, asDraft bool) (err error) {
 	if len(url) > 0 {
 		b = b + caret + url
 	}
-
 	strBody := fmt.Sprintln(b)
+
 	parentRepoName, err := GetParentRepoName(wd)
 	if err != nil {
-		return err
+		return "", "", err
 	}
+
+	// Create temporary file for the body
+	bodyFile, err := os.CreateTemp("", "pr-body-*.txt")
+	if err != nil {
+		return "", "", err
+	}
+	defer os.Remove(bodyFile.Name())
+
+	if _, err := bodyFile.WriteString(strBody); err != nil {
+		bodyFile.Close()
+		return "", "", err
+	}
+	bodyFile.Close()
+
+	// Create a temporary shell script that properly handles all quoting issues
+	scriptFile, err := os.CreateTemp("", "gh-pr-*.sh")
+	if err != nil {
+		return "", "", err
+	}
+	defer os.Remove(scriptFile.Name())
+
+	normalizedTitle := strings.ReplaceAll(title, " ", "-")
+	// Write a shell script that handles quoting properly
+	scriptContent := "#!/bin/bash\n"
+	scriptContent += fmt.Sprintf("cd %s\n", wd)
+	scriptContent += fmt.Sprintf(`gh pr create --title "%s" --body "%s" --repo %s`,
+		normalizedTitle, // Properly escape single quotes in title
+		normalizedTitle,
+		parentRepoName)
+
 	if asDraft {
-		err = new(exec.PipedExec).
-			Command("gh", "pr", "create", "--draft", "-t", title, "-b", strBody, "-R", parentRepoName).
-			Run(os.Stdout, os.Stdout)
-	} else {
-		err = new(exec.PipedExec).
-			Command("gh", "pr", "create", "-t", title, "-b", strBody, "-R", parentRepoName).
-			Run(os.Stdout, os.Stdout)
+		scriptContent += " --draft"
 	}
-	return err
+	scriptContent += "\n"
+
+	if _, err := scriptFile.WriteString(scriptContent); err != nil {
+		return "", "", err
+	}
+
+	if err := scriptFile.Chmod(0755); err != nil {
+		return "", "", err
+	}
+	scriptFile.Close()
+
+	// Execute the shell script directly
+	cmd := osExec.Command("/bin/bash", scriptFile.Name())
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	err = cmd.Run()
+	return outBuf.String(), errBuf.String(), err
 }
+
+//// MakePR s.e.
+//func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+//	if len(notes) == 0 {
+//		return "", "", errors.New(ErrMsgPRNotesImpossible)
+//	}
+//	var strnotes string
+//	var url string
+//	strnotes, url = GetNoteAndURL(notes)
+//	b := GetBodyFromNotes(notes)
+//	if len(b) == 0 {
+//		b = strnotes
+//	}
+//	if len(url) > 0 {
+//		b = b + caret + url
+//	}
+//
+//	//strBody := fmt.Sprintln(b)
+//	parentRepoName, err := GetParentRepoName(wd)
+//	if err != nil {
+//		return "", "", err
+//	}
+//
+//	//strBody = "Test-body"
+//	//args := []string{"pr", "create", "--head", "-t", `"` + title + `"`, "-b", `"` + strBody + `"`, "-R", parentRepoName}
+//	//args := []string{"pr", "create", "--head", "--title=", title, "--body=", strBody, "-R", parentRepoName}
+//	//args := []string{"pr", "create", "--head", fmt.Sprintf("--title '%s'", title), "--body", strBody, "-R", parentRepoName}
+//	title = strings.ReplaceAll(title, " ", "-")
+//	//args := []string{"pr", "create", "--head", "-t", title, "-b", strBody, "-R", parentRepoName}
+//	args := []string{
+//		"pr",
+//		"create",
+//		"--head",
+//		//fmt.Sprintf("--title=%s", title),
+//		//fmt.Sprintf("--body=%s", title),
+//		"--title", title,
+//		"--body", title,
+//		"-R",
+//		parentRepoName,
+//	}
+//	if asDraft {
+//		args = append(args, "--draft")
+//	}
+//
+//	// Create a direct command without using PipedExec
+//	cmd := osExec.Command("gh", args...)
+//	cmd.Dir = wd
+//
+//	var outBuf, errBuf bytes.Buffer
+//	cmd.Stdout = &outBuf
+//	cmd.Stderr = &errBuf
+//
+//	err = cmd.Run()
+//
+//	return outBuf.String(), errBuf.String(), err
+//	//return new(exec.PipedExec).Command("gh", args...).WorkingDir(wd).RunToStrings()
+//	//
+//	////cmd := osExec.Command("gh", "pr", "create", "--head", "--title", title, "--body", strBody, "--repo", parentRepoName)
+//	////if asDraft {
+//	////	cmd.Args = append(cmd.Args, "--draft")
+//	////}
+//	////cmd.Dir = wd
+//	//
+//	//var outb, errb bytes.Buffer
+//	//if asDraft {
+//	//	err = new(exec.PipedExec).
+//	//		Command("gh", "pr", "create", "--head", "--draft", "-t", title, "-b", strBody, "-R", parentRepoName).
+//	//		Run(&outb, &errb)
+//	//} else {
+//	//	err = new(exec.PipedExec).
+//	//		Command("gh", "pr", "create", "--head", "-t", title, "-b", strBody, "-R", parentRepoName).
+//	//		Run(&outb, &errb)
+//	//}
+//	//
+//	////err = cmd.Run()
+//	//return outb.String(), errb.String(), err
+//}
 
 // MakePRMerge merges Pull Request by URL
 func MakePRMerge(wd, prURL string) (err error) {
@@ -1800,6 +1977,7 @@ func PRAhead(wd string) (bool, error) {
 	return err != nil, err
 }
 
+// TODO: remove rebase
 func MergeFromUpstreamRebase(wd string) error {
 	mainbr := GetMainBranch(wd)
 	err := new(exec.PipedExec).

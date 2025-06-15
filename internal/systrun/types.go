@@ -1,10 +1,10 @@
 package systrun
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -12,14 +12,16 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	goUtilsExec "github.com/untillpro/goutils/exec"
 	gitCmds "github.com/untillpro/qs/gitcmds"
+	contextCfg "github.com/untillpro/qs/internal/context"
 )
 
 // SystemTest represents a single system test for the qs utility
 type SystemTest struct {
+	ctx           context.Context
 	cfg           *TestConfig
 	cloneRepoPath string
 	repoName      string
-	qsExecRootCmd func(args []string) error
+	qsExecRootCmd func(ctx context.Context, args []string) (context.Context, error)
 }
 
 // TestConfig contains all configuration for a system test
@@ -42,9 +44,12 @@ type TestConfig struct {
 }
 
 type CommandConfig struct {
+	// Command is the name of the qs command to be executed
 	Command string
-	Args    []string
-	Stdin   string
+	// Args are arguments to be passed to the command
+	Args []string
+	// Stdin is a string that will be written to stdin of the command
+	Stdin string
 }
 
 type RuntimeEnvironment struct {
@@ -67,42 +72,78 @@ type GithubConfig struct {
 	ForkToken       string
 }
 
-// ExpectedCurrentBranch represents the expected state of the branch
-type ExpectedCurrentBranch struct {
+// Expectation represents a type of expectation
+type Expectation int
+
+const (
+	ExpectationCurrentBranch Expectation = iota
+	ExpectationRemoteState
+	ExpectationPullRequest
+	ExpectationDownloadResult
+	ExpectationUploadResult
+	ExpectationForkExists
+	ExpectationBranchLinkedToIssue
+	ExpectationCurrentBranchHasPrefix
+	ExpectationPRBranchState
+)
+
+// Available expectations
+// Each Expectation type has its own struct that implements IExpectation interface
+var availableExpectations = map[Expectation]IExpectation{
+	ExpectationCurrentBranch:          expectedCurrentBranch{},
+	ExpectationRemoteState:            expectedRemoteState{},
+	ExpectationPullRequest:            expectedPullRequest{},
+	ExpectationDownloadResult:         expectedDownloadResult{},
+	ExpectationUploadResult:           expectedUploadResult{},
+	ExpectationForkExists:             expectedForkExists{},
+	ExpectationBranchLinkedToIssue:    expectedBranchLinkedToIssue{},
+	ExpectationPRBranchState:          expectedPRBranchState{},
+	ExpectationCurrentBranchHasPrefix: expectedCurrentBranchHasPrefix{},
 }
 
-func (e ExpectedCurrentBranch) Check(re *RuntimeEnvironment) error {
-	currentBranch := gitCmds.GetCurrentBranchName(re.cloneRepoPath)
-	if currentBranch != re.customBranchName {
-		return fmt.Errorf("current branch '%s' does not match expected branch '%s'", currentBranch, re.customBranchName)
+// Expectations returns a list of expectations based on the provided types
+func Expectations(types ...Expectation) []IExpectation {
+	expectations := make([]IExpectation, 0, len(types))
+	for _, t := range types {
+		expectations = append(expectations, availableExpectations[t])
+	}
+
+	return expectations
+}
+
+// expectedCurrentBranch represents checker for ExpectationCurrentBranch
+type expectedCurrentBranch struct{}
+
+func (e expectedCurrentBranch) Check(ctx context.Context) error {
+	currentBranch := gitCmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	customBranchName := ctx.Value(contextCfg.CtxKeyCustomBranchName).(string)
+	if currentBranch != customBranchName {
+		return fmt.Errorf("current branch '%s' does not match expected branch '%s'", currentBranch, customBranchName)
 	}
 
 	return nil
 }
 
 // ExpectedRemoteState represents the expected state of a remote
-type ExpectedRemoteState struct {
-	UpstreamRemoteState RemoteState
-	ForkRemoteState     RemoteState
-}
+type expectedRemoteState struct{}
 
-func (e ExpectedRemoteState) Check(_ *RuntimeEnvironment) error {
+func (e expectedRemoteState) Check(_ context.Context) error {
 	// Implement the logic to check the remote state
 
 	return nil
 }
 
 // ExpectedPullRequest represents the expected state of a pull request
-type ExpectedPullRequest struct {
+type expectedPullRequest struct {
 	Exists          bool
 	Title           string
 	ForkAccount     string
 	UpstreamAccount string
 }
 
-func (e ExpectedPullRequest) Check(re *RuntimeEnvironment) error {
+func (e expectedPullRequest) Check(ctx context.Context) error {
 	// Open the repository
-	repo, err := git.PlainOpen(re.cloneRepoPath)
+	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -134,12 +175,11 @@ func (e ExpectedPullRequest) Check(re *RuntimeEnvironment) error {
 }
 
 // ExpectedDownloadResult represents the expected state after downloading changes
-type ExpectedDownloadResult struct {
-}
+type expectedDownloadResult struct{}
 
-func (e ExpectedDownloadResult) Check(re *RuntimeEnvironment) error {
+func (e expectedDownloadResult) Check(ctx context.Context) error {
 	// Compare local and remote branches to ensure they're in sync
-	repo, err := git.PlainOpen(re.cloneRepoPath)
+	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -174,12 +214,11 @@ func (e ExpectedDownloadResult) Check(re *RuntimeEnvironment) error {
 }
 
 // ExpectedUploadResult represents the expected state after uploading changes
-type ExpectedUploadResult struct {
-}
+type expectedUploadResult struct{}
 
-func (e ExpectedUploadResult) Check(re *RuntimeEnvironment) error {
+func (e expectedUploadResult) Check(ctx context.Context) error {
 	// Similar to download but checks if the changes were pushed to remote
-	repo, err := git.PlainOpen(re.cloneRepoPath)
+	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -225,13 +264,12 @@ func (e ExpectedUploadResult) Check(re *RuntimeEnvironment) error {
 }
 
 // ExpectedForkExists represents the expected state of a fork
-type ExpectedForkExists struct {
-}
+type expectedForkExists struct{}
 
-func (e ExpectedForkExists) Check(re *RuntimeEnvironment) error {
+func (e expectedForkExists) Check(ctx context.Context) error {
 	// Implement the logic to check if the fork exists
 	// get remotes of the local repo and check if remote, called origin, exists
-	repo, err := git.PlainOpen(re.cloneRepoPath)
+	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -250,52 +288,18 @@ func (e ExpectedForkExists) Check(re *RuntimeEnvironment) error {
 	return nil
 }
 
-// ExpectedBranchLinkedToIssue represents the expected state of a branch linked to a GitHub issue
-type ExpectedBranchLinkedToIssue struct {
-}
+// expectedBranchLinkedToIssue represents the expected state of a branch linked to a GitHub issue
+type expectedBranchLinkedToIssue struct{}
 
 // Check verifies if the branch is linked to a GitHub issue
-func (e ExpectedBranchLinkedToIssue) Check(re *RuntimeEnvironment) error {
-	// Get current branch from the repo
-	repo, err := git.PlainOpen(re.cloneRepoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
+func (e expectedBranchLinkedToIssue) Check(ctx context.Context) error {
 	// extract repo and issue number from e.createdGithubIssueURL using regex
-	regExp := regexp.MustCompile(`https://github\.com/([^/]+)/([^/]+)/issues/(\d+)`)
-	matches := regExp.FindStringSubmatch(re.createdGithubIssueURL)
-	if matches == nil {
-		return fmt.Errorf("invalid GitHub issue URL format: %s", re.createdGithubIssueURL)
-	}
-	// Extract repo owner, repo name, and issue number from the matches
-	repoOwner := matches[1]
-	repoName := matches[2]
-	issueNum := matches[3]
-
-	branches, err := repo.Branches()
+	repoOwner, repoName, issueNum, err := parseGithubIssueURL(ctx.Value(contextCfg.CtxKeyCreatedGithubIssueURL).(string))
+	// Get current branch from the repo
+	devBranchName, err := findBranchNameWithPrefix(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string), issueNum)
 	if err != nil {
-		return fmt.Errorf("failed to get branches: %w", err)
+		return err
 	}
-
-	// Find development branch name that starts with the issue ID
-	devBranchName := ""
-	err = branches.ForEach(func(ref *plumbing.Reference) error {
-		branchName := ref.Name().Short()
-		if strings.HasPrefix(branchName, issueNum) {
-			devBranchName = branchName
-		}
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to iterate through the branches: %w", err)
-	}
-
-	if devBranchName == "" {
-		return fmt.Errorf("no branch found for issue ID %s", issueNum)
-	}
-
 	// Build full repo URL
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 	// Run gh issue develop --list command
@@ -313,12 +317,11 @@ func (e ExpectedBranchLinkedToIssue) Check(re *RuntimeEnvironment) error {
 	return nil
 }
 
-type ExpectedCurrentBranchHasPrefix struct {
-}
+type expectedCurrentBranchHasPrefix struct{}
 
-func (e ExpectedCurrentBranchHasPrefix) Check(re *RuntimeEnvironment) error {
+func (e expectedCurrentBranchHasPrefix) Check(ctx context.Context) error {
 	// Open the repository
-	repo, err := git.PlainOpen(re.cloneRepoPath)
+	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -330,34 +333,43 @@ func (e ExpectedCurrentBranchHasPrefix) Check(re *RuntimeEnvironment) error {
 	}
 
 	// Check if the branch name starts with the expected prefix
-	if !strings.HasPrefix(head.Name().Short(), re.branchPrefix) {
-		return fmt.Errorf("branch name '%s' does not start with expected prefix '%s'", head.Name().Short(), re.branchPrefix)
+	branchPrefix := ctx.Value(contextCfg.CtxKeyBranchPrefix).(string)
+	if !strings.HasPrefix(head.Name().Short(), branchPrefix) {
+		return fmt.Errorf("branch name '%s' does not start with expected prefix '%s'", head.Name().Short(), branchPrefix)
 	}
 
 	return nil
 }
 
-// ExpectedPRBranchState checks:
+// expectedPRBranchState checks:
 // 1. If PR branch exists with correct naming pattern (-dev → -pr)
 // 2. If PR branch contains notes with branch_type=2
 // 3. If the PR branch has exactly one squashed commit
 // 4. If the dev branch no longer exists (locally and remotely)
 // 5. If an actual pull request was created in the upstream repo
-type ExpectedPRBranchState struct {
-	DevBranchName string // Original dev branch name
-}
+type expectedPRBranchState struct{}
 
-func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
+func (e expectedPRBranchState) Check(ctx context.Context) error {
 	// 1. Check if PR branch exists with correct naming
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return fmt.Errorf("clone repo path not found in context")
+	}
+
+	devBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
+	if !ok {
+		return fmt.Errorf("dev branch name not found in context")
+	}
+
 	expectedPRBranch := ""
-	if strings.HasSuffix(e.DevBranchName, "-dev") {
-		expectedPRBranch = strings.TrimSuffix(e.DevBranchName, "-dev") + "-pr"
+	if strings.HasSuffix(devBranchName, "-dev") {
+		expectedPRBranch = strings.TrimSuffix(devBranchName, "-dev") + "-pr"
 	} else {
-		return fmt.Errorf("dev branch %s does not have expected -dev suffix", e.DevBranchName)
+		return fmt.Errorf("dev branch %s does not have expected -dev suffix", devBranchName)
 	}
 
 	// Open the repository
-	repo, err := git.PlainOpen(re.cloneRepoPath)
+	repo, err := git.PlainOpen(cloneRepoPath)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
@@ -384,14 +396,14 @@ func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
 	}
 
 	// 2. Check if branch has notes with branch_type=2
-	cmd := exec.Command("git", "-C", re.cloneRepoPath, "checkout", expectedPRBranch)
+	cmd := exec.Command("git", "-C", cloneRepoPath, "checkout", expectedPRBranch)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to checkout PR branch: %w", err)
 	}
 
 	// Get notes from the branch
 	stdout, stderr, err := new(goUtilsExec.PipedExec).
-		Command("git", "-C", re.cloneRepoPath, "notes", "show").
+		Command("git", "-C", cloneRepoPath, "notes", "show").
 		RunToStrings()
 
 	if err != nil {
@@ -405,7 +417,7 @@ func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
 
 	// 3. Check if the PR branch has exactly one squashed commit
 	// First get number of commits
-	cmd = exec.Command("git", "-C", re.cloneRepoPath, "rev-list", "--count", "HEAD")
+	cmd = exec.Command("git", "-C", cloneRepoPath, "rev-list", "--count", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to count commits: %w", err)
@@ -423,14 +435,10 @@ func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
 
 	// Check if we have more than 1 commit, and if so, verify the last one is the empty commit for notes
 	if commitCount > 1 {
-		cmd = exec.Command("git", "-C", re.cloneRepoPath, "log", "-1", "--pretty=%B")
+		cmd = exec.Command("git", "-C", cloneRepoPath, "log", "-1", "--pretty=%B")
 		output, err = cmd.Output()
 		if err != nil {
 			return fmt.Errorf("failed to get last commit message: %w", err)
-		}
-
-		if !strings.Contains(string(output), "commit for notes") {
-			return fmt.Errorf("last commit is not the expected empty commit for notes")
 		}
 	}
 
@@ -443,7 +451,7 @@ func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
 
 	devBranchExists := false
 	err = branches.ForEach(func(ref *plumbing.Reference) error {
-		if ref.Name().Short() == e.DevBranchName {
+		if ref.Name().Short() == devBranchName {
 			devBranchExists = true
 		}
 		return nil
@@ -453,12 +461,12 @@ func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
 	}
 
 	if devBranchExists {
-		return fmt.Errorf("dev branch %s still exists locally after PR creation", e.DevBranchName)
+		return fmt.Errorf("dev branch %s still exists locally after PR creation", devBranchName)
 	}
 
 	// Check remotely
 	stdout, stderr, err = new(goUtilsExec.PipedExec).
-		Command("git", "-C", re.cloneRepoPath, "ls-remote", "--heads", "origin", e.DevBranchName).
+		Command("git", "-C", cloneRepoPath, "ls-remote", "--heads", "origin", devBranchName).
 		RunToStrings()
 
 	if err != nil {
@@ -466,7 +474,7 @@ func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
 	}
 
 	if stdout != "" {
-		return fmt.Errorf("dev branch %s still exists on remote after PR creation", e.DevBranchName)
+		return fmt.Errorf("dev branch %s still exists on remote after PR creation", devBranchName)
 	}
 
 	// 5. Check if a real pull request was created in upstream repo
@@ -479,25 +487,10 @@ func (e ExpectedPRBranchState) Check(re *RuntimeEnvironment) error {
 	upstreamURL := upstream.Config().URLs[0]
 	var owner, repoName string
 
-	// Handle both HTTPS and SSH URLs
-	if strings.HasPrefix(upstreamURL, "https://") {
-		urlParts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(upstreamURL, "https://github.com/"), ".git"), "/")
-		if len(urlParts) < 2 {
-			return fmt.Errorf("invalid upstream URL format: %s", upstreamURL)
-		}
-		owner = urlParts[0]
-		repoName = urlParts[1]
-	} else if strings.Contains(upstreamURL, "git@github.com:") {
-		urlParts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(upstreamURL, "git@github.com:"), ".git"), "/")
-		if len(urlParts) < 2 {
-			return fmt.Errorf("invalid upstream SSH URL format: %s", upstreamURL)
-		}
-		owner = urlParts[0]
-		repoName = urlParts[1]
-	} else {
-		return fmt.Errorf("unsupported upstream URL format: %s", upstreamURL)
+	owner, repoName, err = gitCmds.ParseGitRemoteURL(upstreamURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse upstream URL: %w", err)
 	}
-
 	// Use gh CLI to check if PR exists
 	stdout, stderr, err = new(goUtilsExec.PipedExec).
 		Command("gh", "pr", "list", "--repo", fmt.Sprintf("%s/%s", owner, repoName), "--head", expectedPRBranch, "--json", "number").

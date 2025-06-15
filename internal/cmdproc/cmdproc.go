@@ -1,18 +1,21 @@
 package cmdproc
 
 import (
+	"context"
 	"fmt"
 	"github.com/spf13/cobra"
-	"github.com/untillpro/goutils/cobrau"
+	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
 	"github.com/untillpro/qs/vcs"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
+	"sync"
 )
 
-func updateCmd(params *qsGlobalParams) *cobra.Command {
+func updateCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	var cfgUpload vcs.CfgUpload
 	var uploadCmd = &cobra.Command{
 		Use:   commands.CommandNameU,
@@ -31,7 +34,7 @@ func updateCmd(params *qsGlobalParams) *cobra.Command {
 	return uploadCmd
 }
 
-func downloadCmd(params *qsGlobalParams) *cobra.Command {
+func downloadCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameD,
 		Short: pullParamDesc,
@@ -48,7 +51,7 @@ func downloadCmd(params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func releaseCmd(params *qsGlobalParams) *cobra.Command {
+func releaseCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameR,
 		Short: releaseParamDesc,
@@ -65,7 +68,7 @@ func releaseCmd(params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func guiCmd(params *qsGlobalParams) *cobra.Command {
+func guiCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameG,
 		Short: guiParamDesc,
@@ -82,7 +85,7 @@ func guiCmd(params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func prCmd(params *qsGlobalParams) *cobra.Command {
+func prCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNamePR,
 		Short: prParamDesc,
@@ -100,7 +103,7 @@ func prCmd(params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func versionCmd() *cobra.Command {
+func versionCmd(ctx context.Context) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameVersion,
 		Short: versionParamDesc,
@@ -112,7 +115,7 @@ func versionCmd() *cobra.Command {
 	return cmd
 }
 
-func upgradeCmd() *cobra.Command {
+func upgradeCmd(ctx context.Context) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameUpgrade,
 		Short: upgradeParamDesc,
@@ -124,7 +127,7 @@ func upgradeCmd() *cobra.Command {
 	return cmd
 }
 
-func devCmd(params *qsGlobalParams) *cobra.Command {
+func devCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameDev,
 		Short: devParamDesc,
@@ -144,7 +147,7 @@ func devCmd(params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func forkCmd(params *qsGlobalParams) *cobra.Command {
+func forkCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameFork,
 		Short: forkParamDesc,
@@ -193,29 +196,31 @@ func CheckCommands(commands []string) error {
 	return nil
 }
 
-func ExecRootCmd(args []string) error {
+// ExecRootCmd executes the root command with the given arguments.
+// Returns:
+// - context.Context: The context of the executed command
+// - error: Any error that occurred during execution.
+func ExecRootCmd(ctx context.Context, args []string) (context.Context, error) {
 	params := &qsGlobalParams{}
-	rootCmd := cobrau.PrepareRootCmd(
+	rootCmd := PrepareRootCmd(
+		ctx,
 		"qs",
 		"Quick git wrapper",
 		args,
 		"",
-		updateCmd(params),
-		downloadCmd(params),
-		releaseCmd(params),
-		guiCmd(params),
-		forkCmd(params),
-		devCmd(params),
-		prCmd(params),
-		upgradeCmd(),
-		versionCmd(),
+		updateCmd(ctx, params),
+		downloadCmd(ctx, params),
+		releaseCmd(ctx, params),
+		guiCmd(ctx, params),
+		forkCmd(ctx, params),
+		devCmd(ctx, params),
+		prCmd(ctx, params),
+		upgradeCmd(ctx),
+		versionCmd(ctx),
 	)
-	//rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-	//	return prepareParams(cmd, params, args)
-	//}
 	initChangeDirFlags(rootCmd.Commands(), params)
 
-	return cobrau.ExecCommandAndCatchInterrupt(rootCmd)
+	return ExecCommandAndCatchInterrupt(rootCmd)
 }
 
 func getWorkingDir(params *qsGlobalParams) (string, error) {
@@ -239,26 +244,89 @@ func initChangeDirFlags(cmds []*cobra.Command, params *qsGlobalParams) {
 	}
 }
 
-//func prepareParams(cmd *cobra.Command, params *qsGlobalParams, args []string) (err error) {
-//	wd, err := getWorkingDir(params)
-//
-//	if len(args) > 0 {
-//		switch {
-//		case strings.Contains(cmd.Use, "init"):
-//			params.ModulePath = args[0]
-//		case strings.Contains(cmd.Use, "baseline") || strings.Contains(cmd.Use, "compat"):
-//			params.TargetDir = filepath.Clean(args[0])
-//		}
-//	}
-//	params.Dir, err = makeAbsPath(params.Dir)
-//	if err != nil {
-//		return
-//	}
-//	if params.IgnoreFile != "" {
-//		params.IgnoreFile = filepath.Clean(params.IgnoreFile)
-//	}
-//	if params.TargetDir == "" {
-//		params.TargetDir = params.Dir
-//	}
-//	return nil
-//}
+// ExecCommandAndCatchInterrupt executes the given command and catches interrupts.
+// Returns:
+// - context.Context: The context of the executed command
+// - error: Any error that occurred during execution.
+func ExecCommandAndCatchInterrupt(cmd *cobra.Command) (context.Context, error) {
+	cmdExec := func(ctx context.Context) (*cobra.Command, error) {
+		return cmd.ExecuteContextC(ctx)
+	}
+
+	return goAndCatchInterrupt(cmd, cmdExec)
+
+}
+
+// goAndCatchInterrupt runs the given function in a separate goroutine and catches interrupts.
+// Returns:
+// - context.Context: The context of the executed command
+// - error: Any error that occurred during execution.
+func goAndCatchInterrupt(cmd *cobra.Command, f func(ctx context.Context) (*cobra.Command, error)) (context.Context, error) {
+	var cmdExecuted *cobra.Command
+
+	var signals = make(chan os.Signal, 1)
+
+	ctxWithCancel, cancel := context.WithCancel(cmd.Context())
+	signal.Notify(signals, os.Interrupt)
+
+	var err error
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		cmdExecuted, err = f(ctxWithCancel)
+		cancel()
+	}()
+
+	select {
+	case sig := <-signals:
+		logger.Info("signal received:", sig)
+		cancel()
+	case <-ctxWithCancel.Done():
+	}
+	logger.Verbose("waiting for function to finish...")
+	wg.Wait()
+
+	return cmdExecuted.Context(), err
+}
+
+func PrepareRootCmd(ctx context.Context, use string, short string, args []string, version string, cmds ...*cobra.Command) *cobra.Command {
+
+	var rootCmd = &cobra.Command{
+		Use:   use,
+		Short: short,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if ok, _ := cmd.Flags().GetBool("trace"); ok {
+				logger.SetLogLevel(logger.LogLevelTrace)
+				logger.Verbose("Using logger.LogLevelTrace...")
+			} else if ok, _ := cmd.Flags().GetBool("verbose"); ok {
+				logger.SetLogLevel(logger.LogLevelVerbose)
+				logger.Verbose("Using logger.LogLevelVerbose...")
+			}
+		},
+	}
+
+	var versionCmd = &cobra.Command{
+		Use:     "version",
+		Short:   "Print current version",
+		Aliases: []string{"ver"},
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(version)
+		},
+	}
+
+	rootCmd.SetContext(ctx)
+	rootCmd.SetArgs(args[1:])
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(cmds...)
+	// Set context for all subcommands
+	for _, cmd := range cmds {
+		cmd.SetContext(ctx)
+	}
+
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose output")
+	rootCmd.PersistentFlags().Bool("trace", false, "Extremely verbose output")
+	rootCmd.SilenceUsage = true
+	return rootCmd
+}
