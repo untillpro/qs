@@ -8,4 +8,5 @@ const (
 	CtxKeyCustomBranchName
 	CtxKeyCreatedGithubIssueURL
 	CtxKeyBranchPrefix
+	CtxKeyClipboard
 )

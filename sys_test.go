@@ -260,10 +260,10 @@ func TestPRDevBranchOutOfDate(t *testing.T) {
 			Command: "pr",
 			Args:    []string{},
 		},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		SyncState:      systrun.SyncStateForkChanged,
-		ExpectedStderr: "This branch is out-of-date. Merge automatically [y/n]?",
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		SyncState:     systrun.SyncStateForkChanged,
+		Expectations:  systrun.Expectations(systrun.ExpectationPRBranchState),
 	}
 
 	sysTest := systrun.New(t, testConfig)

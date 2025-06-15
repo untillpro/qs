@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/untillpro/goutils/logger"
-	"github.com/untillpro/qs/gitcmds"
-	contextPkg "github.com/untillpro/qs/internal/context"
 	"io"
 	netHttp "net/http"
 	"os"
@@ -18,14 +15,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
+
+	"github.com/untillpro/goutils/logger"
+	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
+	contextPkg "github.com/untillpro/qs/internal/context"
 )
 
 // checkPrerequisites ensures all required tools are available
@@ -75,7 +75,6 @@ func (st *SystemTest) createTestEnvironment() error {
 	if st.cfg.UpstreamState != RemoteStateNull {
 		upstreamRepoURL := buildRemoteURL(
 			st.cfg.GHConfig.UpstreamAccount,
-			st.cfg.GHConfig.UpstreamToken,
 			st.repoName,
 			true,
 		)
@@ -88,7 +87,6 @@ func (st *SystemTest) createTestEnvironment() error {
 	if st.cfg.ForkState != RemoteStateNull {
 		forkRepoURL := buildRemoteURL(
 			st.cfg.GHConfig.ForkAccount,
-			st.cfg.GHConfig.ForkToken,
 			st.repoName,
 			false,
 		)
@@ -122,7 +120,7 @@ func (st *SystemTest) createTestEnvironment() error {
 	}
 
 	// Configure remotes based on test scenario
-	if err := st.configureRemotes(st.repoName); err != nil {
+	if err := st.configureRemotes(st.cloneRepoPath, st.repoName); err != nil {
 		return err
 	}
 
@@ -280,10 +278,8 @@ func (st *SystemTest) processClipboardContent() error {
 	default:
 		return fmt.Errorf("unknown clipboard content type: %s", st.cfg.ClipboardContent)
 	}
-
-	if err := clipboard.WriteAll(clipboardContent); err != nil {
-		return fmt.Errorf("failed to write custom clipboard content: %w", err)
-	}
+	// put clipboard value to context
+	st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyClipboard, clipboardContent)
 
 	return nil
 }
@@ -317,12 +313,12 @@ func (st *SystemTest) createGitHubIssue() (string, error) {
 	return issueURL, nil
 }
 
-func (st *SystemTest) checkoutOnBranch(branchName string) error {
+func (st *SystemTest) checkoutOnBranch(wd, branchName string) error {
 	if branchName == "" {
 		return nil
 	}
 
-	repo, err := git.PlainOpen(st.cloneRepoPath)
+	repo, err := git.PlainOpen(wd)
 	if err != nil {
 		fmt.Println("Failed to open repo:", err)
 		os.Exit(1)
@@ -565,86 +561,74 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 	return nil
 }
 
-func buildRemoteURL(account, token, repoName string, isUpstream bool) string {
-	//return "https://" + account + ":" + token + "@github.com/" + account + "/" + repoName + ".git"
-	remoteType := "upstream"
-	if !isUpstream {
-		remoteType = "origin"
+func buildRemoteURL(account, repoName string, isUpstream bool) string {
+	remoteType := "origin"
+	if isUpstream {
+		remoteType = "upstream"
 	}
 
 	return "git@github-" + remoteType + ":" + account + "/" + repoName + ".git"
 }
 
-// configureRemotes sets up the remote configuration in the cloned repository
-func (st *SystemTest) configureRemotes(repoName string) error {
-	// Open the repository
-	repo, err := git.PlainOpen(st.cloneRepoPath)
+// createRemote creates a remote in the cloned repository
+func createRemote(wd, remote, account, repoName string, isUpstream bool) error {
+	repo, err := git.PlainOpen(wd)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
 	}
 
+	if err = repo.DeleteRemote(remote); err != nil {
+		return fmt.Errorf("failed to delete %s remote: %w", remote, err)
+	}
+
+	remoteURL := buildRemoteURL(account, repoName, isUpstream)
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: remote,
+		URLs: []string{remoteURL},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create %s remote: %w", remote, err)
+	}
+
+	return nil
+}
+
+// configureRemotes sets up the remote configuration in the cloned repository
+func (st *SystemTest) configureRemotes(wd, repoName string) error {
 	// Configure remotes based on test scenario
 	switch {
 	case st.cfg.ForkState != RemoteStateNull && st.cfg.UpstreamState != RemoteStateNull:
 		// Both upstream and fork exist, configure both remotes
-		//_, err := repo.Remote("origin")
-		//if err != nil {
-		// Add origin remote pointing to fork
-		err = repo.DeleteRemote("origin")
-		if err != nil {
-			return fmt.Errorf("failed to delete origin remote: %w", err)
-		}
-
-		forkURL := buildRemoteURL(
+		if err := createRemote(
+			wd,
+			"origin",
 			st.cfg.GHConfig.ForkAccount,
-			st.cfg.GHConfig.ForkToken,
 			repoName,
 			false,
-		)
-		_, err = repo.CreateRemote(&config.RemoteConfig{
-			Name: "origin",
-			URLs: []string{forkURL},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create origin remote: %w", err)
+		); err != nil {
+			return err
 		}
-		//}
 
-		_, err = repo.Remote("upstream")
-		if err != nil {
-			// Add upstream remote
-			upstreamURL := buildRemoteURL(
-				st.cfg.GHConfig.UpstreamAccount,
-				st.cfg.GHConfig.UpstreamToken,
-				repoName,
-				true,
-			)
-			_, err = repo.CreateRemote(&config.RemoteConfig{
-				Name: "upstream",
-				URLs: []string{upstreamURL},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create upstream remote: %w", err)
-			}
+		if err := createRemote(
+			wd,
+			"upstream",
+			st.cfg.GHConfig.UpstreamAccount,
+			repoName,
+			true,
+		); err != nil {
+			return err
 		}
 
 	case st.cfg.ForkState == RemoteStateNull && st.cfg.UpstreamState != RemoteStateNull:
 		// Only upstream exists, make sure origin points to upstream
-		_, err := repo.Remote("origin")
-		if err != nil {
-			upstreamURL := buildRemoteURL(
-				st.cfg.GHConfig.UpstreamAccount,
-				st.cfg.GHConfig.UpstreamToken,
-				repoName,
-				true,
-			)
-			_, err = repo.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{upstreamURL},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create origin remote: %w", err)
-			}
+		if err := createRemote(
+			wd,
+			"origin",
+			st.cfg.GHConfig.UpstreamAccount,
+			repoName,
+			true,
+		); err != nil {
+			return err
 		}
 	}
 
@@ -821,17 +805,27 @@ func (st *SystemTest) validateStderr(stderr string) error {
 func (st *SystemTest) processSyncState() error {
 	// Handle sync state based on configuration
 	switch st.cfg.SyncState {
+	case SyncStateUnspecified:
+		return nil
 	case SyncStateSynchronized:
-		return st.installSyncStateSynchronized()
+		return st.setSyncState(true, true, false, "")
+	case SyncStateCloneChanged:
+		return st.setSyncState(true, false, false, "")
+	case SyncStateForkChanged:
+		return st.setSyncState(false, false, true, "another clone header", 4)
+	case SyncStateBothChanged:
+		return st.setSyncState(true, false, true, "another clone header", 4)
+	case SyncStateBothChangedConflict:
+		return st.setSyncState(true, false, true, "another clone header", 3)
 	default:
 		return fmt.Errorf("not supported yet sync state: %s", st.cfg.SyncState)
 	}
 }
 
-// installSyncStateSynchronized installs the synchronized state for the dev branch
-func (st *SystemTest) installSyncStateSynchronized() error {
-	if st.cfg.SyncState != SyncStateSynchronized {
-		return nil // No custom dev branch state needed
+// setSyncState installs the synchronized state for the dev branch
+func (st *SystemTest) setSyncState(needChangeClone, needSync, needChangeFork bool, headerOfFilesInFork string, idFilesInFork ...int) error {
+	if st.cfg.SyncState == SyncStateUnspecified || st.cfg.SyncState == SyncStateDoesntTrackOrigin {
+		return errors.New("sync state is not supported")
 	}
 
 	// Set the expected dev branch name that will be used later for PR
@@ -840,7 +834,6 @@ func (st *SystemTest) installSyncStateSynchronized() error {
 		return errors.New("failed to determine github issue URL. Use ClipboardContentGithubIssue")
 	}
 
-	// Run "qs dev custom-branch-name" using st.runCommand
 	stdout, stderr, err := st.runCommand(CommandConfig{
 		Command: "dev",
 		Stdin:   "y",
@@ -852,14 +845,63 @@ func (st *SystemTest) installSyncStateSynchronized() error {
 
 	logger.Verbose(stdout)
 
+	if needChangeClone {
+		// Create 3 commits with different files
+		if err := st.commitFiles("", 1, 2, 3); err != nil {
+			return err
+		}
+	}
+
+	if needSync {
+		devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
+		// Push the dev branch to the remote
+		pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
+		pushOutput, err := pushCmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to push dev branch: %w, output: %s", err, pushOutput)
+		}
+	}
+
+	if needChangeFork {
+		remoteURL, err := getRemoteUrlByName(st.cloneRepoPath, "origin")
+		if err != nil {
+			return fmt.Errorf("failed to get remote URL: %w", err)
+		}
+
+		devBranchName := st.ctx.Value(contextPkg.CtxKeyDevBranchName).(string)
+		if devBranchName == "" {
+			return errors.New("failed to determine dev branch name")
+		}
+
+		// push changes from another clone
+		if err := st.pushFromAnotherClone(remoteURL, devBranchName, headerOfFilesInFork, idFilesInFork...); err != nil {
+			return err
+		}
+
+	}
+
+	time.Sleep(2 * time.Second)
+
+	return nil
+}
+
+// commitFiles creates files in the cloned repository and commits them
+// Parameters:
+// - headerOfFiles: optional header to be added to each file
+// - idFiles: list of file IDs to create (e.g., 1, 2, 3 for 1.txt, 2.txt, 3.txt)
+func (st *SystemTest) commitFiles(headerOfFiles string, idFiles ...int) error {
 	// Create 3 commits with different files
-	for i := 1; i <= 3; i++ {
-		fileName := fmt.Sprintf("%d.txt", i)
+	for _, id := range idFiles {
+		fileName := fmt.Sprintf("%d.txt", id)
 		filePath := filepath.Join(st.cloneRepoPath, fileName)
-		fileContent := fmt.Sprintf("Content of file %d", i)
+		fileContent := strings.Builder{}
+		if headerOfFiles != "" {
+			fileContent.WriteString(headerOfFiles + "\n")
+		}
+		fileContent.WriteString(fmt.Sprintf("Content of file %d", id))
 
 		// Create the file
-		if err := os.WriteFile(filePath, []byte(fileContent), 0644); err != nil {
+		if err := os.WriteFile(filePath, []byte(fileContent.String()), 0644); err != nil {
 			return fmt.Errorf("failed to create file %s: %w", fileName, err)
 		}
 
@@ -876,16 +918,91 @@ func (st *SystemTest) installSyncStateSynchronized() error {
 		}
 	}
 
-	devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
+	return nil
+}
 
-	// Push the dev branch to the remote
-	pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
-	pushOutput, err := pushCmd.CombinedOutput()
+func getRemoteUrlByName(wd string, remoteName string) (string, error) {
+	repo, err := git.PlainOpen(wd)
 	if err != nil {
-		return fmt.Errorf("failed to push dev branch: %w, output: %s", err, pushOutput)
+		return "", fmt.Errorf("failed to open repository: %w", err)
 	}
 
-	time.Sleep(2 * time.Second)
+	remotes, err := repo.Remotes()
+	if err != nil {
+		return "", fmt.Errorf("failed to get remotes: %w", err)
+	}
+
+	for _, remote := range remotes {
+		if remote.Config().Name == remoteName {
+			if len(remote.Config().URLs) > 0 {
+				return remote.Config().URLs[0], nil
+			}
+			return "", fmt.Errorf("remote %s has no URLs configured", remoteName)
+		}
+	}
+
+	return "", fmt.Errorf("remote %s not found", remoteName)
+}
+
+// pushFromAnotherClone pushes changes from another clone of the repository
+// This simulates a scenario where changes are made in a different clone and pushed to the remote.
+// Parameters:
+// - originRemoteURL: the remote URL of the original repository
+// - branchName: the name of the branch to push changes to
+// - headOfFiles: optional header to be added to each file
+// - idFiles: list of file IDs to create (e.g., 1, 2, 3 for 1.txt, 2.txt, 3.txt)
+func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFiles string, idFiles ...int) error {
+	// 1. Clone the repository to temp path
+	// 2. Pull the latest changes from the remote
+	// 3. Commit to the branchName
+	// 4. Push the branch to the remote
+
+	tempClonePath, err := os.MkdirTemp("", "qs-test-clone-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp clone path: %w", err)
+	}
+
+	defer os.RemoveAll(tempClonePath)
+	// Clone the repository
+	cloneCmd := exec.Command("git", "clone", originRemoteURL)
+	cloneCmd.Dir = tempClonePath
+
+	account, repo, err := gitcmds.ParseGitRemoteURL(originRemoteURL)
+	if err != nil {
+		return err
+	}
+
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
+	}
+
+	// Create the remote in the cloned repository
+	if err := createRemote(
+		tempClonePath,
+		"origin",
+		account,
+		repo,
+		false,
+	); err != nil {
+		return err
+	}
+
+	// Change to the cloned repository directory
+	if err := st.checkoutOnBranch(tempClonePath, branchName); err != nil {
+		return err
+	}
+
+	// Create files in the cloned repository
+	if err := st.commitFiles(headOfFiles, idFiles...); err != nil {
+		return err
+	}
+
+	// Push the branch to the remote
+	pushCmd := exec.Command("git", "-C", tempClonePath, "push", "origin", branchName)
+
+	if output, err := pushCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push branch %s: %w, output: %s", branchName, err, output)
+	}
 
 	return nil
 }

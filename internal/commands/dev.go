@@ -2,9 +2,11 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	contextPkg "github.com/untillpro/qs/internal/context"
 	"io"
 	"net/http"
 	"os"
@@ -18,6 +20,7 @@ import (
 	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
+
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands/helper"
@@ -49,7 +52,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	var response string
 
 	if len(args) == 0 {
-		clipargs := strings.TrimSpace(getArgStringFromClipboard())
+		clipargs := strings.TrimSpace(getArgStringFromClipboard(cmd.Context()))
 		args = append(args, clipargs)
 	}
 	remoteURL := gitcmds.GetRemoteUpstreamURL(wd)
@@ -127,6 +130,9 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		fmt.Print(devMsg)
 		_, _ = fmt.Scanln(&response)
 	}
+
+	// put branch name to command context
+	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyDevBranchName, branch))
 
 	exists, err := branchExists(wd, branch)
 	if err != nil {
@@ -214,18 +220,26 @@ func branchExists(wd, branchName string) (bool, error) {
 	return exists, nil
 }
 
-func getArgStringFromClipboard() string {
-	arg, err := clipboard.ReadAll()
-	if err != nil {
-		return ""
+// getArgStringFromClipboard retrieves a string from the clipboard, or uses the context value if available.
+func getArgStringFromClipboard(ctx context.Context) string {
+	var err error
+	// context value is first
+	arg := ctx.Value(contextPkg.CtxKeyClipboard).(string)
+	if len(arg) == 0 {
+		arg, err = clipboard.ReadAll()
+		if err != nil {
+			return ""
+		}
 	}
+
 	args := strings.Split(arg, "\n")
-	var newarg string
+	var newArg string
 	for _, str := range args {
-		newarg += str
-		newarg += oneSpace
+		newArg += str
+		newArg += oneSpace
 	}
-	return newarg
+
+	return newArg
 }
 
 func setPreCommitHook(wd string) error {

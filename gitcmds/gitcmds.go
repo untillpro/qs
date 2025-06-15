@@ -2,12 +2,10 @@ package gitcmds
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
-	contextPkg "github.com/untillpro/qs/internal/context"
 	"net/url"
 	"os"
 	osExec "os/exec"
@@ -779,8 +777,6 @@ func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber 
 	if err != nil {
 		return "", nil, err
 	}
-	// put branch name to command context
-	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyDevBranchName, branchName))
 
 	stdout, stderr, err := new(exec.PipedExec).
 		Command("gh", "issue", "develop", strIssueNum, "--repo="+parentrepo, "--name", branchName).
