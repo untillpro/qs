@@ -45,7 +45,10 @@ func TestFork(t *testing.T) {
 		},
 		UpstreamState: systrun.RemoteStateOK,
 		ForkState:     systrun.RemoteStateNull,
-		Expectations:  systrun.Expectations(systrun.ExpectationRemoteState),
+		Expectations: systrun.Expectations(
+			systrun.ExpectationRemoteState,
+			systrun.ExpectationCurrentBranchHasPrefix,
+		),
 	}
 
 	sysTest := systrun.New(t, testConfig)

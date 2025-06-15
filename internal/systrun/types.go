@@ -105,7 +105,12 @@ var availableExpectations = map[Expectation]IExpectation{
 func Expectations(types ...Expectation) []IExpectation {
 	expectations := make([]IExpectation, 0, len(types))
 	for _, t := range types {
-		expectations = append(expectations, availableExpectations[t])
+		iExpectation, ok := availableExpectations[t]
+		if !ok {
+			panic(fmt.Sprintf("unknown expectation type: %v", t))
+		}
+
+		expectations = append(expectations, iExpectation)
 	}
 
 	return expectations
