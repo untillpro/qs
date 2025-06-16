@@ -7,6 +7,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/require"
+
 	"github.com/untillpro/qs/internal/systrun"
 )
 
