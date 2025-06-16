@@ -806,7 +806,7 @@ func (st *SystemTest) processSyncState() error {
 	case SyncStateCloneChanged:
 		return st.setSyncState(true, true, false, false, "")
 	case SyncStateForkChanged:
-		return st.setSyncState(true, true, false, true, headerOfFilesInAnotherClone, 4)
+		return st.setSyncState(false, false, false, true, headerOfFilesInAnotherClone, 4)
 	case SyncStateBothChanged:
 		return st.setSyncState(true, true, false, true, headerOfFilesInAnotherClone, 4)
 	case SyncStateBothChangedConflict:
@@ -817,7 +817,21 @@ func (st *SystemTest) processSyncState() error {
 }
 
 // setSyncState installs the synchronized state for the dev branch
-func (st *SystemTest) setSyncState(needToCommit, needChangeClone, needSync, needChangeFork bool, headerOfFilesInFork string, idFilesInFork ...int) error {
+// Parameters:
+// - needToCommit: if true then create commits in clone repo
+// - needChangeClone: if true then add files into clone repo
+// - needSync: if true then push changes from clone to remote
+// - needChangeFork: if true then push new commits from another clone
+// - headerOfFilesInFork: optional header to be added to each file in fork
+// - idFilesInFork: list of file IDs to create in fork (e.g., 1, 2, 3 for 1.txt, 2.txt, 3.txt)
+func (st *SystemTest) setSyncState(
+	needToCommit bool,
+	needChangeClone bool,
+	needSync bool,
+	needChangeFork bool,
+	headerOfFilesInFork string,
+	idFilesInFork ...int,
+) error {
 	if st.cfg.SyncState == SyncStateUnspecified || st.cfg.SyncState == SyncStateDoesntTrackOrigin {
 		return errors.New("sync state is not supported")
 	}
@@ -1043,6 +1057,8 @@ func (st *SystemTest) Run() error {
 		if err := st.validateStderr(stderr); err != nil {
 			return err
 		}
+
+		return err
 	}
 
 	if err := st.validateStdout(stdout); err != nil {

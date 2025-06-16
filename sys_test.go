@@ -10,7 +10,6 @@ import (
 	"github.com/untillpro/qs/internal/systrun"
 )
 
-// TODO: add into prerequisites section info about required environment variables to design-systests.md
 // TestForkOnExistingFork tests the case where a fork already exists
 func TestFork_OnExistingFork(t *testing.T) {
 	require := require.New(t)
@@ -29,7 +28,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 
 	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
-	require.NoError(err)
+	require.Error(err)
 
 }
 
