@@ -7,6 +7,7 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
@@ -105,7 +106,7 @@ func Pr(cmd *cobra.Command, wd string) error {
 	// Extract notes before any operations
 	notes, ok := gitcmds.GetNotes(wd)
 	if !ok {
-		return errors.New("Warning: No notes found in dev branch")
+		return errors.New("Error: No notes found in dev branch")
 	}
 
 	// Ask for confirmation before creating the PR
@@ -336,7 +337,7 @@ func createPRBranch(wd string) (string, error) {
 	// extract notes from dev branch before any operations
 	notes, ok := gitcmds.GetNotes(wd)
 	if !ok {
-		return "", errors.New("Warning: No notes found in dev branch")
+		return "", errors.New("Error: No notes found in dev branch")
 	}
 	_, _, err = new(exec.PipedExec).
 		Command("git", "checkout", devBranchName).
@@ -387,11 +388,6 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	newNotes.BranchType = int(types.BranchTypePr)
-	// Add empty commit to create commit object and link notes to it
-	if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
-		return "", err
-	}
-
 	// Step 7: Commit the squashed changes
 	stdout, stderr, err := new(exec.PipedExec).
 		Command("git", "commit", "-m", issueDescription).
@@ -404,6 +400,11 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
+	// Add empty commit to create commit object and link notes to it
+	if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
+		return "", err
+	}
+
 	// Step 8: Push notes to origin
 	err = new(exec.PipedExec).
 		Command("git", "push", "origin", "ref/notes/*").
@@ -413,6 +414,8 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
+	time.Sleep(2 * time.Second)
+
 	// Step 9: Push PR branch to origin
 	_, _, err = new(exec.PipedExec).
 		Command("git", "push", "-u", "origin", prBranchName).
@@ -421,6 +424,8 @@ func createPRBranch(wd string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	time.Sleep(2 * time.Second)
 
 	// Step 10: Delete dev branch locally
 	_, _, err = new(exec.PipedExec).

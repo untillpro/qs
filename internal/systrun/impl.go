@@ -180,6 +180,7 @@ func inviteCollaborator(owner, repo, username, token string) error {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Content-Type", "application/json")
 
+	// TODO: add retry logic
 	resp, err := netHttp.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -221,6 +222,7 @@ func acceptPendingInvitations(token string) error {
 		acceptReq.Header.Set("Authorization", "token "+token)
 		acceptReq.Header.Set("Accept", "application/vnd.github+json")
 
+		// TODO: add retry logic
 		acceptResp, err := netHttp.DefaultClient.Do(acceptReq)
 		if err != nil {
 			return err
