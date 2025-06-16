@@ -45,10 +45,7 @@ func TestFork(t *testing.T) {
 		},
 		UpstreamState: systrun.RemoteStateOK,
 		ForkState:     systrun.RemoteStateNull,
-		Expectations: systrun.Expectations(
-			systrun.ExpectationRemoteState,
-			systrun.ExpectationCurrentBranchHasPrefix,
-		),
+		Expectations:  systrun.Expectations(systrun.ExpectationForkExists),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -148,7 +145,6 @@ func TestDev_ExistingBranch(t *testing.T) {
 	require.Error(err)
 }
 
-// TODO: Add same test for case when both exist upstream and fork remotes
 // TestDevNoForkExistingIssue tests creating a dev branch when upstream remote doesn't exist
 func TestDev_NoFork_ExistingIssue(t *testing.T) {
 	require := require.New(t)
@@ -174,8 +170,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 	require.NoError(err)
 }
 
-// TODO: Add same test for case when both exist upstream and fork remotes
-// TestDevNoForkExistingIssue tests creating a dev branch when upstream remote doesn't exist
+// TestDev_NoFork_NonExistingIssue tests creating a dev branch when upstream remote doesn't exist
 func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 	require := require.New(t)
 

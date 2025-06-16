@@ -224,8 +224,8 @@ func branchExists(wd, branchName string) (bool, error) {
 func getArgStringFromClipboard(ctx context.Context) string {
 	var err error
 	// context value is first
-	arg := ctx.Value(contextPkg.CtxKeyClipboard).(string)
-	if len(arg) == 0 {
+	arg, ok := ctx.Value(contextPkg.CtxKeyClipboard).(string)
+	if !ok || len(arg) == 0 {
 		arg, err = clipboard.ReadAll()
 		if err != nil {
 			return ""
