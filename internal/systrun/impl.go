@@ -318,23 +318,13 @@ func (st *SystemTest) checkoutOnBranch(wd, branchName string) error {
 		return nil
 	}
 
-	repo, err := git.PlainOpen(wd)
-	if err != nil {
-		fmt.Println("Failed to open repo:", err)
-		os.Exit(1)
+	cmd := exec.Command("git", "checkout", branchName)
+	cmd.Dir = wd
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to checkout on %s branch: %w, output: %s", branchName, err, output)
 	}
 
-	worktree, err := repo.Worktree()
-	if err != nil {
-		fmt.Println("Failed to get worktree:", err)
-		os.Exit(1)
-	}
-
-	return worktree.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName(branchName),
-		Create: false, // true if the branch doesn't exist locally
-		Force:  false, // true to override uncommitted changes
-	})
+	return nil
 }
 
 // createUpstreamRepo creates the upstream repository
@@ -809,23 +799,25 @@ func (st *SystemTest) processSyncState() error {
 	switch st.cfg.SyncState {
 	case SyncStateUnspecified:
 		return nil
+	case SyncStateUncommitedChangesInClone:
+		return st.setSyncState(false, true, true, false, "")
 	case SyncStateSynchronized:
-		return st.setSyncState(true, true, false, "")
+		return st.setSyncState(true, true, true, false, "")
 	case SyncStateCloneChanged:
-		return st.setSyncState(true, false, false, "")
+		return st.setSyncState(true, true, false, false, "")
 	case SyncStateForkChanged:
-		return st.setSyncState(false, false, true, "another clone header", 4)
+		return st.setSyncState(true, true, false, true, headerOfFilesInAnotherClone, 4)
 	case SyncStateBothChanged:
-		return st.setSyncState(true, false, true, "another clone header", 4)
+		return st.setSyncState(true, true, false, true, headerOfFilesInAnotherClone, 4)
 	case SyncStateBothChangedConflict:
-		return st.setSyncState(true, false, true, "another clone header", 3)
+		return st.setSyncState(true, true, false, true, headerOfFilesInAnotherClone, 3)
 	default:
 		return fmt.Errorf("not supported yet sync state: %s", st.cfg.SyncState)
 	}
 }
 
 // setSyncState installs the synchronized state for the dev branch
-func (st *SystemTest) setSyncState(needChangeClone, needSync, needChangeFork bool, headerOfFilesInFork string, idFilesInFork ...int) error {
+func (st *SystemTest) setSyncState(needToCommit, needChangeClone, needSync, needChangeFork bool, headerOfFilesInFork string, idFilesInFork ...int) error {
 	if st.cfg.SyncState == SyncStateUnspecified || st.cfg.SyncState == SyncStateDoesntTrackOrigin {
 		return errors.New("sync state is not supported")
 	}
@@ -839,7 +831,6 @@ func (st *SystemTest) setSyncState(needChangeClone, needSync, needChangeFork boo
 	stdout, stderr, err := st.runCommand(CommandConfig{
 		Command: "dev",
 		Stdin:   "y",
-		Args:    []string{},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to run qs dev command: %w, stderr: %s", err, stderr)
@@ -849,7 +840,7 @@ func (st *SystemTest) setSyncState(needChangeClone, needSync, needChangeFork boo
 
 	if needChangeClone {
 		// Create 3 commits with different files
-		if err := st.commitFiles("", 1, 2, 3); err != nil {
+		if err := commitFiles(st.cloneRepoPath, needToCommit, "", 1, 2, 3); err != nil {
 			return err
 		}
 	}
@@ -891,11 +882,11 @@ func (st *SystemTest) setSyncState(needChangeClone, needSync, needChangeFork boo
 // Parameters:
 // - headerOfFiles: optional header to be added to each file
 // - idFiles: list of file IDs to create (e.g., 1, 2, 3 for 1.txt, 2.txt, 3.txt)
-func (st *SystemTest) commitFiles(headerOfFiles string, idFiles ...int) error {
+func commitFiles(wd string, needToCommit bool, headerOfFiles string, idFiles ...int) error {
 	// Create 3 commits with different files
 	for _, id := range idFiles {
 		fileName := fmt.Sprintf("%d.txt", id)
-		filePath := filepath.Join(st.cloneRepoPath, fileName)
+		filePath := filepath.Join(wd, fileName)
 		fileContent := strings.Builder{}
 		if headerOfFiles != "" {
 			fileContent.WriteString(headerOfFiles + "\n")
@@ -908,15 +899,17 @@ func (st *SystemTest) commitFiles(headerOfFiles string, idFiles ...int) error {
 		}
 
 		// Add file to git
-		addCmd := exec.Command("git", "-C", st.cloneRepoPath, "add", fileName)
+		addCmd := exec.Command("git", "-C", wd, "add", fileName)
 		if err := addCmd.Run(); err != nil {
 			return fmt.Errorf("failed to git add %s: %w", fileName, err)
 		}
 
-		// Commit the file
-		commitCmd := exec.Command("git", "-C", st.cloneRepoPath, "commit", "-m", fmt.Sprintf("Add %s", fileName))
-		if err := commitCmd.Run(); err != nil {
-			return fmt.Errorf("failed to commit %s: %w", fileName, err)
+		if needToCommit {
+			// Commit the file
+			commitCmd := exec.Command("git", "-C", wd, "commit", "-m", fmt.Sprintf("Add %s", fileName))
+			if err := commitCmd.Run(); err != nil {
+				return fmt.Errorf("failed to commit %s: %w", fileName, err)
+			}
 		}
 	}
 
@@ -959,26 +952,30 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 	// 3. Commit to the branchName
 	// 4. Push the branch to the remote
 
-	tempClonePath, err := os.MkdirTemp("", "qs-test-clone-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp clone path: %w", err)
-	}
-
-	defer os.RemoveAll(tempClonePath)
-	// Clone the repository
-	cloneCmd := exec.Command("git", "clone", originRemoteURL)
-	cloneCmd.Dir = tempClonePath
-
+	// Step 1: Get account and repo name from originRemoteURL
 	account, repo, err := gitcmds.ParseGitRemoteURL(originRemoteURL)
 	if err != nil {
 		return err
 	}
 
+	// Step 2: Create temp path for the clone
+	tempPath, err := os.MkdirTemp("", "qs-test-clone-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp clone path: %w", err)
+	}
+
+	defer os.RemoveAll(tempPath)
+
+	// Step 3: Clone the repository in the temp path
+	tempClonePath := filepath.Join(tempPath, repo)
+	cloneCmd := exec.Command("git", "clone", originRemoteURL)
+	cloneCmd.Dir = tempPath
+
 	if output, err := cloneCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
 	}
 
-	// Create the remote in the cloned repository
+	// Step 4: Create the remote in the cloned repository
 	if err := createRemote(
 		tempClonePath,
 		"origin",
@@ -989,19 +986,25 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 		return err
 	}
 
-	// Change to the cloned repository directory
+	// Step 4.1: Fetch the dev branch from origin
+	fetchCmd := exec.Command("git", "fetch", "origin", branchName)
+	fetchCmd.Dir = tempClonePath
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to fetch %s branch from origin: %w, output: %s", branchName, err, output)
+	}
+
+	// Step 5: Change to the cloned repository directory
 	if err := st.checkoutOnBranch(tempClonePath, branchName); err != nil {
 		return err
 	}
 
-	// Create files in the cloned repository
-	if err := st.commitFiles(headOfFiles, idFiles...); err != nil {
+	// Step 6: Create files in the cloned repository
+	if err := commitFiles(tempClonePath, true, headOfFiles, idFiles...); err != nil {
 		return err
 	}
 
-	// Push the branch to the remote
+	// Step 7: Push the branch to the remote
 	pushCmd := exec.Command("git", "-C", tempClonePath, "push", "origin", branchName)
-
 	if output, err := pushCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to push branch %s: %w, output: %s", branchName, err, output)
 	}

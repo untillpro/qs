@@ -1948,56 +1948,24 @@ func UpstreamNotExist(wd string) bool {
 	return len(getRemotes(wd)) < 2
 }
 
-func PRAhead(wd string) (bool, error) {
-	brName := GetCurrentBranchName(wd)
-	mainBranch := GetMainBranch(wd)
-
-	remotes := getRemotes(wd)
-	if len(remotes) < 2 {
-		return false, errors.New("upstream is not set, Pull Request can not be done")
-	}
-
-	err := new(exec.PipedExec).
-		Command(git, "fetch", "upstream").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
-	if err != nil {
-		return false, err
-	}
-
-	_, _, err = new(exec.PipedExec).
-		Command(git, "diff", "--quiet", brName+"...upstream/"+mainBranch).
+func HasRemote(wd, remoteName string) (bool, error) {
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "remote").
 		WorkingDir(wd).
 		RunToStrings()
 
-	return err != nil, err
-}
-
-// TODO: remove rebase
-func MergeFromUpstreamRebase(wd string) error {
-	mainbr := GetMainBranch(wd)
-	err := new(exec.PipedExec).
-		Command(git, "fetch", "upstream").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
 	if err != nil {
-		return err
+		return false, fmt.Errorf("failed to list git remotes: %w: %s", err, stderr)
 	}
 
-	err = new(exec.PipedExec).
-		Command(git, "rebase", "upstream/"+mainbr).
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
-	if err != nil {
-		return err
+	remotes := strings.Split(strings.TrimSpace(stdout), "\n")
+	for _, remote := range remotes {
+		if strings.TrimSpace(remote) == remoteName {
+			return true, nil
+		}
 	}
 
-	brName := GetCurrentBranchName(wd)
-
-	return new(exec.PipedExec).
-		Command(git, push, "-f", origin, brName).
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	return false, nil
 }
 
 func GawkInstalled() bool {

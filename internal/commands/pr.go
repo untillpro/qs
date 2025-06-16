@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/untillpro/goutils/logger"
 	"os"
 	"strings"
 
@@ -70,23 +71,23 @@ func Pr(cmd *cobra.Command, wd string) error {
 		}
 	}
 
-	ok, err := gitcmds.PRAhead(wd)
-	if err != nil {
-		return err
-	}
-	if ok {
-		fmt.Print("This branch is out-of-date. Merge automatically[y/n]?")
-		_, _ = fmt.Scanln(&response)
-		if response != pushYes {
-			fmt.Print(pushFail)
-			return nil
-		}
-		response = ""
-		if err := gitcmds.MergeFromUpstreamRebase(wd); err != nil {
-			return err
-		}
-	}
-
+	//ok, err := gitcmds.PRAhead(wd)
+	//if err != nil {
+	//	return err
+	//}
+	//if ok {
+	//	fmt.Print("This branch is out-of-date. Merge automatically[y/n]?")
+	//	_, _ = fmt.Scanln(&response)
+	//	if response != pushYes {
+	//		fmt.Print(pushFail)
+	//		return nil
+	//	}
+	//	response = ""
+	//	if err := gitcmds.MergeFromUpstreamRebase(wd); err != nil {
+	//		return err
+	//	}
+	//}
+	//
 	// Check if there are any modified files in the current branch
 	if _, ok, err := gitcmds.ChangedFilesExist(wd); ok || err != nil {
 		if err != nil {
@@ -189,6 +190,119 @@ func convertIssuesURLToRepoURL(issueURL string) (string, error) {
 	return repoURL, nil
 }
 
+//// createPRBranch creates a new branch for the pull request and checks out on it.
+//// Returns:
+//// - title of the pull request
+//// - error if any operation fails
+//func createPRBranch(wd string) (string, error) {
+//	// Save current branch name (dev branch)
+//	devBranchName := gitcmds.GetCurrentBranchName(wd)
+//
+//	// Extract notes before any operations
+//	notes, ok := gitcmds.GetNotes(wd)
+//	if !ok {
+//		return "", errors.New("Warning: No notes found in dev branch")
+//	}
+//
+//	//
+//	// checking out on main branch
+//	mainBranch := gitcmds.GetMainBranch(wd)
+//	_, _, err := new(exec.PipedExec).
+//		Command("git", "checkout", mainBranch).
+//		WorkingDir(wd).
+//		Command("git", "pull", "origin", mainBranch).
+//		WorkingDir(wd).
+//		RunToStrings()
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	// building pr branch name
+//	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
+//
+//	// creating new branch for PR from updated main
+//	_, _, err = new(exec.PipedExec).
+//		Command("git", "checkout", "-b", prBranchName).
+//		WorkingDir(wd).
+//		RunToStrings()
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	// Squash merge dev branch commits
+//	_, _, err = new(exec.PipedExec).
+//		Command("git", "merge", "--squash", devBranchName).
+//		WorkingDir(wd).
+//		RunToStrings()
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	// get json notes from dev branch
+//	newNotes, err := notesPkg.Deserialize(notes)
+//	if err != nil {
+//		return "", fmt.Errorf("Error deserializing notes: %w", err)
+//	}
+//
+//	// get issue description from notes for commit message
+//	issueDescription, err := getIssueDescription(newNotes.GithubIssueURL)
+//	if err != nil {
+//		return "", fmt.Errorf("Error retrieving issue description: %w", err)
+//	}
+//
+//	// Create commit with the squashed changes
+//	_, _, err = new(exec.PipedExec).
+//		Command("git", "commit", "-m", issueDescription).
+//		WorkingDir(wd).
+//		RunToStrings()
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	newNotes.BranchType = int(types.BranchTypePr)
+//	// Add empty commit to create commit object and link notes to it
+//	if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
+//		return "", err
+//	}
+//
+//	// Push notes to origin
+//	err = new(exec.PipedExec).
+//		Command("git", "push", "origin", "ref/notes/*").
+//		WorkingDir(wd).
+//		Run(os.Stdout, os.Stdout)
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	// Push PR branch to origin
+//	_, _, err = new(exec.PipedExec).
+//		Command("git", "push", "-u", "origin", prBranchName).
+//		WorkingDir(wd).
+//		RunToStrings()
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	// Delete dev branch locally and remotely
+//	_, _, err = new(exec.PipedExec).
+//		Command("git", "branch", "-D", devBranchName).
+//		WorkingDir(wd).
+//		RunToStrings()
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	_, _, err = new(exec.PipedExec).
+//		Command("git", "push", "origin", "--delete", devBranchName).
+//		WorkingDir(wd).
+//		RunToStrings()
+//	if err != nil {
+//		return "", err
+//	}
+//
+//	return issueDescription, nil
+//}
+
 // createPRBranch creates a new branch for the pull request and checks out on it.
 // Returns:
 // - title of the pull request
@@ -196,39 +310,61 @@ func convertIssuesURLToRepoURL(issueURL string) (string, error) {
 func createPRBranch(wd string) (string, error) {
 	// Save current branch name (dev branch)
 	devBranchName := gitcmds.GetCurrentBranchName(wd)
+	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
 
-	// Extract notes before any operations
+	upstreamRemote := "upstream"
+	exists, err := gitcmds.HasRemote(wd, upstreamRemote)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		upstreamRemote = "origin"
+	}
+	upstreamMain := upstreamRemote + "/main"
+
+	// Step 1: Fetch latest upstream
+	_, _, err = new(exec.PipedExec).
+		Command("git", "fetch", upstreamRemote).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		return "", err
+	}
+
+	// Step 2: Checkout dev branch
+
+	// extract notes from dev branch before any operations
 	notes, ok := gitcmds.GetNotes(wd)
 	if !ok {
 		return "", errors.New("Warning: No notes found in dev branch")
 	}
-
-	//
-	// checking out on main branch
-	mainBranch := gitcmds.GetMainBranch(wd)
-	_, _, err := new(exec.PipedExec).
-		Command("git", "checkout", mainBranch).
-		WorkingDir(wd).
-		Command("git", "pull", "origin", mainBranch).
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		return "", err
-	}
-
-	// building pr branch name
-	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
-
-	// creating new branch for PR from updated main
 	_, _, err = new(exec.PipedExec).
-		Command("git", "checkout", "-b", prBranchName).
+		Command("git", "checkout", devBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		return "", err
 	}
 
-	// Squash merge dev branch commits
+	// Step 3: Merge upstream/main into dev branch (non-rebase)
+	_, _, err = new(exec.PipedExec).
+		Command("git", "merge", upstreamMain).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		return "", err
+	}
+
+	// Step 4: Create new PR branch from upstream/main
+	_, _, err = new(exec.PipedExec).
+		Command("git", "checkout", "-b", prBranchName, upstreamMain).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		return "", err
+	}
+
+	// Step 5: Squash merge dev into PR branch
 	_, _, err = new(exec.PipedExec).
 		Command("git", "merge", "--squash", devBranchName).
 		WorkingDir(wd).
@@ -237,25 +373,17 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
+	// Step 6: Get issue description from notes for commit message
+
 	// get json notes from dev branch
 	newNotes, err := notesPkg.Deserialize(notes)
 	if err != nil {
 		return "", fmt.Errorf("Error deserializing notes: %w", err)
 	}
 
-	// get issue description from notes for commit message
 	issueDescription, err := getIssueDescription(newNotes.GithubIssueURL)
 	if err != nil {
 		return "", fmt.Errorf("Error retrieving issue description: %w", err)
-	}
-
-	// Create commit with the squashed changes
-	_, _, err = new(exec.PipedExec).
-		Command("git", "commit", "-m", issueDescription).
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		return "", err
 	}
 
 	newNotes.BranchType = int(types.BranchTypePr)
@@ -264,22 +392,19 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	//// Add empty commit to create commit object and link notes to it
-	//err = new(exec.PipedExec).
-	//	Command("git", "commit", "--allow-empty", "-m", gitcmds.MsgCommitForNotes).
-	//	WorkingDir(wd).
-	//	Run(os.Stdout, os.Stdout)
-	//if err != nil {
-	//	return "", err
-	//}
-	//
-	//newNotes.BranchType = int(types.BranchTypePr)
-	//// Add empty commit to create commit object and link notes to it
-	//if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
-	//	return "", err
-	//}
+	// Step 7: Commit the squashed changes
+	stdout, stderr, err := new(exec.PipedExec).
+		Command("git", "commit", "-m", issueDescription).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stdout)
+		logger.Verbose(stderr)
 
-	// Push notes to origin
+		return "", err
+	}
+
+	// Step 8: Push notes to origin
 	err = new(exec.PipedExec).
 		Command("git", "push", "origin", "ref/notes/*").
 		WorkingDir(wd).
@@ -288,7 +413,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	// Push PR branch to origin
+	// Step 9: Push PR branch to origin
 	_, _, err = new(exec.PipedExec).
 		Command("git", "push", "-u", "origin", prBranchName).
 		WorkingDir(wd).
@@ -297,7 +422,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	// Delete dev branch locally and remotely
+	// Step 10: Delete dev branch locally
 	_, _, err = new(exec.PipedExec).
 		Command("git", "branch", "-D", devBranchName).
 		WorkingDir(wd).
@@ -306,6 +431,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
+	// Step 11: Delete dev branch remotely
 	_, _, err = new(exec.PipedExec).
 		Command("git", "push", "origin", "--delete", devBranchName).
 		WorkingDir(wd).

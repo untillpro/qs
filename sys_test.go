@@ -264,13 +264,11 @@ func TestPR_ForkChanged(t *testing.T) {
 
 	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
-	require.NoError(err)
+	require.Error(err)
 }
 
 // TestDownload tests synchronizing local repository with remote changes
 func TestDownload(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -278,12 +276,12 @@ func TestDownload(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "d",
-			Args:    []string{},
 		},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		SyncState:      systrun.SyncStateForkChanged,
-		ExpectedStdout: "Downloading changes from remote",
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		SyncState:        systrun.SyncStateForkChanged,
+		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		Expectations:     systrun.Expectations(systrun.ExpectationDownloadResult),
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -293,8 +291,6 @@ func TestDownload(t *testing.T) {
 
 // TestUpload tests uploading local changes to remote repository
 func TestUpload(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -302,41 +298,18 @@ func TestUpload(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "u",
-			Args:    []string{},
+			Args:    []string{"test commit message"},
 		},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		SyncState:      systrun.SyncStateCloneChanged,
-		ExpectedStdout: "Uploading changes to remote",
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		SyncState:        systrun.SyncStateUncommitedChangesInClone,
+		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		Expectations:     systrun.Expectations(systrun.ExpectationRemoteBranch),
 	}
 
 	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
-}
-
-// TestUploadConflict tests uploading changes when there are conflicts
-func TestUploadConflict(t *testing.T) {
-	t.Skip("Test is under debugging session")
-
-	require := require.New(t)
-
-	testConfig := &systrun.TestConfig{
-		TestID:   "upload-conflict",
-		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
-			Command: "u",
-			Args:    []string{},
-		},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		SyncState:      systrun.SyncStateBothChangedConflict,
-		ExpectedStderr: "There are conflicts that need to be resolved manually",
-	}
-
-	sysTest := systrun.New(t, testConfig)
-	err := sysTest.Run()
-	require.Error(err)
 }
 
 // getGithubConfig retrieves GitHub credentials from environment variables

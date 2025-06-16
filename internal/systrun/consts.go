@@ -30,8 +30,10 @@ const (
 
 const (
 	SyncStateUnspecified SyncState = iota
+	// SyncStateUncommitedChangesInClone means that the clone repo has uncommitted changes
+	SyncStateUncommitedChangesInClone
 	// SyncStateSynchronized means that the clone repo and fork/upstream repos are in sync
-	SyncStateSynchronized SyncState = iota
+	SyncStateSynchronized
 	// SyncStateForkChanged means that the fork repo has changes that are not in the clone repo
 	SyncStateForkChanged
 	// SyncStateCloneChanged means that the clone repo has changes that are not in the fork repo
@@ -64,4 +66,8 @@ const (
 	DevBranchStateExistsAndCheckedOut
 	// Dev branch exists but it is not the current branch
 	DevBranchStateExistsButNotCheckedOut
+)
+
+const (
+	headerOfFilesInAnotherClone = "another clone header"
 )

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -85,20 +86,24 @@ const (
 	ExpectationBranchLinkedToIssue
 	ExpectationCurrentBranchHasPrefix
 	ExpectationPRBranchState
+	ExpectationCommitsFromAnotherClone
+	ExpectationRemoteBranch
 )
 
 // Available expectations
 // Each Expectation type has its own struct that implements IExpectation interface
 var availableExpectations = map[Expectation]IExpectation{
-	ExpectationCurrentBranch:          expectedCurrentBranch{},
-	ExpectationRemoteState:            expectedRemoteState{},
-	ExpectationPullRequest:            expectedPullRequest{},
-	ExpectationDownloadResult:         expectedDownloadResult{},
-	ExpectationUploadResult:           expectedUploadResult{},
-	ExpectationForkExists:             expectedForkExists{},
-	ExpectationBranchLinkedToIssue:    expectedBranchLinkedToIssue{},
-	ExpectationPRBranchState:          expectedPRBranchState{},
-	ExpectationCurrentBranchHasPrefix: expectedCurrentBranchHasPrefix{},
+	ExpectationCurrentBranch:           expectedCurrentBranch{},
+	ExpectationRemoteState:             expectedRemoteState{},
+	ExpectationPullRequest:             expectedPullRequest{},
+	ExpectationDownloadResult:          expectedDownloadResult{},
+	ExpectationUploadResult:            expectedUploadResult{},
+	ExpectationForkExists:              expectedForkExists{},
+	ExpectationBranchLinkedToIssue:     expectedBranchLinkedToIssue{},
+	ExpectationPRBranchState:           expectedPRBranchState{},
+	ExpectationCurrentBranchHasPrefix:  expectedCurrentBranchHasPrefix{},
+	ExpectationCommitsFromAnotherClone: expectedCommitsFromAnotherClone{},
+	ExpectationRemoteBranch:            expectedRemoteBranch{},
 }
 
 // Expectations returns a list of expectations based on the provided types
@@ -513,6 +518,76 @@ func (e expectedPRBranchState) Check(ctx context.Context) error {
 
 	if len(prList) == 0 {
 		return fmt.Errorf("no pull request found for branch %s", expectedPRBranch)
+	}
+
+	return nil
+}
+
+type expectedCommitsFromAnotherClone struct{}
+
+func (e expectedCommitsFromAnotherClone) Check(ctx context.Context) error {
+	// Check if the commit from another clone exists
+	// Get the current branch
+	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	// Get the current branch
+	head, err := repo.Head()
+	if err != nil {
+		return fmt.Errorf("failed to get HEAD: %w", err)
+	}
+
+	// Get the commit history
+	commits, err := repo.Log(&git.LogOptions{From: head.Hash()})
+	if err != nil {
+		return fmt.Errorf("failed to get commit history: %w", err)
+	}
+
+	// Check if the commit from another clone exists
+	commitFound := false
+	err = commits.ForEach(func(c *object.Commit) error {
+		if strings.Contains(c.Message, headerOfFilesInAnotherClone) {
+			commitFound = true
+			return nil
+		}
+		return nil
+	})
+
+	if !commitFound {
+		return fmt.Errorf("commit from another clone not found")
+	}
+
+	return nil
+}
+
+type expectedRemoteBranch struct{}
+
+func (e expectedRemoteBranch) Check(ctx context.Context) error {
+	// Check if the remote branch exists
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return fmt.Errorf("clone repo path not found in context")
+	}
+
+	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
+	if !ok {
+		return fmt.Errorf("remote branch name not found in context")
+	}
+
+	// Check if branch exists on the remote
+	stdout, stderr, err := new(goUtilsExec.PipedExec).
+		Command("git", "ls-remote", "--heads", "origin", remoteBranchName).
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+
+	if err != nil {
+		return fmt.Errorf("failed to check remote branches: %w: %s", err, stderr)
+	}
+
+	if stdout == "" {
+		return fmt.Errorf("remote branch %s not found", remoteBranchName)
 	}
 
 	return nil
