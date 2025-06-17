@@ -53,18 +53,6 @@ type CommandConfig struct {
 	Stdin string
 }
 
-type RuntimeEnvironment struct {
-	// URL of the created GitHub issue
-	createdGithubIssueURL string
-	// Path to the cloned repository
-	cloneRepoPath string
-	// Custom name of the branch created during the test
-	customBranchName string
-	// Prefix for the branch name, used to check if the branch is created correctly
-	branchPrefix  string
-	devBranchName string
-}
-
 // GithubConfig holds GitHub account and token information
 type GithubConfig struct {
 	UpstreamAccount string
