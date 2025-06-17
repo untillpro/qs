@@ -77,11 +77,8 @@ type GithubConfig struct {
 type Expectation int
 
 const (
-	ExpectationCurrentBranch Expectation = iota
-	ExpectationRemoteState
-	ExpectationPullRequest
-	ExpectationDownloadResult
-	ExpectationUploadResult
+	ExpectationCustomBranchIsCurrentBranch Expectation = iota
+	ExpectationCloneIsSyncedWithFork
 	ExpectationForkExists
 	ExpectationBranchLinkedToIssue
 	ExpectationCurrentBranchHasPrefix
@@ -93,17 +90,14 @@ const (
 // Available expectations
 // Each Expectation type has its own struct that implements IExpectation interface
 var availableExpectations = map[Expectation]IExpectation{
-	ExpectationCurrentBranch:           expectedCurrentBranch{},
-	ExpectationRemoteState:             expectedRemoteState{},
-	ExpectationPullRequest:             expectedPullRequest{},
-	ExpectationDownloadResult:          expectedDownloadResult{},
-	ExpectationUploadResult:            expectedUploadResult{},
-	ExpectationForkExists:              expectedForkExists{},
-	ExpectationBranchLinkedToIssue:     expectedBranchLinkedToIssue{},
-	ExpectationPRBranchState:           expectedPRBranchState{},
-	ExpectationCurrentBranchHasPrefix:  expectedCurrentBranchHasPrefix{},
-	ExpectationCommitsFromAnotherClone: expectedCommitsFromAnotherClone{},
-	ExpectationRemoteBranch:            expectedRemoteBranch{},
+	ExpectationCustomBranchIsCurrentBranch: expectedCustomBranchIsCurrentBranch{},
+	ExpectationCloneIsSyncedWithFork:       expectedCloneIsSyncedWithFork{},
+	ExpectationForkExists:                  expectedForkExists{},
+	ExpectationBranchLinkedToIssue:         expectedBranchLinkedToIssue{},
+	ExpectationPRBranchState:               expectedPRBranchState{},
+	ExpectationCurrentBranchHasPrefix:      expectedCurrentBranchHasPrefix{},
+	ExpectationCommitsFromAnotherClone:     expectedCommitsFromAnotherClone{},
+	ExpectationRemoteBranch:                expectedRemoteBranch{},
 }
 
 // Expectations returns a list of expectations based on the provided types
@@ -121,10 +115,10 @@ func Expectations(types ...Expectation) []IExpectation {
 	return expectations
 }
 
-// expectedCurrentBranch represents checker for ExpectationCurrentBranch
-type expectedCurrentBranch struct{}
+// expectedCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
+type expectedCustomBranchIsCurrentBranch struct{}
 
-func (e expectedCurrentBranch) Check(ctx context.Context) error {
+func (e expectedCustomBranchIsCurrentBranch) Check(ctx context.Context) error {
 	currentBranch := gitCmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	customBranchName := ctx.Value(contextCfg.CtxKeyCustomBranchName).(string)
 	if currentBranch != customBranchName {
@@ -134,60 +128,10 @@ func (e expectedCurrentBranch) Check(ctx context.Context) error {
 	return nil
 }
 
-// ExpectedRemoteState represents the expected state of a remote
-type expectedRemoteState struct{}
+// expectedCloneIsSyncedWithFork checks if the clone is synchronized with the fork
+type expectedCloneIsSyncedWithFork struct{}
 
-func (e expectedRemoteState) Check(_ context.Context) error {
-	// Implement the logic to check the remote state
-
-	return nil
-}
-
-// ExpectedPullRequest represents the expected state of a pull request
-type expectedPullRequest struct {
-	Exists          bool
-	Title           string
-	ForkAccount     string
-	UpstreamAccount string
-}
-
-func (e expectedPullRequest) Check(ctx context.Context) error {
-	// Open the repository
-	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Check remotes configuration
-	origin, err := repo.Remote("origin")
-	if err != nil {
-		return fmt.Errorf("origin remote not found after fork command: %w", err)
-	}
-
-	// Verify origin points to fork
-	expectedForkURL := fmt.Sprintf("https://github.com/%s/", e.ForkAccount)
-	if !strings.Contains(origin.Config().URLs[0], expectedForkURL) {
-		return fmt.Errorf("origin remote does not point to fork: %s", origin.Config().URLs[0])
-	}
-
-	// Verify upstream remote exists and points to upstream
-	upstream, err := repo.Remote("upstream")
-	if err != nil {
-		return fmt.Errorf("upstream remote not found after fork command: %w", err)
-	}
-
-	expectedUpstreamURL := fmt.Sprintf("https://github.com/%s/", e.UpstreamAccount)
-	if !strings.Contains(upstream.Config().URLs[0], expectedUpstreamURL) {
-		return fmt.Errorf("upstream remote does not point to upstream: %s", upstream.Config().URLs[0])
-	}
-
-	return nil
-}
-
-// ExpectedDownloadResult represents the expected state after downloading changes
-type expectedDownloadResult struct{}
-
-func (e expectedDownloadResult) Check(ctx context.Context) error {
+func (e expectedCloneIsSyncedWithFork) Check(ctx context.Context) error {
 	// Compare local and remote branches to ensure they're in sync
 	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
@@ -218,56 +162,6 @@ func (e expectedDownloadResult) Check(ctx context.Context) error {
 	// Check if local and remote are in sync
 	if head.Hash() != remoteBranch.Hash() {
 		return fmt.Errorf("local and remote branches are not in sync")
-	}
-
-	return nil
-}
-
-// ExpectedUploadResult represents the expected state after uploading changes
-type expectedUploadResult struct{}
-
-func (e expectedUploadResult) Check(ctx context.Context) error {
-	// Similar to download but checks if the changes were pushed to remote
-	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Get the current branch
-	head, err := repo.Head()
-	if err != nil {
-		return fmt.Errorf("failed to get HEAD: %w", err)
-	}
-
-	// Get the branch name
-	branchName := ""
-	if head.Name().IsBranch() {
-		branchName = head.Name().Short()
-	} else {
-		return fmt.Errorf("HEAD is not on a branch")
-	}
-
-	// Execute git fetch to get latest remote state
-	cmd := exec.Command("git", "fetch", "origin")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to fetch from remote: %w", err)
-	}
-
-	// Check if local branch is ahead of remote branch
-	cmd = exec.Command("git", "rev-list", "--count",
-		fmt.Sprintf("origin/%s..%s", branchName, branchName))
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to check if branch is ahead: %w", err)
-	}
-
-	aheadCount, err := strconv.Atoi(strings.TrimSpace(string(output)))
-	if err != nil {
-		return fmt.Errorf("failed to parse ahead count: %w", err)
-	}
-
-	if aheadCount > 0 {
-		return fmt.Errorf("local branch is ahead of remote by %d commits", aheadCount)
 	}
 
 	return nil
@@ -474,7 +368,7 @@ func (e expectedPRBranchState) Check(ctx context.Context) error {
 		return fmt.Errorf("dev branch %s still exists locally after PR creation", devBranchName)
 	}
 
-	// Check remotely
+	// Check remotely in origin
 	stdout, stderr, err = new(goUtilsExec.PipedExec).
 		Command("git", "-C", cloneRepoPath, "ls-remote", "--heads", "origin", devBranchName).
 		RunToStrings()
@@ -484,7 +378,20 @@ func (e expectedPRBranchState) Check(ctx context.Context) error {
 	}
 
 	if stdout != "" {
-		return fmt.Errorf("dev branch %s still exists on remote after PR creation", devBranchName)
+		return fmt.Errorf("dev branch %s still exists on origin after PR creation", devBranchName)
+	}
+
+	// Check remotely in upstream
+	stdout, stderr, err = new(goUtilsExec.PipedExec).
+		Command("git", "-C", cloneRepoPath, "ls-remote", "--heads", "upstream", devBranchName).
+		RunToStrings()
+
+	if err != nil {
+		return fmt.Errorf("failed to check remote branches: %w, stderr: %s", err, stderr)
+	}
+
+	if stdout != "" {
+		return fmt.Errorf("dev branch %s still exists on upstream after PR creation", devBranchName)
 	}
 
 	// 5. Check if a real pull request was created in upstream repo
@@ -588,6 +495,25 @@ func (e expectedRemoteBranch) Check(ctx context.Context) error {
 
 	if stdout == "" {
 		return fmt.Errorf("remote branch %s not found", remoteBranchName)
+	}
+
+	// check that remote branch has specific commit message
+	stdout, stderr, err = new(goUtilsExec.PipedExec).
+		Command("git", "log", "-1", "--pretty=%B", remoteBranchName).
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+
+	if err != nil {
+		return fmt.Errorf("failed to get last commit message: %w: %s", err, stderr)
+	}
+
+	commitMessage, ok := ctx.Value(contextCfg.CtxKeyCommitMessage).(string)
+	if !ok {
+		return fmt.Errorf("commit message not found in context")
+	}
+
+	if !strings.Contains(stdout, commitMessage) {
+		return fmt.Errorf("remote branch %s does not have commit message '%s'", remoteBranchName, commitMessage)
 	}
 
 	return nil

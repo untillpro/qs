@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/atotto/clipboard"
@@ -16,7 +17,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "fork-on-existing-fork",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "fork",
@@ -27,7 +28,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 		Expectations:   systrun.Expectations(systrun.ExpectationForkExists),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 
@@ -38,7 +39,7 @@ func TestFork(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "fork",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "fork",
@@ -48,7 +49,7 @@ func TestFork(t *testing.T) {
 		Expectations:  systrun.Expectations(systrun.ExpectationForkExists),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -58,7 +59,7 @@ func TestFork_NoRemotes(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "fork-no-remotes",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "fork",
@@ -68,7 +69,7 @@ func TestFork_NoRemotes(t *testing.T) {
 		ExpectedStderr: "origin remote not found",
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 }
@@ -78,7 +79,7 @@ func TestDev_CustomName(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-custom-name",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
@@ -87,10 +88,10 @@ func TestDev_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
-		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranch),
+		Expectations:     systrun.Expectations(systrun.ExpectationCustomBranchIsCurrentBranch),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -100,7 +101,7 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-upstream-custom-name",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
@@ -110,10 +111,10 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
-		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranch),
+		Expectations:     systrun.Expectations(systrun.ExpectationCustomBranchIsCurrentBranch),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -127,7 +128,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 
 	branchName := "dev"
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-existing-branch",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
@@ -140,7 +141,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 		ExpectedStderr: fmt.Sprintf("dev branch '%s' already exists", branchName),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err = sysTest.Run()
 	require.Error(err)
 }
@@ -152,7 +153,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 	ghConfig := getGithubConfig(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-fork-existing-issue",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: ghConfig,
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
@@ -165,7 +166,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationBranchLinkedToIssue),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -176,7 +177,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 
 	ghConfig := getGithubConfig(t)
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-fork-non-existing-issue",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: ghConfig,
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
@@ -189,7 +190,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 		ExpectedStderr:   "Invalid GitHub issue link",
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 }
@@ -199,7 +200,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "dev-no-fork-jira-ticket-url",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
@@ -212,7 +213,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranchHasPrefix),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -222,7 +223,7 @@ func TestPR_Synchronized(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "pr-synchronized",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
@@ -235,7 +236,7 @@ func TestPR_Synchronized(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -244,7 +245,7 @@ func TestPR_ForkChanged(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "pr-fork-changed",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
@@ -257,7 +258,7 @@ func TestPR_ForkChanged(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 }
@@ -267,7 +268,7 @@ func TestDownload(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "download",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "d",
@@ -276,10 +277,10 @@ func TestDownload(t *testing.T) {
 		ForkState:        systrun.RemoteStateOK,
 		SyncState:        systrun.SyncStateForkChanged,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     systrun.Expectations(systrun.ExpectationDownloadResult),
+		Expectations:     systrun.Expectations(systrun.ExpectationCloneIsSyncedWithFork),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -289,11 +290,11 @@ func TestUpload(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
-		TestID:   "upload",
+		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "u",
-			Args:    []string{"test commit message"},
+			Stdin:   "y",
 		},
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
@@ -302,7 +303,7 @@ func TestUpload(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationRemoteBranch),
 	}
 
-	sysTest := systrun.New(t, testConfig)
+	sysTest := systrun.New(testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }

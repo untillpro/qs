@@ -71,3 +71,43 @@ const (
 const (
 	headerOfFilesInAnotherClone = "another clone header"
 )
+
+func (c ClipboardContentType) String() string {
+	switch c {
+	case ClipboardContentEmpty:
+		return "ClipboardContentEmpty"
+	case ClipboardContentGithubIssue:
+		return "ClipboardContentGithubIssue"
+	case ClipboardContentUnavailableGithubIssue:
+		return "ClipboardContentUnavailableGithubIssue"
+	case ClipboardContentJiraTicket:
+		return "ClipboardContentJiraTicket"
+	case ClipboardContentCustom:
+		return "ClipboardContentCustom"
+	default:
+		return "unknown"
+	}
+}
+
+func (s SyncState) String() string {
+	switch s {
+	case SyncStateUnspecified:
+		return "SyncStateUnspecified"
+	case SyncStateUncommitedChangesInClone:
+		return "SyncStateUncommitedChangesInClone"
+	case SyncStateSynchronized:
+		return "SyncStateSynchronized"
+	case SyncStateForkChanged:
+		return "SyncStateForkChanged"
+	case SyncStateCloneChanged:
+		return "SyncStateCloneChanged"
+	case SyncStateBothChanged:
+		return "SyncStateBothChanged"
+	case SyncStateBothChangedConflict:
+		return "SyncStateBothChangedConflict"
+	case SyncStateDoesntTrackOrigin:
+		return "SyncStateDoesntTrackOrigin"
+	default:
+		return "unknown"
+	}
+}

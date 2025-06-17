@@ -9,4 +9,5 @@ const (
 	CtxKeyCreatedGithubIssueURL
 	CtxKeyBranchPrefix
 	CtxKeyClipboard
+	CtxKeyCommitMessage
 )

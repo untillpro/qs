@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
 	"github.com/untillpro/qs/internal/cmdproc"
 )
 
 // New creates a new SystemTest instance
-func New(t *testing.T, testConfig *TestConfig) *SystemTest {
+func New(testConfig *TestConfig) *SystemTest {
 	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
 	repoName := fmt.Sprintf("%s-%s", testConfig.TestID, timestamp)
 	wd, err := os.Getwd()

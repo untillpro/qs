@@ -58,15 +58,6 @@ func TestGeRepoNameFromURL(t *testing.T) {
 	assert.Equal(t, "13427", topicid)
 }
 
-// TODO: uncomment before PR
-//func TestGetJiraIssueName(t *testing.T) {
-//	os.Setenv("JIRA_EMAIL", "v.istratenko@dev.untill.com")
-//	name := getJiraIssueNameByNumber("AIR-270")
-//	if name == "" {
-//		assert.Equal(t, "qwfwf", name)
-//	}
-//}
-
 func TestContainsJiraName(t *testing.T) {
 	tests := []struct {
 		name     string

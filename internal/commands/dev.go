@@ -348,7 +348,7 @@ func getJiraBranchName(wd string, args ...string) (branch string, comments []str
 			issueKey := matches[2] // Extract the JIRA issue key (e.g., "AIR-270")
 
 			var brName string
-			issueName, err := getJiraIssueNameByNumber(wd, issueKey)
+			issueName, err := getJiraIssueNameByNumber(issueKey)
 			if err != nil {
 				return "", nil, err
 			}
@@ -446,7 +446,7 @@ func deleteDupMinus(str string) string {
 	return buf.String()
 }
 
-func getJiraIssueNameByNumber(wd, issueNum string) (name string, err error) {
+func getJiraIssueNameByNumber(issueNum string) (name string, err error) {
 	// Validate the issue key
 	if issueNum == "" {
 		return "", errors.New("Error: Issue key is required.")

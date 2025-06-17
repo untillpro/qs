@@ -26,7 +26,7 @@ func updateCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 				return err
 			}
 
-			return commands.U(cfgUpload, wd)
+			return commands.U(cmd, cfgUpload, wd)
 		},
 	}
 	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, []string{gitcmds.PushDefaultMsg}, pushMsgComment)

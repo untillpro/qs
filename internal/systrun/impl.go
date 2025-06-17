@@ -553,6 +553,7 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 	return nil
 }
 
+// buildRemoteURL constructs the remote URL for cloning
 func buildRemoteURL(account, repoName string, isUpstream bool) string {
 	remoteType := "origin"
 	if isUpstream {
@@ -624,6 +625,8 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 		); err != nil {
 			return err
 		}
+	default:
+		return errors.New("incorrect remote state configuration")
 	}
 
 	return nil

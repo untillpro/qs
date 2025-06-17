@@ -1,8 +1,11 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/spf13/cobra"
+	contextPkg "github.com/untillpro/qs/internal/context"
 	"strings"
 
 	"github.com/untillpro/qs/gitcmds"
@@ -10,7 +13,7 @@ import (
 	"github.com/untillpro/qs/vcs"
 )
 
-func U(cfgUpload vcs.CfgUpload, wd string) error {
+func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	var response string
 
 	globalConfig()
@@ -54,7 +57,10 @@ func U(cfgUpload vcs.CfgUpload, wd string) error {
 
 		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 	}
+	// put commit message to context
+	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, strings.Join(finalCommitMessages, " ")))
 
+	// print commit message finalCommitMessages))
 	// ask for confirmation before pushing
 	pushConfirm := pushConfirm + " with comment: \n\n'" + strings.Join(finalCommitMessages, " ") + "'\n\n'y': agree, 'g': show GUI >"
 	fmt.Print(pushConfirm)

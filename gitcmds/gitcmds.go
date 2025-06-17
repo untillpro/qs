@@ -283,8 +283,8 @@ func Release(wd string) error {
 // Upload uploads sources to git repo
 func Upload(wd string, commitMessageParts []string) error {
 	err := new(exec.PipedExec).
-		WorkingDir(wd).
 		Command(git, "add", ".").
+		WorkingDir(wd).
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
 		return err
