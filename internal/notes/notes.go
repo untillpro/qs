@@ -33,7 +33,7 @@ type Notes struct {
 func (nt *Notes) String() string {
 	bytes, err := json.Marshal(nt)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to marshal notes: %w", err)
+		_, _ = fmt.Fprintf(os.Stderr, "failed to marshal notes: %v", err)
 		os.Exit(1)
 
 		return ""
