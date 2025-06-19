@@ -489,7 +489,7 @@ func GetRepoAndOrgName(wd string) (repo string, org string, err error) {
 		return "", "", err
 	}
 
-	org, repo, err = ParseGitRemoteURL(repoURL)
+	org, repo, _, err = ParseGitRemoteURL(repoURL)
 	if err != nil {
 		return "", "", err
 	}
@@ -497,33 +497,25 @@ func GetRepoAndOrgName(wd string) (repo string, org string, err error) {
 	return
 }
 
-// ParseGitRemoteURL extracts account and repository name from a git remote URL.
-// Handles SSH format (git@github.com:account/repo.git), custom SSH hosts,
-// and HTTPS format (https://github.com/account/repo.git)
-func ParseGitRemoteURL(remoteURL string) (account, repo string, err error) {
-	// Trim any trailing .git suffix
+// ParseGitRemoteURL extracts account, repository name, and token from a git remote URL.
+// Handles HTTPS format (https://github.com/account/repo.git),
+// and HTTPS with token (https://account:token@github.com/account/repo.git or https://oauth2:token@github.com/repo.git)
+func ParseGitRemoteURL(remoteURL string) (account, repo string, token string, err error) {
 	remoteURL = strings.TrimSuffix(remoteURL, ".git")
-
-	// Handle SSH format: git@host:account/repo
-	if strings.HasPrefix(remoteURL, "git@") {
-		parts := strings.Split(remoteURL, ":")
-		if len(parts) != 2 {
-			return "", "", fmt.Errorf("invalid SSH git URL format: %s", remoteURL)
-		}
-
-		pathParts := strings.Split(parts[1], "/")
-		if len(pathParts) < 2 {
-			return "", "", fmt.Errorf("invalid repository path in URL: %s", remoteURL)
-		}
-
-		return pathParts[0], pathParts[1], nil
-	}
-
 	// Handle HTTPS format: https://github.com/account/repo
+	// or https://account:token@github.com/account/repo
 	if strings.HasPrefix(remoteURL, "http") {
 		u, err := url.Parse(remoteURL)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to parse URL: %w", err)
+			return "", "", "", fmt.Errorf("failed to parse URL: %w", err)
+		}
+
+		// Extract token if present in the userinfo section
+		if u.User != nil {
+			password, hasPassword := u.User.Password()
+			if hasPassword {
+				token = password
+			}
 		}
 
 		// Remove leading '/' if any
@@ -531,13 +523,23 @@ func ParseGitRemoteURL(remoteURL string) (account, repo string, err error) {
 		pathParts := strings.Split(path, "/")
 
 		if len(pathParts) < 2 {
-			return "", "", fmt.Errorf("invalid repository path in URL: %s", remoteURL)
+			return "", "", "", fmt.Errorf("invalid repository path in URL: %s", remoteURL)
 		}
 
-		return pathParts[0], pathParts[1], nil
+		// If no token was found or username is oauth2 (common for token auth without real account name)
+		// use the first path component as account
+		if u.User != nil && u.User.Username() == "oauth2" {
+			account = pathParts[0]
+		} else if u.User != nil && u.User.Username() != "" {
+			account = u.User.Username()
+		} else {
+			account = pathParts[0]
+		}
+
+		return account, pathParts[1], token, nil
 	}
 
-	return "", "", fmt.Errorf("unsupported git URL format: %s", remoteURL)
+	return "", "", "", fmt.Errorf("unsupported git URL format: %s", remoteURL)
 }
 
 func IsMainOrg(wd string) (bool, error) {

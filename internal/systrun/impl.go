@@ -75,6 +75,7 @@ func (st *SystemTest) createTestEnvironment() error {
 	if st.cfg.UpstreamState != RemoteStateNull {
 		upstreamRepoURL := buildRemoteURL(
 			st.cfg.GHConfig.UpstreamAccount,
+			st.cfg.GHConfig.UpstreamToken,
 			st.repoName,
 			true,
 		)
@@ -87,6 +88,7 @@ func (st *SystemTest) createTestEnvironment() error {
 	if st.cfg.ForkState != RemoteStateNull {
 		forkRepoURL := buildRemoteURL(
 			st.cfg.GHConfig.ForkAccount,
+			st.cfg.GHConfig.ForkToken,
 			st.repoName,
 			false,
 		)
@@ -404,15 +406,11 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 		// Push changes
 		err = repo.Push(&git.PushOptions{
 			RemoteName: "origin",
+			Auth: &http.BasicAuth{
+				Username: "x-access-token",
+				Password: st.cfg.GHConfig.UpstreamToken,
+			},
 		})
-		//err = repo.Push(&git.PushOptions{
-		//	RemoteName: "origin",
-		//	Auth:       &http.TokenAuth{Token: st.cfg.GHConfig.UpstreamToken},
-		//	//Auth: &http.BasicAuth{
-		//	//	Username: "x-access-token",
-		//	//	Password: st.cfg.GHConfig.UpstreamToken,
-		//	//},
-		//})
 		if err != nil {
 			return fmt.Errorf("failed to push changes: %w", err)
 		}
@@ -516,10 +514,10 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 			// Push changes
 			err = repo.Push(&git.PushOptions{
 				RemoteName: "origin",
-				//Auth: &http.BasicAuth{
-				//	Username: "x-access-token",
-				//	Password: st.cfg.GHConfig.ForkToken,
-				//},
+				Auth: &http.BasicAuth{
+					Username: "x-access-token",
+					Password: st.cfg.GHConfig.ForkToken,
+				},
 			})
 			if err != nil {
 				return fmt.Errorf("failed to push changes: %w", err)
@@ -554,17 +552,12 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 }
 
 // buildRemoteURL constructs the remote URL for cloning
-func buildRemoteURL(account, repoName string, isUpstream bool) string {
-	remoteType := "origin"
-	if isUpstream {
-		remoteType = "upstream"
-	}
-
-	return "git@github-" + remoteType + ":" + account + "/" + repoName + ".git"
+func buildRemoteURL(account, token, repoName string, isUpstream bool) string {
+	return "https://" + account + ":" + token + "@github.com/" + account + "/" + repoName + ".git"
 }
 
 // createRemote creates a remote in the cloned repository
-func createRemote(wd, remote, account, repoName string, isUpstream bool) error {
+func createRemote(wd, remote, account, token, repoName string, isUpstream bool) error {
 	repo, err := git.PlainOpen(wd)
 	if err != nil {
 		return fmt.Errorf("failed to open cloned repository: %w", err)
@@ -576,7 +569,7 @@ func createRemote(wd, remote, account, repoName string, isUpstream bool) error {
 		}
 	}
 
-	remoteURL := buildRemoteURL(account, repoName, isUpstream)
+	remoteURL := buildRemoteURL(account, token, repoName, isUpstream)
 	_, err = repo.CreateRemote(&config.RemoteConfig{
 		Name: remote,
 		URLs: []string{remoteURL},
@@ -598,6 +591,7 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 			wd,
 			"origin",
 			st.cfg.GHConfig.ForkAccount,
+			st.cfg.GHConfig.ForkToken,
 			repoName,
 			false,
 		); err != nil {
@@ -608,6 +602,7 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 			wd,
 			"upstream",
 			st.cfg.GHConfig.UpstreamAccount,
+			st.cfg.GHConfig.UpstreamToken,
 			repoName,
 			true,
 		); err != nil {
@@ -620,6 +615,7 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 			wd,
 			"origin",
 			st.cfg.GHConfig.UpstreamAccount,
+			st.cfg.GHConfig.UpstreamToken,
 			repoName,
 			true,
 		); err != nil {
@@ -657,7 +653,8 @@ func (st *SystemTest) setupDevBranch() error {
 	}
 
 	// Create local dev branch
-	branchRef := plumbing.NewBranchReferenceName("dev")
+	devBranchName := "dev-dev"
+	branchRef := plumbing.NewBranchReferenceName(devBranchName)
 	ref := plumbing.NewHashReference(branchRef, headRef.Hash())
 	if err := repo.Storer.SetReference(ref); err != nil {
 		return fmt.Errorf("failed to create dev branch: %w", err)
@@ -682,7 +679,7 @@ func (st *SystemTest) setupDevBranch() error {
 				Password: st.cfg.GHConfig.ForkToken,
 			},
 			RefSpecs: []config.RefSpec{
-				config.RefSpec(fmt.Sprintf("refs/heads/dev:refs/heads/dev")),
+				config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", devBranchName, devBranchName)),
 			},
 		})
 		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
@@ -868,6 +865,7 @@ func (st *SystemTest) setSyncState(
 		devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
 		// Push the dev branch to the remote
 		pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
+		pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 		pushOutput, err := pushCmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to push dev branch: %w, output: %s", err, pushOutput)
@@ -972,7 +970,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 	// 4. Push the branch to the remote
 
 	// Step 1: Get account and repo name from originRemoteURL
-	account, repo, err := gitcmds.ParseGitRemoteURL(originRemoteURL)
+	account, repo, token, err := gitcmds.ParseGitRemoteURL(originRemoteURL)
 	if err != nil {
 		return err
 	}
@@ -988,6 +986,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 	// Step 3: Clone the repository in the temp path
 	tempClonePath := filepath.Join(tempPath, repo)
 	cloneCmd := exec.Command("git", "clone", originRemoteURL)
+	cloneCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
 	cloneCmd.Dir = tempPath
 
 	if output, err := cloneCmd.CombinedOutput(); err != nil {
@@ -999,6 +998,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 		tempClonePath,
 		"origin",
 		account,
+		token,
 		repo,
 		false,
 	); err != nil {
@@ -1008,6 +1008,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 	// Step 4.1: Fetch the dev branch from origin
 	fetchCmd := exec.Command("git", "fetch", "origin", branchName)
 	fetchCmd.Dir = tempClonePath
+	fetchCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
 	if output, err := fetchCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to fetch %s branch from origin: %w, output: %s", branchName, err, output)
 	}
@@ -1024,6 +1025,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 
 	// Step 7: Push the branch to the remote
 	pushCmd := exec.Command("git", "-C", tempClonePath, "push", "origin", branchName)
+	pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
 	if output, err := pushCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to push branch %s: %w, output: %s", branchName, err, output)
 	}

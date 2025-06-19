@@ -72,23 +72,6 @@ func Pr(cmd *cobra.Command, wd string) error {
 		}
 	}
 
-	//ok, err := gitcmds.PRAhead(wd)
-	//if err != nil {
-	//	return err
-	//}
-	//if ok {
-	//	fmt.Print("This branch is out-of-date. Merge automatically[y/n]?")
-	//	_, _ = fmt.Scanln(&response)
-	//	if response != pushYes {
-	//		fmt.Print(pushFail)
-	//		return nil
-	//	}
-	//	response = ""
-	//	if err := gitcmds.MergeFromUpstreamRebase(wd); err != nil {
-	//		return err
-	//	}
-	//}
-	//
 	// Check if there are any modified files in the current branch
 	if _, ok, err := gitcmds.ChangedFilesExist(wd); ok || err != nil {
 		if err != nil {
@@ -205,6 +188,7 @@ func createPRBranch(wd string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if !exists {
 		upstreamRemote = "origin"
 	}

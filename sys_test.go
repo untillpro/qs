@@ -28,7 +28,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 		Expectations:   systrun.Expectations(systrun.ExpectationForkExists),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 
@@ -49,7 +49,7 @@ func TestFork(t *testing.T) {
 		Expectations:  systrun.Expectations(systrun.ExpectationForkExists),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -69,7 +69,7 @@ func TestFork_NoRemotes(t *testing.T) {
 		ExpectedStderr: "origin remote not found",
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 }
@@ -91,7 +91,7 @@ func TestDev_CustomName(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationCustomBranchIsCurrentBranch),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -114,7 +114,7 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationCustomBranchIsCurrentBranch),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -141,7 +141,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 		ExpectedStderr: fmt.Sprintf("dev branch '%s' already exists", branchName),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err = sysTest.Run()
 	require.Error(err)
 }
@@ -166,7 +166,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationBranchLinkedToIssue),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -190,7 +190,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 		ExpectedStderr:   "Invalid GitHub issue link",
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 }
@@ -213,7 +213,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranchHasPrefix),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -236,7 +236,7 @@ func TestPR_Synchronized(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -258,7 +258,7 @@ func TestPR_ForkChanged(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.Error(err)
 }
@@ -280,7 +280,7 @@ func TestDownload(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationCloneIsSyncedWithFork),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }
@@ -303,7 +303,7 @@ func TestUpload(t *testing.T) {
 		Expectations:     systrun.Expectations(systrun.ExpectationRemoteBranch),
 	}
 
-	sysTest := systrun.New(testConfig)
+	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	require.NoError(err)
 }

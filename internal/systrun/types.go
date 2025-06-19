@@ -384,15 +384,15 @@ func (e expectedPRBranchState) Check(ctx context.Context) error {
 
 	// 5. Check if a real pull request was created in upstream repo
 	// Extract repo owner and name from upstream remote
-	upstream, err := repo.Remote("upstream")
+	upstreamRemote, err := repo.Remote("upstream")
 	if err != nil {
 		return fmt.Errorf("upstream remote not found: %w", err)
 	}
 
-	upstreamURL := upstream.Config().URLs[0]
+	upstreamRemoteURL := upstreamRemote.Config().URLs[0]
 	var owner, repoName string
 
-	owner, repoName, err = gitCmds.ParseGitRemoteURL(upstreamURL)
+	owner, repoName, _, err = gitCmds.ParseGitRemoteURL(upstreamRemoteURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse upstream URL: %w", err)
 	}
