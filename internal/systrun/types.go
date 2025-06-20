@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -41,7 +40,7 @@ type TestConfig struct {
 	// If ExpectedStderr is not empty then check exit code of qs it must be != 0
 	ExpectedStderr string
 	ExpectedStdout string
-	Expectations   []IExpectation
+	Expectations   []ExpectationFunc
 }
 
 type CommandConfig struct {
@@ -64,49 +63,10 @@ type GithubConfig struct {
 // Expectation represents a type of expectation
 type Expectation int
 
-const (
-	ExpectationCustomBranchIsCurrentBranch Expectation = iota
-	ExpectationCloneIsSyncedWithFork
-	ExpectationForkExists
-	ExpectationBranchLinkedToIssue
-	ExpectationCurrentBranchHasPrefix
-	ExpectationPRBranchState
-	ExpectationCommitsFromAnotherClone
-	ExpectationRemoteBranch
-)
+type ExpectationFunc func(_ context.Context) error
 
-// Available expectations
-// Each Expectation type has its own struct that implements IExpectation interface
-var availableExpectations = map[Expectation]IExpectation{
-	ExpectationCustomBranchIsCurrentBranch: expectedCustomBranchIsCurrentBranch{},
-	ExpectationCloneIsSyncedWithFork:       expectedCloneIsSyncedWithFork{},
-	ExpectationForkExists:                  expectedForkExists{},
-	ExpectationBranchLinkedToIssue:         expectedBranchLinkedToIssue{},
-	ExpectationPRBranchState:               expectedPRBranchState{},
-	ExpectationCurrentBranchHasPrefix:      expectedCurrentBranchHasPrefix{},
-	ExpectationCommitsFromAnotherClone:     expectedCommitsFromAnotherClone{},
-	ExpectationRemoteBranch:                expectedRemoteBranch{},
-}
-
-// Expectations returns a list of expectations based on the provided types
-func Expectations(types ...Expectation) []IExpectation {
-	expectations := make([]IExpectation, 0, len(types))
-	for _, t := range types {
-		iExpectation, ok := availableExpectations[t]
-		if !ok {
-			panic(fmt.Sprintf("unknown expectation type: %v", t))
-		}
-
-		expectations = append(expectations, iExpectation)
-	}
-
-	return expectations
-}
-
-// expectedCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
-type expectedCustomBranchIsCurrentBranch struct{}
-
-func (e expectedCustomBranchIsCurrentBranch) Check(ctx context.Context) error {
+// ExpectationCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
+func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
 	currentBranch := gitCmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	customBranchName := ctx.Value(contextCfg.CtxKeyCustomBranchName).(string)
 	if currentBranch != customBranchName {
@@ -116,10 +76,8 @@ func (e expectedCustomBranchIsCurrentBranch) Check(ctx context.Context) error {
 	return nil
 }
 
-// expectedCloneIsSyncedWithFork checks if the clone is synchronized with the fork
-type expectedCloneIsSyncedWithFork struct{}
-
-func (e expectedCloneIsSyncedWithFork) Check(ctx context.Context) error {
+// ExpectationCloneIsSyncedWithFork checks if the clone is synchronized with the fork
+func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 	// Compare local and remote branches to ensure they're in sync
 	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
@@ -155,10 +113,8 @@ func (e expectedCloneIsSyncedWithFork) Check(ctx context.Context) error {
 	return nil
 }
 
-// ExpectedForkExists represents the expected state of a fork
-type expectedForkExists struct{}
-
-func (e expectedForkExists) Check(ctx context.Context) error {
+// ExpectationForkExists represents the expected state of a fork
+func ExpectationForkExists(ctx context.Context) error {
 	// Implement the logic to check if the fork exists
 	// get remotes of the local repo and check if remote, called origin, exists
 	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
@@ -180,11 +136,8 @@ func (e expectedForkExists) Check(ctx context.Context) error {
 	return nil
 }
 
-// expectedBranchLinkedToIssue represents the expected state of a branch linked to a GitHub issue
-type expectedBranchLinkedToIssue struct{}
-
-// Check verifies if the branch is linked to a GitHub issue
-func (e expectedBranchLinkedToIssue) Check(ctx context.Context) error {
+// ExpectationBranchLinkedToIssue represents the expected state of a branch linked to a GitHub issue
+func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 	// extract repo and issue number from e.createdGithubIssueURL using regex
 	repoOwner, repoName, issueNum, err := parseGithubIssueURL(ctx.Value(contextCfg.CtxKeyCreatedGithubIssueURL).(string))
 	// Get current branch from the repo
@@ -209,9 +162,8 @@ func (e expectedBranchLinkedToIssue) Check(ctx context.Context) error {
 	return nil
 }
 
-type expectedCurrentBranchHasPrefix struct{}
-
-func (e expectedCurrentBranchHasPrefix) Check(ctx context.Context) error {
+// ExpectationCurrentBranchHasPrefix checks if the current branch has the expected prefix
+func ExpectationCurrentBranchHasPrefix(ctx context.Context) error {
 	// Open the repository
 	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
@@ -233,15 +185,13 @@ func (e expectedCurrentBranchHasPrefix) Check(ctx context.Context) error {
 	return nil
 }
 
-// expectedPRBranchState checks:
+// ExpectationPRCreated checks:
 // 1. If PR branch exists with correct naming pattern (-dev → -pr)
 // 2. If PR branch contains notes with branch_type=2
 // 3. If the PR branch has exactly one squashed commit
 // 4. If the dev branch no longer exists (locally and remotely)
 // 5. If an actual pull request was created in the upstream repo
-type expectedPRBranchState struct{}
-
-func (e expectedPRBranchState) Check(ctx context.Context) error {
+func ExpectationPRCreated(ctx context.Context) error {
 	// 1. Check if PR branch exists with correct naming
 	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
@@ -418,48 +368,8 @@ func (e expectedPRBranchState) Check(ctx context.Context) error {
 	return nil
 }
 
-type expectedCommitsFromAnotherClone struct{}
-
-func (e expectedCommitsFromAnotherClone) Check(ctx context.Context) error {
-	// Check if the commit from another clone exists
-	// Get the current branch
-	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Get the current branch
-	head, err := repo.Head()
-	if err != nil {
-		return fmt.Errorf("failed to get HEAD: %w", err)
-	}
-
-	// Get the commit history
-	commits, err := repo.Log(&git.LogOptions{From: head.Hash()})
-	if err != nil {
-		return fmt.Errorf("failed to get commit history: %w", err)
-	}
-
-	// Check if the commit from another clone exists
-	commitFound := false
-	err = commits.ForEach(func(c *object.Commit) error {
-		if strings.Contains(c.Message, headerOfFilesInAnotherClone) {
-			commitFound = true
-			return nil
-		}
-		return nil
-	})
-
-	if !commitFound {
-		return fmt.Errorf("commit from another clone not found")
-	}
-
-	return nil
-}
-
-type expectedRemoteBranch struct{}
-
-func (e expectedRemoteBranch) Check(ctx context.Context) error {
+// ExpectationRemoteBranchWithCommitMessage checks if the remote branch exists and has specific commit message
+func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 	// Check if the remote branch exists
 	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {

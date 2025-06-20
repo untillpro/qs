@@ -243,20 +243,11 @@ func getArgStringFromClipboard(ctx context.Context) string {
 }
 
 func setPreCommitHook(wd string) error {
-	var response string
 	if ok, err := gitcmds.LocalPreCommitHookExist(wd); ok || err != nil {
 		return err
 	}
 
-	fmt.Print("\nGit pre-commit hook, preventing commit large files does not exist.\nDo you want to set hook(y/n)?")
-	_, _ = fmt.Scanln(&response)
-
-	switch response {
-	case pushYes:
-		return gitcmds.SetLocalPreCommitHook(wd)
-	default:
-		return nil
-	}
+	return gitcmds.SetLocalPreCommitHook(wd)
 }
 
 func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string, err error) {
@@ -294,11 +285,11 @@ func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 	}
 	branch = cleanArgfromSpecSymbols(branch)
 	// Prepare new notes
-	newNotes, err := notes.Serialize("", "", types.BranchTypeDev)
+	notesObj, err := notes.Serialize("", "", types.BranchTypeDev)
 	if err != nil {
 		return "", []string{}, err
 	}
-	comments = append(comments, newNotes)
+	comments = append(comments, notesObj)
 
 	return branch, comments, nil
 }
@@ -360,11 +351,11 @@ func getJiraBranchName(wd string, args ...string) (branch string, comments []str
 			} else {
 				jiraTicketURL := matches[0] // Full JIRA ticket URL
 				// Prepare new notes
-				newNotes, err := notes.Serialize("", jiraTicketURL, types.BranchTypeDev)
+				notesObj, err := notes.Serialize("", jiraTicketURL, types.BranchTypeDev)
 				if err != nil {
 					return "", nil, err
 				}
-				comments = append(comments, newNotes)
+				comments = append(comments, notesObj)
 				brName, _, err = getBranchName(false, issueName)
 				if err != nil {
 					return "", nil, err

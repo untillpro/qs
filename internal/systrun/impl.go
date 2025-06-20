@@ -1036,7 +1036,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 // checkExpectations checks expectations after command execution
 func (st *SystemTest) checkExpectations() error {
 	for _, expectation := range st.cfg.Expectations {
-		if err := expectation.Check(st.ctx); err != nil {
+		if err := expectation(st.ctx); err != nil {
 			return fmt.Errorf("validation failed: %w", err)
 		}
 	}
@@ -1059,11 +1059,18 @@ func (st *SystemTest) Run() error {
 		return err
 	}
 
+	// authenticate with GitHub using the fork token
+	if err := os.Setenv("GITHUB_TOKEN", st.cfg.GHConfig.ForkToken); err != nil {
+		return err
+	}
+
 	stdout, stderr, err := st.runCommand(st.cfg.CommandConfig)
 	if err != nil {
 		if err := st.validateStderr(stderr); err != nil {
 			return err
 		}
+
+		_, _ = fmt.Fprint(os.Stderr, stderr)
 
 		return err
 	}
@@ -1083,14 +1090,7 @@ func (st *SystemTest) Run() error {
 	return err
 }
 
-//	func (st *SystemTest) preRunCommand() error {
-//		// authenticate with GitHub using the fork token
-//		if err := utils.GhAuthLogin(st.cfg.GHConfig.ForkToken); err != nil {
-//			return fmt.Errorf("failed to authenticate with GitHub: %w", err)
-//		}
-//
-//		return nil
-//	}
+// cleanupTestEnvironment removes all created resources: cloned repo, upstream repo, fork repo
 func (st *SystemTest) cleanupTestEnvironment() error {
 	// Remove the cloned repository
 	if err := os.RemoveAll(st.cloneRepoPath); err != nil {

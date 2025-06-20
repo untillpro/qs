@@ -25,7 +25,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		ExpectedStderr: "you are in fork already",
-		Expectations:   systrun.Expectations(systrun.ExpectationForkExists),
+		Expectations:   []systrun.ExpectationFunc{systrun.ExpectationForkExists},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -46,7 +46,7 @@ func TestFork(t *testing.T) {
 		},
 		UpstreamState: systrun.RemoteStateOK,
 		ForkState:     systrun.RemoteStateNull,
-		Expectations:  systrun.Expectations(systrun.ExpectationForkExists),
+		Expectations:  []systrun.ExpectationFunc{systrun.ExpectationForkExists},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -88,7 +88,7 @@ func TestDev_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
-		Expectations:     systrun.Expectations(systrun.ExpectationCustomBranchIsCurrentBranch),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCustomBranchIsCurrentBranch},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -111,7 +111,7 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
-		Expectations:     systrun.Expectations(systrun.ExpectationCustomBranchIsCurrentBranch),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCustomBranchIsCurrentBranch},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -163,7 +163,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     systrun.Expectations(systrun.ExpectationBranchLinkedToIssue),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationBranchLinkedToIssue},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -210,7 +210,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
 		ClipboardContent: systrun.ClipboardContentJiraTicket,
-		Expectations:     systrun.Expectations(systrun.ExpectationCurrentBranchHasPrefix),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCurrentBranchHasPrefix},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -233,7 +233,7 @@ func TestPR_Synchronized(t *testing.T) {
 		ForkState:        systrun.RemoteStateOK,
 		SyncState:        systrun.SyncStateSynchronized,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -255,7 +255,7 @@ func TestPR_ForkChanged(t *testing.T) {
 		ForkState:        systrun.RemoteStateOK,
 		SyncState:        systrun.SyncStateForkChanged,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     systrun.Expectations(systrun.ExpectationPRBranchState),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -277,7 +277,7 @@ func TestDownload(t *testing.T) {
 		ForkState:        systrun.RemoteStateOK,
 		SyncState:        systrun.SyncStateForkChanged,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     systrun.Expectations(systrun.ExpectationCloneIsSyncedWithFork),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCloneIsSyncedWithFork},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -300,7 +300,7 @@ func TestUpload(t *testing.T) {
 		ForkState:        systrun.RemoteStateOK,
 		SyncState:        systrun.SyncStateUncommitedChangesInClone,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     systrun.Expectations(systrun.ExpectationRemoteBranch),
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationRemoteBranchWithCommitMessage},
 	}
 
 	sysTest := systrun.New(t, testConfig)

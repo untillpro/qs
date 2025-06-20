@@ -247,18 +247,19 @@ func createPRBranch(wd string) (string, error) {
 
 	// Step 6: Get issue description from notes for commit message
 
-	// get json notes from dev branch
-	newNotes, err := notesPkg.Deserialize(notes)
+	// get json notes object from dev branch
+	notesObj, err := notesPkg.Deserialize(notes)
 	if err != nil {
 		return "", fmt.Errorf("Error deserializing notes: %w", err)
 	}
+	// update branch type in notes object
+	notesObj.BranchType = int(types.BranchTypePr)
 
-	issueDescription, err := getIssueDescription(newNotes.GithubIssueURL)
+	issueDescription, err := getIssueDescription(notesObj.GithubIssueURL)
 	if err != nil {
 		return "", fmt.Errorf("Error retrieving issue description: %w", err)
 	}
 
-	newNotes.BranchType = int(types.BranchTypePr)
 	// Step 7: Commit the squashed changes
 	stdout, stderr, err := new(exec.PipedExec).
 		Command("git", "commit", "-m", issueDescription).
@@ -272,7 +273,7 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	// Add empty commit to create commit object and link notes to it
-	if err := gitcmds.AddNotes(wd, []string{newNotes.String()}); err != nil {
+	if err := gitcmds.AddNotes(wd, updateNotesObjInNoteLines(notes, *notesObj)); err != nil {
 		return "", err
 	}
 
@@ -356,55 +357,15 @@ func doesPrExist(wd string) (bool, error) {
 	return true, nil
 }
 
-func issueNote(notes []string) bool {
-	if len(notes) == 0 {
-		return false
-	}
+// updateNotesObjInNoteLines updates notes by removing old notes and adding new ones
+func updateNotesObjInNoteLines(notes []string, notesObj notesPkg.Notes) []string {
+	newNotes := make([]string, 0, len(notes))
 	for _, s := range notes {
-		s = strings.TrimSpace(s)
-		if len(s) > 0 {
-			if strings.Contains(s, gitcmds.IssueSign) {
-				return true
-			}
+		if strings.Contains(s, "{") {
+			continue
 		}
+		newNotes = append(newNotes, s)
 	}
-	return false
-}
 
-func GetCommentForPR(notes []string) (strnote string) {
-	strnote = ""
-	if len(notes) == 0 {
-		return strnote
-	}
-	for _, note := range notes {
-		note = strings.TrimSpace(note)
-		if (strings.Contains(note, "https://") && strings.Contains(note, "/issues/")) || !strings.Contains(note, "https://") {
-			if len(note) > 0 {
-				strnote = strnote + oneSpace + note
-			}
-		}
-	}
-	return strings.TrimSpace(strnote)
-}
-
-func getIssueNumFromNotes(notes []string) (string, bool) {
-	if len(notes) == 0 {
-		return "", false
-	}
-	for _, s := range notes {
-		s = strings.TrimSpace(s)
-		if len(s) > 0 {
-			if strings.Contains(s, gitcmds.IssueSign) {
-				arr := strings.Split(s, oneSpace)
-				if len(arr) > 1 {
-					num := arr[1]
-					if strings.Contains(num, "#") {
-						num = strings.ReplaceAll(num, "#", "")
-						return num, true
-					}
-				}
-			}
-		}
-	}
-	return "", false
+	return append(newNotes, notesObj.String())
 }

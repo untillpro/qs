@@ -798,13 +798,20 @@ func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber 
 	if len(branch) == 0 {
 		return "", nil, errors.New("Can not create branch for issue")
 	}
+	// old-style notes
+	issueName := GetIssueNameByNumber(strIssueNum, parentrepo)
+	comment := IssuePRTtilePrefix + " '" + issueName + "' "
+	body := ""
+	if len(issueName) > 0 {
+		body = IssueSign + strIssueNum + oneSpace + issueName
+	}
 	// Prepare new notes
-	newNotes, err := notesPkg.Serialize(githubIssueURL, "", types.BranchTypeDev)
+	notesObj, err := notesPkg.Serialize(githubIssueURL, "", types.BranchTypeDev)
 	if err != nil {
 		return "", nil, err
 	}
 
-	return branch, []string{newNotes}, nil
+	return branch, []string{comment, body, notesObj}, nil
 }
 
 // getBranchTypeByName returns branch type based on branch name
@@ -878,13 +885,15 @@ func buildDevBranchName(issueURL string) (string, error) {
 func GetBranchType(wd string) types.BranchType {
 	notes, ok := GetNotes(wd)
 	if ok {
-		newNotes, err := notesPkg.Deserialize(notes)
+		notesObj, err := notesPkg.Deserialize(notes)
 		if err != nil {
-			return getBranchTypeByName(GetCurrentBranchName(wd))
+			if isOldStyledBranch(notes) {
+				return types.BranchTypeDev
+			}
 		}
 
-		if newNotes != nil {
-			switch newNotes.BranchType {
+		if notesObj != nil {
+			switch notesObj.BranchType {
 			case int(types.BranchTypeDev):
 				return types.BranchTypeDev
 			case int(types.BranchTypePr):
@@ -896,6 +905,20 @@ func GetBranchType(wd string) types.BranchType {
 	}
 
 	return getBranchTypeByName(GetCurrentBranchName(wd))
+}
+
+// isOldStyledBranch checks if branch is old styled
+func isOldStyledBranch(notes []string) bool {
+	for _, s := range notes {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			if strings.Contains(s, IssuePRTtilePrefix) || strings.Contains(s, IssueSign) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func GetIssueNameByNumber(issueNum string, parentrepo string) string {
@@ -1382,19 +1405,6 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 		return "", "", err
 	}
 
-	// Create temporary file for the body
-	bodyFile, err := os.CreateTemp("", "pr-body-*.txt")
-	if err != nil {
-		return "", "", err
-	}
-	defer os.Remove(bodyFile.Name())
-
-	if _, err := bodyFile.WriteString(strBody); err != nil {
-		bodyFile.Close()
-		return "", "", err
-	}
-	bodyFile.Close()
-
 	// Create a temporary shell script that properly handles all quoting issues
 	scriptFile, err := os.CreateTemp("", "gh-pr-*.sh")
 	if err != nil {
@@ -1406,10 +1416,12 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 	// Write a shell script that handles quoting properly
 	scriptContent := "#!/bin/bash\n"
 	scriptContent += fmt.Sprintf("cd %s\n", wd)
-	scriptContent += fmt.Sprintf(`gh pr create --title "%s" --body "%s" --repo %s`,
-		normalizedTitle, // Properly escape single quotes in title
+	scriptContent += fmt.Sprintf(
+		`gh pr create --title "%s" --body "%s" --repo %s`,
 		normalizedTitle,
-		parentRepoName)
+		strBody,
+		parentRepoName,
+	)
 
 	if asDraft {
 		scriptContent += " --draft"
@@ -1434,83 +1446,6 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 	err = cmd.Run()
 	return outBuf.String(), errBuf.String(), err
 }
-
-//// MakePR s.e.
-//func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
-//	if len(notes) == 0 {
-//		return "", "", errors.New(ErrMsgPRNotesImpossible)
-//	}
-//	var strnotes string
-//	var url string
-//	strnotes, url = GetNoteAndURL(notes)
-//	b := GetBodyFromNotes(notes)
-//	if len(b) == 0 {
-//		b = strnotes
-//	}
-//	if len(url) > 0 {
-//		b = b + caret + url
-//	}
-//
-//	//strBody := fmt.Sprintln(b)
-//	parentRepoName, err := GetParentRepoName(wd)
-//	if err != nil {
-//		return "", "", err
-//	}
-//
-//	//strBody = "Test-body"
-//	//args := []string{"pr", "create", "--head", "-t", `"` + title + `"`, "-b", `"` + strBody + `"`, "-R", parentRepoName}
-//	//args := []string{"pr", "create", "--head", "--title=", title, "--body=", strBody, "-R", parentRepoName}
-//	//args := []string{"pr", "create", "--head", fmt.Sprintf("--title '%s'", title), "--body", strBody, "-R", parentRepoName}
-//	title = strings.ReplaceAll(title, " ", "-")
-//	//args := []string{"pr", "create", "--head", "-t", title, "-b", strBody, "-R", parentRepoName}
-//	args := []string{
-//		"pr",
-//		"create",
-//		"--head",
-//		//fmt.Sprintf("--title=%s", title),
-//		//fmt.Sprintf("--body=%s", title),
-//		"--title", title,
-//		"--body", title,
-//		"-R",
-//		parentRepoName,
-//	}
-//	if asDraft {
-//		args = append(args, "--draft")
-//	}
-//
-//	// Create a direct command without using PipedExec
-//	cmd := osExec.Command("gh", args...)
-//	cmd.Dir = wd
-//
-//	var outBuf, errBuf bytes.Buffer
-//	cmd.Stdout = &outBuf
-//	cmd.Stderr = &errBuf
-//
-//	err = cmd.Run()
-//
-//	return outBuf.String(), errBuf.String(), err
-//	//return new(exec.PipedExec).Command("gh", args...).WorkingDir(wd).RunToStrings()
-//	//
-//	////cmd := osExec.Command("gh", "pr", "create", "--head", "--title", title, "--body", strBody, "--repo", parentRepoName)
-//	////if asDraft {
-//	////	cmd.Args = append(cmd.Args, "--draft")
-//	////}
-//	////cmd.Dir = wd
-//	//
-//	//var outb, errb bytes.Buffer
-//	//if asDraft {
-//	//	err = new(exec.PipedExec).
-//	//		Command("gh", "pr", "create", "--head", "--draft", "-t", title, "-b", strBody, "-R", parentRepoName).
-//	//		Run(&outb, &errb)
-//	//} else {
-//	//	err = new(exec.PipedExec).
-//	//		Command("gh", "pr", "create", "--head", "-t", title, "-b", strBody, "-R", parentRepoName).
-//	//		Run(&outb, &errb)
-//	//}
-//	//
-//	////err = cmd.Run()
-//	//return outb.String(), errb.String(), err
-//}
 
 // MakePRMerge merges Pull Request by URL
 func MakePRMerge(wd, prURL string) (err error) {
