@@ -317,7 +317,7 @@ func (st *SystemTest) createGitHubIssue() (string, error) {
 	return issueURL, nil
 }
 
-func (st *SystemTest) checkoutOnBranch(wd, branchName string) error {
+func checkoutOnBranch(wd, branchName string) error {
 	if branchName == "" {
 		return nil
 	}
@@ -1014,7 +1014,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 	}
 
 	// Step 5: Change to the cloned repository directory
-	if err := st.checkoutOnBranch(tempClonePath, branchName); err != nil {
+	if err := checkoutOnBranch(tempClonePath, branchName); err != nil {
 		return err
 	}
 

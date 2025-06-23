@@ -277,7 +277,10 @@ func TestDownload(t *testing.T) {
 		ForkState:        systrun.RemoteStateOK,
 		SyncState:        systrun.SyncStateForkChanged,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCloneIsSyncedWithFork},
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationCloneIsSyncedWithFork,
+			systrun.ExpectationNotesDownloaded,
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -294,7 +297,6 @@ func TestUpload(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "u",
-			Stdin:   "y",
 		},
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,

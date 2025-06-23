@@ -3,15 +3,20 @@ package systrun
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	notesPkg "github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/internal/types"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	goUtilsExec "github.com/untillpro/goutils/exec"
-	gitCmds "github.com/untillpro/qs/gitcmds"
+	"github.com/untillpro/qs/gitcmds"
 	contextCfg "github.com/untillpro/qs/internal/context"
 )
 
@@ -67,7 +72,7 @@ type ExpectationFunc func(_ context.Context) error
 
 // ExpectationCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
 func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
-	currentBranch := gitCmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	currentBranch := gitcmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	customBranchName := ctx.Value(contextCfg.CtxKeyCustomBranchName).(string)
 	if currentBranch != customBranchName {
 		return fmt.Errorf("current branch '%s' does not match expected branch '%s'", currentBranch, customBranchName)
@@ -342,7 +347,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 	upstreamRemoteURL := upstreamRemote.Config().URLs[0]
 	var owner, repoName string
 
-	owner, repoName, _, err = gitCmds.ParseGitRemoteURL(upstreamRemoteURL)
+	owner, repoName, _, err = gitcmds.ParseGitRemoteURL(upstreamRemoteURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse upstream URL: %w", err)
 	}
@@ -412,6 +417,90 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 
 	if !strings.Contains(stdout, commitMessage) {
 		return fmt.Errorf("remote branch %s does not have commit message '%s'", remoteBranchName, commitMessage)
+	}
+
+	return nil
+}
+
+// ExpectationNotesDownloaded checks if the notes are downloaded from the remote branch
+func ExpectationNotesDownloaded(ctx context.Context) error {
+	// Step 1: Get the remote URL and repo name
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return fmt.Errorf("clone repo path not found in context")
+	}
+
+	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
+	if !ok {
+		return fmt.Errorf("remote branch name not found in context")
+	}
+
+	remoteURL, err := getRemoteUrlByName(cloneRepoPath, "origin")
+	if err != nil {
+		return fmt.Errorf("failed to get remote URL: %w", err)
+	}
+
+	_, repo, token, err := gitcmds.ParseGitRemoteURL(remoteURL)
+	if err != nil {
+		return err
+	}
+
+	// Step 2: Create temp path for the clone
+	tempPath, err := os.MkdirTemp("", "qs-test-clone-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp clone path: %w", err)
+	}
+
+	defer func() {
+		_ = os.RemoveAll(tempPath)
+	}()
+
+	// Step 3: Clone the repository in the temp path
+	tempClonePath := filepath.Join(tempPath, repo)
+	cloneCmd := exec.Command("git", "clone", remoteURL)
+	cloneCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
+	cloneCmd.Dir = tempPath
+
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
+	}
+
+	// Step 3.1: Fetch remote branch
+	fetchCmd := exec.Command("git", "fetch", "origin", remoteBranchName)
+	fetchCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
+	fetchCmd.Dir = tempClonePath
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to fetch remote branch: %w, output: %s", err, output)
+	}
+
+	// Step 4: Checkout on remote branch
+	if err := checkoutOnBranch(tempClonePath, remoteBranchName); err != nil {
+		return err
+	}
+
+	// Step 5: Run `qs d`
+	if err := gitcmds.Download(tempClonePath); err != nil {
+		return err
+	}
+
+	// Step 6: Check if notes are downloaded
+	notes, ok := gitcmds.GetNotes(tempClonePath)
+	if !ok {
+		return errors.New("Error: No notes found in dev branch")
+	}
+
+	if len(notes) == 0 {
+		return fmt.Errorf("no notes downloaded")
+	}
+
+	// Step 7: Check if notes are of correct type
+	notesObj, err := notesPkg.Deserialize(notes)
+	if err != nil {
+		return err
+	}
+
+	if notesObj.BranchType != int(types.BranchTypeDev) {
+		return fmt.Errorf("notes downloaded but branch type is not dev")
 	}
 
 	return nil

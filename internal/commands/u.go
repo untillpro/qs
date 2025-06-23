@@ -14,8 +14,6 @@ import (
 )
 
 func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
-	var response string
-
 	globalConfig()
 	if err := gitcmds.Status(wd); err != nil {
 		return fmt.Errorf("git status failed: %w", err)
@@ -60,20 +58,5 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	// put commit message to context
 	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, strings.Join(finalCommitMessages, " ")))
 
-	// print commit message finalCommitMessages))
-	// ask for confirmation before pushing
-	pushConfirm := pushConfirm + " with comment: \n\n'" + strings.Join(finalCommitMessages, " ") + "'\n\n'y': agree, 'g': show GUI >"
-	fmt.Print(pushConfirm)
-	_, _ = fmt.Scanln(&response)
-	// handle user response
-	switch response {
-	case pushYes:
-		return gitcmds.Upload(wd, finalCommitMessages)
-	case guiParam:
-		return gitcmds.Gui(wd)
-	default:
-		fmt.Print(pushFail)
-
-		return nil
-	}
+	return gitcmds.Upload(wd, finalCommitMessages)
 }

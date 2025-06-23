@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	survey "github.com/AlecAivazis/survey/v2"
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	notesPkg "github.com/untillpro/qs/internal/notes"
@@ -326,58 +325,35 @@ func Upload(wd string, commitMessageParts []string) error {
 		return fmt.Errorf("error pulling before push: %w", err)
 	}
 
-	for i := 0; i < 2; i++ {
-		_, stderr, err := new(exec.PipedExec).
-			Command(git, push).
-			WorkingDir(wd).
-			RunToStrings()
-		if i == 0 && err != nil {
-			if strings.Contains(stderr, "has no upstream") {
-				remotelist := getRemotes(wd)
-				if len(remotelist) == 0 {
-					return errors.New("Remote not found. It's somethig wrong with your repository")
-				}
-				brName := GetCurrentBranchName(wd) // Suggest to execute git push --set-upstream origin <branch-name>
-				var response string
-
-				if len(remotelist) == 1 {
-					fmt.Printf("\nCurrent branch has no upstream branch.\nI am going to execute 'git push --set-upstream origin %s'.\nAgree[y/n]? ", brName)
-					_, _ = fmt.Scanln(&response)
-					if response == pushYes {
-						if err := setUpstreamBranch(wd, "origin", brName); err != nil {
-							return fmt.Errorf("failed to set upstream branch: %w", err)
-						}
-
-						continue
-					}
-				}
-				fmt.Printf("\nCurrent branch has no upstream branch.")
-
-				choice := ""
-				prompt := &survey.Select{
-					Message: "Choose a remote for your branch:",
-					Options: remotelist,
-				}
-				err := survey.AskOne(prompt, &choice)
-				if err != nil {
-					return err
-				}
-
-				fmt.Printf("\nYour choice is %s.\nI am going to execute 'git push --set-upstream %s %s'.\nAgree[y/n]? ", choice, choice, brName)
-				_, _ = fmt.Scanln(&response)
-				if response == pushYes {
-					if err := setUpstreamBranch(wd, choice, brName); err != nil {
-						return fmt.Errorf("failed to set upstream branch: %w", err)
-					}
-
-					continue
-				}
-			}
-		}
-		break
+	brName := GetCurrentBranchName(wd)
+	if err := setUpstreamBranch(wd, "origin", brName); err != nil {
+		return fmt.Errorf("failed to set upstream branch: %w", err)
 	}
 
-	return err
+	// Push notes to origin
+	err = new(exec.PipedExec).
+		Command(git, push, origin, "ref/notes/*").
+		WorkingDir(wd).
+		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return err
+	}
+
+	time.Sleep(2 * time.Second)
+
+	// Push branch to origin
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, push, "-u", origin, brName).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return err
+	}
+	logger.Verbose(stdout)
+
+	return nil
 }
 
 // Stash stashes uncommitted changes
@@ -440,12 +416,19 @@ func Download(wd string) error {
 	}
 	// pull from origin for dev branch
 	if !isMain {
+		// Fetch notes from origin
 		err := new(exec.PipedExec).
+			Command(git, fetch, "origin", "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+		if err != nil {
+			return err
+		}
+
+		return new(exec.PipedExec).
 			Command(git, pull, "origin").
 			WorkingDir(wd).
 			Run(os.Stdout, os.Stdout)
-
-		return err
 	}
 
 	// pull from upstream if exists and current branch is main
@@ -1043,7 +1026,7 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	}
 	// Push notes to origin
 	err = new(exec.PipedExec).
-		Command(git, push, origin, "ref/notes/*").
+		Command(git, push, origin, "refs/notes/*:refs/notes/*").
 		WorkingDir(wd).
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
@@ -1445,74 +1428,6 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 
 	err = cmd.Run()
 	return outBuf.String(), errBuf.String(), err
-}
-
-// MakePRMerge merges Pull Request by URL
-func MakePRMerge(wd, prURL string) (err error) {
-	if len(prURL) == 0 {
-		return errors.New(ErrMsgPRMerge)
-	}
-	if !strings.Contains(prURL, "https") {
-		return errors.New(ErrMsgPRBadFormat)
-	}
-
-	parentrepo := retrieveRepoNameFromUPL(prURL)
-	var val *gchResponse
-	// The checks could not found yet, need to wait for 1..10 seconds
-	for idx := 0; idx < timeWaitPR; idx++ {
-		val = waitPRChecks(parentrepo, prURL)
-		if prCheckAbsent(val) {
-			time.Sleep(2 * time.Second)
-			fmt.Println(msgPRCheckNotFoundYet)
-			continue
-		}
-		break
-	}
-
-	// If after 10 seconds  we still have no checks - then thery don't exists at all, so we can merge
-	if prCheckAbsent(val) {
-		fmt.Println(oneSpace)
-		fmt.Println(msgPRCheckNotFound)
-		fmt.Println(oneSpace)
-	} else {
-		if len(val._stderr) > 0 {
-			return errors.New(val._stderr)
-		}
-		if val._err != nil {
-			return val._err
-		}
-		if !prCheckSuccess(val) {
-			return errors.New(ErrUnknowGHResponse + ": " + val._stdout)
-		}
-	}
-
-	if len(parentrepo) == 0 {
-		err = new(exec.PipedExec).
-			Command("gh", "pr", "merge", prURL, "--squash").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-	} else {
-		err = new(exec.PipedExec).
-			Command("gh", "pr", "merge", prURL, "--squash", "-R", parentrepo).
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-		if err != nil {
-			return err
-		}
-
-		repo, org, err := GetRepoAndOrgName(wd)
-		if err != nil {
-			return err
-		}
-		if len(repo) > 0 {
-			err = new(exec.PipedExec).
-				Command("gh", "repo", "sync", org+slash+repo).
-				WorkingDir(wd).
-				Run(os.Stdout, os.Stdout)
-		}
-
-	}
-	return err
 }
 
 func retrieveRepoNameFromUPL(prurl string) string {
