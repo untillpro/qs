@@ -248,12 +248,12 @@ func createPRBranch(wd string) (string, error) {
 	// Step 6: Get issue description from notes for commit message
 
 	// get json notes object from dev branch
-	notesObj, err := notesPkg.Deserialize(notes)
-	if err != nil {
-		return "", fmt.Errorf("Error deserializing notes: %w", err)
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		return "", errors.New("error deserializing notes")
 	}
 	// update branch type in notes object
-	notesObj.BranchType = int(types.BranchTypePr)
+	notesObj.BranchType = types.BranchTypePr
 
 	issueDescription, err := getIssueDescription(notesObj.GithubIssueURL)
 	if err != nil {
@@ -286,7 +286,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	// Step 9: Push PR branch to origin
 	_, _, err = new(exec.PipedExec).
@@ -297,7 +297,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	// Step 10: Delete dev branch locally
 	_, _, err = new(exec.PipedExec).

@@ -339,7 +339,7 @@ func Upload(wd string, commitMessageParts []string) error {
 		return err
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	// Push branch to origin
 	stdout, stderr, err := new(exec.PipedExec).
@@ -624,7 +624,7 @@ func PopStashedFiles(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return fmt.Errorf("PopStashedFiles error: %w", stderr)
+		return fmt.Errorf("PopStashedFiles error: %s", stderr)
 	}
 
 	return nil
@@ -690,7 +690,7 @@ func MakeUpstream(wd string, repo string) error {
 		return err
 	}
 	// delay to ensure remote is added
-	time.Sleep(1 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	err = new(exec.PipedExec).
 		Command(git, "fetch", "origin").
@@ -772,7 +772,7 @@ func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber 
 		return "", nil, err
 	}
 	// delay to ensure branch is created
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	branch = strings.TrimSpace(stdout)
 	segments := strings.Split(branch, slash)
@@ -868,22 +868,15 @@ func buildDevBranchName(issueURL string) (string, error) {
 func GetBranchType(wd string) types.BranchType {
 	notes, ok := GetNotes(wd)
 	if ok {
-		notesObj, err := notesPkg.Deserialize(notes)
-		if err != nil {
+		notesObj, ok := notesPkg.Deserialize(notes)
+		if !ok {
 			if isOldStyledBranch(notes) {
 				return types.BranchTypeDev
 			}
 		}
 
 		if notesObj != nil {
-			switch notesObj.BranchType {
-			case int(types.BranchTypeDev):
-				return types.BranchTypeDev
-			case int(types.BranchTypePr):
-				return types.BranchTypePr
-			default:
-				return types.BranchTypeUnknown
-			}
+			return notesObj.BranchType
 		}
 	}
 
@@ -964,6 +957,16 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 		return err
 	}
 
+	err = new(exec.PipedExec).
+		Command(git, push, origin, mainBranch).
+		WorkingDir(wd).
+		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return err
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
 	_, stderr, err := new(exec.PipedExec).
 		Command(git, "checkout", mainBranch).
 		WorkingDir(wd).
@@ -982,25 +985,6 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	}
 	if err != nil {
 		return err
-	}
-
-	if branchIsInFork {
-		err = new(exec.PipedExec).
-			Command(git, pull, "-p", "upstream", mainBranch).
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-		if err != nil {
-			return err
-		}
-		err = new(exec.PipedExec).
-			Command(git, push, origin, mainBranch).
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-		if err != nil {
-			return err
-		}
-
-		time.Sleep(2 * time.Second)
 	}
 
 	err = new(exec.PipedExec).
@@ -1032,7 +1016,7 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	if err != nil {
 		return err
 	}
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, push, "-u", origin, branch).
@@ -1045,7 +1029,7 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	}
 	logger.Verbose(stdout)
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	if chExist {
 		err = new(exec.PipedExec).

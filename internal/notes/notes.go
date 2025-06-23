@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/untillpro/qs/internal/types"
 )
 
@@ -24,8 +23,8 @@ type Notes struct {
 	// GithubIssueURL is the URL of the GitHub issue associated with the branch.
 	GithubIssueURL string `json:"github_issue_url"`
 	// JiraTicketURL is the URL of the Jira ticket associated with the branch.
-	JiraTicketURL string `json:"jira_ticket_url"`
-	BranchType    int    `json:"branch_type"` // Optional field to specify the type of branch (`dev` or `pr`)
+	JiraTicketURL string           `json:"jira_ticket_url"`
+	BranchType    types.BranchType `json:"branch_type"` // Optional field to specify the type of branch (`dev` or `pr`)
 }
 
 // Serialize is a function for serializing given notes field into a JSON string representation.
@@ -53,7 +52,7 @@ func Serialize(
 		Version:        version,
 		GithubIssueURL: githubIssueURL,
 		JiraTicketURL:  jiraTicketURL,
-		BranchType:     int(branchType),
+		BranchType:     branchType,
 	}
 
 	bytes, err := json.Marshal(n)
@@ -69,8 +68,8 @@ func Serialize(
 // - notes: a slice of strings
 // Returns:
 // - a pointer to Notes structure if successful
-// - an error if unmarshalling fails
-func Deserialize(notes []string) (*Notes, error) {
+// - true if successful, false otherwise
+func Deserialize(notes []string) (*Notes, bool) {
 	jsonString := strings.Builder{}
 	jsonStringStarted := false
 	for _, note := range notes {
@@ -96,8 +95,8 @@ func Deserialize(notes []string) (*Notes, error) {
 
 	var n Notes
 	if err := json.Unmarshal([]byte(jsonString.String()), &n); err == nil {
-		return &n, nil
+		return &n, true
 	}
 
-	return nil, errors.New("failed to unmarshal notes")
+	return nil, false
 }

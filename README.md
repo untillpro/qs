@@ -97,27 +97,3 @@ Command 'qs dev' creates a developer branch and after success, it shows the foll
 - On 'y', qs creates github local pre-commit hook script for current repository.
 
 If local pre-commit hook found, 'qs dev' does not asks to create the hook.
-
-## SSH Configuration
-
-In order yo work system tests we need to configure SSH keys for GitHub.
-We need 2 GitHub accounts: one for the "origin" (fork) and one for the "upstream" (main) repository. 
-
-Example of SSH config:
-```
-# For the "origin" GitHub account
-Host github-origin
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/privatekey_for_fork_account
-    IdentitiesOnly yes
-
-# For the "upstream" GitHub account
-Host github-upstream
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/privatekey_for_upstream_account
-    IdentitiesOnly yes
-
-```
-

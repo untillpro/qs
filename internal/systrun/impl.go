@@ -156,7 +156,7 @@ func (st *SystemTest) configureCollaboration() error {
 		return err
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	if err := acceptPendingInvitations(st.cfg.GHConfig.ForkToken); err != nil {
 		return err
@@ -236,7 +236,7 @@ func acceptPendingInvitations(token string) error {
 		} else {
 			fmt.Printf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status)
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	return nil
@@ -890,7 +890,7 @@ func (st *SystemTest) setSyncState(
 
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	return nil
 }

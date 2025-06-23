@@ -494,12 +494,12 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 	}
 
 	// Step 7: Check if notes are of correct type
-	notesObj, err := notesPkg.Deserialize(notes)
-	if err != nil {
-		return err
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		return errors.New("error: No notes found in dev branch")
 	}
 
-	if notesObj.BranchType != int(types.BranchTypeDev) {
+	if notesObj.BranchType != types.BranchTypeDev {
 		return fmt.Errorf("notes downloaded but branch type is not dev")
 	}
 

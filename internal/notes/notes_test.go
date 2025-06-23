@@ -108,15 +108,15 @@ func TestDeserialize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := notes.Deserialize(tt.input)
+			got, ok := notes.Deserialize(tt.input)
 
 			if tt.wantErr {
-				require.Error(t, err)
+				require.False(t, ok)
 				require.Nil(t, got)
 				return
 			}
 
-			require.NoError(t, err)
+			require.True(t, ok)
 			require.NotNil(t, got)
 			require.Equal(t, tt.expected.Version, got.Version)
 			require.Equal(t, tt.expected.GithubIssueURL, got.GithubIssueURL)
