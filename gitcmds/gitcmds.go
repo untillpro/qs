@@ -5,19 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
 	"net/url"
 	"os"
 	osExec "os/exec"
 	"os/user"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
+	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/internal/types"
 	"github.com/untillpro/qs/utils"
@@ -339,7 +340,9 @@ func Upload(wd string, commitMessageParts []string) error {
 		return err
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	// Push branch to origin
 	stdout, stderr, err := new(exec.PipedExec).
@@ -690,7 +693,9 @@ func MakeUpstream(wd string, repo string) error {
 		return err
 	}
 	// delay to ensure remote is added
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	err = new(exec.PipedExec).
 		Command(git, "fetch", "origin").
@@ -772,7 +777,9 @@ func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber 
 		return "", nil, err
 	}
 	// delay to ensure branch is created
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	branch = strings.TrimSpace(stdout)
 	segments := strings.Split(branch, slash)
@@ -965,7 +972,9 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 		return err
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	_, stderr, err := new(exec.PipedExec).
 		Command(git, "checkout", mainBranch).
@@ -1016,7 +1025,9 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	if err != nil {
 		return err
 	}
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, push, "-u", origin, branch).
@@ -1029,7 +1040,9 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	}
 	logger.Verbose(stdout)
 
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	if chExist {
 		err = new(exec.PipedExec).
@@ -1468,7 +1481,7 @@ func waitPRChecks(parentrepo string, prurl string) *gchResponse {
 			fmt.Println("")
 			return &gchResponse{_err: errors.New(ErrTimer40Sec)}
 		default:
-			time.Sleep(time.Second)
+			helper.Delay()
 			fmt.Print(".")
 		}
 	}
@@ -1809,67 +1822,6 @@ func GawkInstalled() bool {
 		Command("gawk", "--version").
 		RunToStrings()
 	return err == nil
-}
-
-// GHInstalled returns is gh utility installed
-func GHInstalled() bool {
-	_, _, err := new(exec.PipedExec).
-		Command("gh", "--version").
-		RunToStrings()
-	return err == nil
-}
-
-// GHLoggedIn returns is gh logged in
-func GHLoggedIn() bool {
-	_, _, err := new(exec.PipedExec).
-		Command("gh", "auth", "status").
-		RunToStrings()
-	return err == nil
-}
-
-func GetInstalledQSVersion() (string, error) {
-	stdout, stderr, err := new(exec.PipedExec).
-		Command("go", "env", "GOPATH").
-		RunToStrings()
-	if err != nil {
-		return "", fmt.Errorf("GetInstalledVersion error: %s", stderr)
-	}
-
-	gopath := strings.TrimSpace(stdout)
-	if len(gopath) == 0 {
-		return "", errors.New("GetInstalledVersion error: \"GOPATH is not defined\"")
-	}
-	qsExe := "qs"
-	if runtime.GOOS == "windows" {
-		qsExe = "qs.exe"
-	}
-
-	stdout, stderr, err = new(exec.PipedExec).
-		Command("go", "version", "-m", gopath+"/bin/"+qsExe).
-		Command("grep", "-i", "-h", "mod.*github.com/untillpro/qs").
-		Command("gawk", "{print $3}").
-		RunToStrings()
-	if err != nil {
-		return "", fmt.Errorf("GetInstalledQSVersion error: %s", stderr)
-	}
-
-	return strings.TrimSpace(stdout), nil
-}
-
-func GetLastQSVersion() string {
-	stdouts, stderr, err := new(exec.PipedExec).
-		Command("go", "list", "-m", "-versions", "github.com/untillpro/qs").
-		RunToStrings()
-	if err != nil {
-		logger.Error("GetLastQSVersion error:", stderr)
-	}
-
-	arr := strings.Split(strings.TrimSpace(stdouts), oneSpace)
-	if len(arr) == 0 {
-		return ""
-	}
-
-	return arr[len(arr)-1]
 }
 
 func extractIntegerPrefix(input string) (string, error) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
-	"github.com/untillpro/qs/internal/commands/helper"
+	"github.com/untillpro/qs/internal/helper"
 )
 
 func Fork(wd string) error {

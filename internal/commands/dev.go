@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	contextPkg "github.com/untillpro/qs/internal/context"
 	"io"
 	"net/http"
 	"os"
@@ -20,10 +19,11 @@ import (
 	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
+	contextPkg "github.com/untillpro/qs/internal/context"
 
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
-	"github.com/untillpro/qs/internal/commands/helper"
+	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/internal/types"
 )

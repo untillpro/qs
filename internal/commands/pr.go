@@ -4,17 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/untillpro/goutils/logger"
-	"os"
-	"strings"
-	"time"
-
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
+	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
-	"github.com/untillpro/qs/internal/commands/helper"
+	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/internal/types"
+	"os"
+	"strings"
 )
 
 func Pr(cmd *cobra.Command, wd string) error {
@@ -286,7 +284,9 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	// Step 9: Push PR branch to origin
 	_, _, err = new(exec.PipedExec).
@@ -297,7 +297,9 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	// Step 10: Delete dev branch locally
 	_, _, err = new(exec.PipedExec).

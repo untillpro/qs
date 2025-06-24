@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/untillpro/qs/internal/helper"
 	"io"
 	netHttp "net/http"
 	"os"
@@ -115,8 +116,10 @@ func (st *SystemTest) createTestEnvironment() error {
 	}
 
 	// Need some time to ensure the repo is created
-	// TODO: add check in loop with deadline instead of sleep
-	time.Sleep(time.Millisecond * 2000)
+	if helper.IsTest() {
+		helper.Delay()
+	}
+
 	if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
 		return err
 	}
@@ -156,7 +159,9 @@ func (st *SystemTest) configureCollaboration() error {
 		return err
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	if err := acceptPendingInvitations(st.cfg.GHConfig.ForkToken); err != nil {
 		return err
@@ -236,7 +241,10 @@ func acceptPendingInvitations(token string) error {
 		} else {
 			fmt.Printf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status)
 		}
-		time.Sleep(500 * time.Millisecond)
+
+		if helper.IsTest() {
+			helper.Delay()
+		}
 	}
 
 	return nil
@@ -890,7 +898,9 @@ func (st *SystemTest) setSyncState(
 
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	if helper.IsTest() {
+		helper.Delay()
+	}
 
 	return nil
 }

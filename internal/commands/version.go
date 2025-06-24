@@ -3,12 +3,12 @@ package commands
 import (
 	"fmt"
 
-	"github.com/untillpro/qs/gitcmds"
+	"github.com/untillpro/qs/internal/helper"
 )
 
 func Version() error {
 	globalConfig()
-	ver, err := gitcmds.GetInstalledQSVersion()
+	ver, err := helper.GetInstalledQSVersion()
 	if err != nil {
 		return err
 	}
