@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/untillpro/qs/internal/helper"
 	"io"
 	netHttp "net/http"
 	"os"
@@ -22,11 +21,11 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
-
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
 	contextPkg "github.com/untillpro/qs/internal/context"
+	"github.com/untillpro/qs/internal/helper"
 )
 
 // checkPrerequisites ensures all required tools are available
@@ -144,6 +143,96 @@ func (st *SystemTest) createTestEnvironment() error {
 
 	if err := st.processSyncState(); err != nil {
 		return fmt.Errorf("failed to process sync state: %w", err)
+	}
+
+	if err := st.createAnotherClone(); err != nil {
+		return fmt.Errorf("failed to create another clone: %w", err)
+	}
+
+	return nil
+}
+
+func (st *SystemTest) createAnotherClone() error {
+	if !st.cfg.RunCommandFromAnotherClone {
+		return nil
+	}
+
+	// get remotes from main clone
+	remoteOriginURL, err := gitcmds.GetRemoteUrlByName(st.cloneRepoPath, "origin")
+	if err != nil {
+		return fmt.Errorf("failed to get oririn remote URL: %w", err)
+	}
+
+	remoteUpstreamURL, err := gitcmds.GetRemoteUrlByName(st.cloneRepoPath, "upstream")
+	if err != nil {
+		if !strings.Contains(err.Error(), "not found") {
+			remoteUpstreamURL = ""
+		}
+
+		return fmt.Errorf("failed to get upstream remote URL: %w", err)
+	}
+
+	// extract account, repo and token from remote url
+	forkAccount, repo, forkToken, err := gitcmds.ParseGitRemoteURL(remoteOriginURL)
+	if err != nil {
+		return err
+	}
+
+	// extract account, repo and token from remote url
+	upstreamAccount, repo, upstreamToken, err := gitcmds.ParseGitRemoteURL(remoteUpstreamURL)
+	if err != nil {
+		return err
+	}
+
+	// create temp dir for another clone
+	tempPath, err := os.MkdirTemp("", "qs-test-clone-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp clone path: %w", err)
+	}
+	// set path to another clone
+	st.anotherCloneRepoPath = filepath.Join(tempPath, st.repoName)
+	// put path to the another clone to the context
+	st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyAnotherCloneRepoPath, st.anotherCloneRepoPath)
+
+	// clone  repo to the temp dir
+	cloneCmd := exec.Command("git", "clone", remoteOriginURL)
+	cloneCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", forkToken))
+	cloneCmd.Dir = tempPath
+
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
+	}
+
+	// Step 3.1: Configure remotes in temp clone
+	if err := gitcmds.CreateRemote(
+		st.anotherCloneRepoPath,
+		"upstream",
+		upstreamAccount,
+		upstreamToken,
+		repo,
+		true,
+	); err != nil {
+		return err
+	}
+
+	if err := gitcmds.CreateRemote(
+		st.anotherCloneRepoPath,
+		"origin",
+		forkAccount,
+		forkToken,
+		repo,
+		false,
+	); err != nil {
+		return err
+	}
+
+	remoteBranchName, ok := st.ctx.Value(contextPkg.CtxKeyDevBranchName).(string)
+	if !ok {
+		return fmt.Errorf("remote branch name not found in context")
+	}
+
+	if err := checkoutOnBranch(st.anotherCloneRepoPath, remoteBranchName); err != nil {
+		return err
 	}
 
 	return nil
@@ -736,7 +825,12 @@ func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr st
 	qsArgs = append(qsArgs, "qs")
 	qsArgs = append(qsArgs, cmdCfg.Command)
 	qsArgs = append(qsArgs, cmdCfg.Args...)
-	qsArgs = append(qsArgs, "-C", st.cloneRepoPath)
+
+	runDir := st.cloneRepoPath
+	if st.cfg.RunCommandFromAnotherClone && st.anotherCloneRepoPath != "" {
+		runDir = st.anotherCloneRepoPath
+	}
+	qsArgs = append(qsArgs, "-C", runDir)
 
 	// run the qs command
 	st.ctx, err = st.qsExecRootCmd(st.ctx, qsArgs)
@@ -851,7 +945,7 @@ func (st *SystemTest) setSyncState(
 	}
 
 	if needChangeFork {
-		remoteURL, err := getRemoteUrlByName(st.cloneRepoPath, "origin")
+		remoteURL, err := gitcmds.GetRemoteUrlByName(st.cloneRepoPath, "origin")
 		if err != nil {
 			return fmt.Errorf("failed to get remote URL: %w", err)
 		}
@@ -911,29 +1005,6 @@ func commitFiles(wd string, needToCommit bool, headerOfFiles string, idFiles ...
 	}
 
 	return nil
-}
-
-func getRemoteUrlByName(wd string, remoteName string) (string, error) {
-	repo, err := git.PlainOpen(wd)
-	if err != nil {
-		return "", fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	remotes, err := repo.Remotes()
-	if err != nil {
-		return "", fmt.Errorf("failed to get remotes: %w", err)
-	}
-
-	for _, remote := range remotes {
-		if remote.Config().Name == remoteName {
-			if len(remote.Config().URLs) > 0 {
-				return remote.Config().URLs[0], nil
-			}
-			return "", fmt.Errorf("remote %s has no URLs configured", remoteName)
-		}
-	}
-
-	return "", fmt.Errorf("remote %s not found", remoteName)
 }
 
 // pushFromAnotherClone pushes changes from another clone of the repository
@@ -1049,7 +1120,6 @@ func (st *SystemTest) Run() error {
 		if err := st.validateStderr(stderr); err != nil {
 			return err
 		}
-
 		_, _ = fmt.Fprint(os.Stderr, stderr)
 
 		return err
@@ -1075,6 +1145,13 @@ func (st *SystemTest) cleanupTestEnvironment() error {
 	// Remove the cloned repository
 	if err := os.RemoveAll(st.cloneRepoPath); err != nil {
 		return fmt.Errorf("failed to remove cloned repository: %w", err)
+	}
+
+	// Remove the another cloned repository
+	if st.anotherCloneRepoPath != "" {
+		if err := os.RemoveAll(st.anotherCloneRepoPath); err != nil {
+			return fmt.Errorf("failed to remove another cloned repository: %w", err)
+		}
 	}
 
 	// Optionally remove the upstream and fork repositories

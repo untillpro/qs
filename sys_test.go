@@ -8,7 +8,6 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/require"
-
 	"github.com/untillpro/qs/internal/systrun"
 )
 
@@ -170,7 +169,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 	require.NoError(err)
 }
 
-func TestDev_PrFromOtherClone(t *testing.T) {
+func TestPR_FromOtherClone(t *testing.T) {
 	require := require.New(t)
 
 	ghConfig := getGithubConfig(t)
@@ -179,13 +178,14 @@ func TestDev_PrFromOtherClone(t *testing.T) {
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: ghConfig,
 		CommandConfig: systrun.CommandConfig{
-			Command: "dev",
-			Stdin:   "y",
+			Command: "pr",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPrFromCloneIsSucceeded},
+		UpstreamState:              systrun.RemoteStateOK,
+		ForkState:                  systrun.RemoteStateOK,
+		ClipboardContent:           systrun.ClipboardContentGithubIssue,
+		SyncState:                  systrun.SyncStateSynchronized,
+		RunCommandFromAnotherClone: true,
+		Expectations:               []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -270,7 +270,6 @@ func TestPR_ForkChanged(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
-			Stdin:   "y",
 		},
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,

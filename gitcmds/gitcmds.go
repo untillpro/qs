@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-git/go-git/v5/config"
 	"net/url"
 	"os"
 	osExec "os/exec"
@@ -16,7 +15,7 @@ import (
 	"time"
 
 	goGitPkg "github.com/go-git/go-git/v5"
-
+	"github.com/go-git/go-git/v5/config"
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/helper"
@@ -487,6 +486,10 @@ func GetRepoAndOrgName(wd string) (repo string, org string, err error) {
 // Handles HTTPS format (https://github.com/account/repo.git),
 // and HTTPS with token (https://account:token@github.com/account/repo.git or https://oauth2:token@github.com/repo.git)
 func ParseGitRemoteURL(remoteURL string) (account, repo string, token string, err error) {
+	if remoteURL == "" {
+		return "", "", "", errors.New("remote URL is empty")
+	}
+
 	remoteURL = strings.TrimSuffix(remoteURL, ".git")
 	// Handle HTTPS format: https://github.com/account/repo
 	// or https://account:token@github.com/account/repo
@@ -1984,4 +1987,103 @@ func IamInMainBranch(wd string) (string, bool, error) {
 	mainbr := GetMainBranch(wd)
 
 	return curBr, strings.EqualFold(curBrOrigin, mainbr), err
+}
+
+// RemoveRepo removes a repository from GitHub
+func RemoveRepo(repoName, account, token string) error {
+	cmd := osExec.Command("gh", "repo", "delete",
+		fmt.Sprintf("%s/%s", account, repoName),
+		"--yes")
+
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GITHUB_TOKEN=%s", token))
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to delete repository: %w\nOutput: %s", err, output)
+	}
+
+	return nil
+}
+
+// GetRemoteUrlByName retrieves the URL of a specified remote by its name
+func GetRemoteUrlByName(wd string, remoteName string) (string, error) {
+	repo, err := goGitPkg.PlainOpen(wd)
+	if err != nil {
+		return "", fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	remotes, err := repo.Remotes()
+	if err != nil {
+		return "", fmt.Errorf("failed to get remotes: %w", err)
+	}
+
+	for _, remote := range remotes {
+		if remote.Config().Name == remoteName {
+			if len(remote.Config().URLs) > 0 {
+				return remote.Config().URLs[0], nil
+			}
+			return "", fmt.Errorf("remote %s has no URLs configured", remoteName)
+		}
+	}
+
+	return "", fmt.Errorf("remote %s not found", remoteName)
+}
+
+// CleanupTestEnvironment removes all created resources: cloned repo, upstream repo, fork repo
+func CleanupTestEnvironment(cloneRepoPath, anotherCloneRepoPath string) error {
+	// Remove the another cloned repository
+	if anotherCloneRepoPath != "" {
+		if err := os.RemoveAll(anotherCloneRepoPath); err != nil {
+			return fmt.Errorf("failed to remove another cloned repository: %w", err)
+		}
+	}
+
+	// get remotes from main clone
+	remoteOriginURL, err := GetRemoteUrlByName(cloneRepoPath, "origin")
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			remoteOriginURL = ""
+		} else {
+			return fmt.Errorf("failed to get oririn remote URL: %w", err)
+		}
+	}
+
+	remoteUpstreamURL, err := GetRemoteUrlByName(cloneRepoPath, "upstream")
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			remoteUpstreamURL = ""
+		} else {
+			return fmt.Errorf("failed to get upstream remote URL: %w", err)
+		}
+	}
+
+	// Remove the cloned repository
+	if err := os.RemoveAll(cloneRepoPath); err != nil {
+		return fmt.Errorf("failed to remove cloned repository: %w", err)
+	}
+
+	var errList []error
+	// extract account, repo and token from remote url
+	forkAccount, repo, forkToken, err := ParseGitRemoteURL(remoteOriginURL)
+	if err == nil {
+		// Optionally remove the fork repository
+		if err := RemoveRepo(repo, forkAccount, forkToken); err != nil {
+			errList = append(errList, errors.Join(fmt.Errorf("failed to remove origin repository: %w", err)))
+		}
+	}
+
+	// extract account, repo and token from remote url
+	upstreamAccount, repo, upstreamToken, err := ParseGitRemoteURL(remoteUpstreamURL)
+	if err == nil {
+		// Optionally remove the upstream repository
+		if err := RemoveRepo(repo, upstreamAccount, upstreamToken); err != nil {
+			errList = append(errList, errors.Join(fmt.Errorf("failed to remove upstream repository: %w", err)))
+		}
+	}
+
+	if len(errList) > 0 {
+		return errors.Join(errList...)
+	}
+
+	return nil
 }
