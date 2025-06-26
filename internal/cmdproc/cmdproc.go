@@ -94,8 +94,13 @@ func prCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Ask for confirmation before creating the PR
+			needDraft := false
+			if cmd.Flag(prdraftParamFull).Value.String() == "true" {
+				needDraft = true
+			}
 
-			return commands.Pr(cmd, wd)
+			return commands.Pr(wd, needDraft)
 		},
 	}
 	cmd.Flags().BoolP(prdraftParamFull, prdraftParam, false, prdraftMsgComment)
@@ -285,7 +290,7 @@ func goAndCatchInterrupt(cmd *cobra.Command, f func(ctx context.Context) (*cobra
 		cancel()
 	case <-ctxWithCancel.Done():
 	}
-	logger.Verbose("waiting for function to finish...")
+	logger.Error("waiting for function to finish...")
 	wg.Wait()
 
 	return cmdExecuted.Context(), err
@@ -299,10 +304,10 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			if ok, _ := cmd.Flags().GetBool("trace"); ok {
 				logger.SetLogLevel(logger.LogLevelTrace)
-				logger.Verbose("Using logger.LogLevelTrace...")
+				logger.Error("Using logger.LogLevelTrace...")
 			} else if ok, _ := cmd.Flags().GetBool("verbose"); ok {
 				logger.SetLogLevel(logger.LogLevelVerbose)
-				logger.Verbose("Using logger.LogLevelVerbose...")
+				logger.Error("Using logger.LogLevelVerbose...")
 			}
 		},
 	}

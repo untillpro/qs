@@ -38,7 +38,7 @@ func CheckGH() bool {
 func CheckQsVer() bool {
 	installedVer, err := GetInstalledQSVersion()
 	if err != nil {
-		logger.Verbose("Error getting installed qs version: %s\n", err)
+		logger.Error("Error getting installed qs version: %s\n", err)
 
 		return false
 	}

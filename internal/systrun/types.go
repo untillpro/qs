@@ -465,14 +465,6 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
 	}
 
-	// Step 3.1: Fetch remote branch
-	fetchCmd := exec.Command("git", "fetch", "origin", remoteBranchName)
-	fetchCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
-	fetchCmd.Dir = tempClonePath
-	if output, err := fetchCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to fetch remote branch: %w, output: %s", err, output)
-	}
-
 	// Step 4: Checkout on remote branch
 	if err := checkoutOnBranch(tempClonePath, remoteBranchName); err != nil {
 		return err
@@ -501,6 +493,120 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 
 	if notesObj.BranchType != types.BranchTypeDev {
 		return fmt.Errorf("notes downloaded but branch type is not dev")
+	}
+
+	return nil
+}
+
+// ExpectationPrFromCloneIsSucceeded checks if PR from clone is successful
+func ExpectationPrFromCloneIsSucceeded(ctx context.Context) error {
+	// Step 1: Get the remote URL and repo name
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return fmt.Errorf("clone repo path not found in context")
+	}
+
+	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
+	if !ok {
+		return fmt.Errorf("remote branch name not found in context")
+	}
+
+	remoteOriginURL, err := getRemoteUrlByName(cloneRepoPath, "origin")
+	if err != nil {
+		return fmt.Errorf("failed to get oririn remote URL: %w", err)
+	}
+
+	remoteUpstreamURL, err := getRemoteUrlByName(cloneRepoPath, "upstream")
+	if err != nil {
+		return fmt.Errorf("failed to get upstream remote URL: %w", err)
+	}
+
+	forkAccount, repo, forkToken, err := gitcmds.ParseGitRemoteURL(remoteOriginURL)
+	if err != nil {
+		return err
+	}
+
+	upstreamAccount, repo, upstreamToken, err := gitcmds.ParseGitRemoteURL(remoteUpstreamURL)
+	if err != nil {
+		return err
+	}
+
+	// Step 2: Create temp path for the clone
+	tempPath, err := os.MkdirTemp("", "qs-test-clone-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp clone path: %w", err)
+	}
+
+	defer func() {
+		_ = os.RemoveAll(tempPath)
+	}()
+
+	// Step 3: Clone the repository in the temp path
+	tempClonePath := filepath.Join(tempPath, repo)
+	cloneCmd := exec.Command("git", "clone", remoteOriginURL)
+	cloneCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", forkToken))
+	cloneCmd.Dir = tempPath
+
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
+	}
+
+	// Step 3.1: Configure remotes in temp clone
+	if err := gitcmds.CreateRemote(
+		tempClonePath,
+		"upstream",
+		upstreamAccount,
+		upstreamToken,
+		repo,
+		true,
+	); err != nil {
+		return err
+	}
+
+	if err := gitcmds.CreateRemote(
+		tempClonePath,
+		"origin",
+		forkAccount,
+		forkToken,
+		repo,
+		false,
+	); err != nil {
+		return err
+	}
+
+	// Step 4: Checkout on remote branch
+	if err := checkoutOnBranch(tempClonePath, remoteBranchName); err != nil {
+		return err
+	}
+
+	// Step 4.1: Commit some changes
+	if err := commitFiles(tempClonePath, true, "", 4); err != nil {
+		return err
+	}
+
+	// Step 5: Run `qs pr`
+	if err := gitcmds.Pr(tempClonePath, false); err != nil {
+		return err
+	}
+
+	// Step 6: Check if notes are downloaded
+	notes, ok := gitcmds.GetNotes(tempClonePath)
+	if !ok {
+		return errors.New("Error: No notes found in dev branch")
+	}
+
+	if len(notes) == 0 {
+		return fmt.Errorf("no notes downloaded")
+	}
+
+	// Step 7: Check if notes are of correct type
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		return errors.New("error: No notes found in dev branch")
+	}
+
+	if notesObj.BranchType != types.BranchTypePr {
+		return fmt.Errorf("notes downloaded but branch type is not pr")
 	}
 
 	return nil

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-git/go-git/v5/config"
 	"net/url"
 	"os"
 	osExec "os/exec"
@@ -14,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
+	goGitPkg "github.com/go-git/go-git/v5"
 
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
@@ -333,7 +334,7 @@ func Upload(wd string, commitMessageParts []string) error {
 
 	// Push notes to origin
 	err = new(exec.PipedExec).
-		Command(git, push, origin, "ref/notes/*").
+		Command(git, push, origin, "refs/notes/*:refs/notes/*").
 		WorkingDir(wd).
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
@@ -350,11 +351,11 @@ func Upload(wd string, commitMessageParts []string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Verbose(stderr)
+		logger.Error(stderr)
 
 		return err
 	}
-	logger.Verbose(stdout)
+	logger.Error(stdout)
 
 	return nil
 }
@@ -729,9 +730,9 @@ func GetIssueRepoFromURL(url string) (repoName string) {
 	return
 }
 
-// DevIssue
-func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
-	repo, org, err := GetRepoAndOrgName(wd)
+// GenerateDevBranchNameAndNotes
+func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
+	repo, _, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
 	}
@@ -741,8 +742,7 @@ func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber 
 	}
 
 	strIssueNum := strconv.Itoa(issueNumber)
-	myrepo := org + slash + repo
-	parentrepo, err := GetParentRepoName(wd)
+	parentRepoName, err := GetParentRepoName(wd)
 	if err != nil {
 		return "", nil, err
 	}
@@ -751,45 +751,34 @@ func DevIssue(cmd *cobra.Command, wd string, githubIssueURL string, issueNumber 
 		url := args[0]
 		issuerepo := GetIssueRepoFromURL(url)
 		if len(issuerepo) > 0 {
-			parentrepo = issuerepo
+			parentRepoName = issuerepo
 		}
 	}
 
-	err = new(exec.PipedExec).
-		Command("gh", "repo", "set-default", myrepo).
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	branch, err = buildDevBranchName(githubIssueURL)
 	if err != nil {
 		return "", nil, err
 	}
 
-	branchName, err := buildDevBranchName(githubIssueURL)
-	if err != nil {
-		return "", nil, err
-	}
-
+	// check if branch already exists in remote
 	stdout, stderr, err := new(exec.PipedExec).
-		Command("gh", "issue", "develop", strIssueNum, "--repo="+parentrepo, "--name", branchName).
+		Command(git, "ls-remote", "--heads", "origin", branch).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Verbose(stderr)
+		logger.Error(stderr)
+
 		return "", nil, err
 	}
-	// delay to ensure branch is created
-	if helper.IsTest() {
-		helper.Delay()
+	if len(stdout) > 0 {
+		return "", nil, fmt.Errorf("branch %s already exists in origin remote", branch)
 	}
-
-	branch = strings.TrimSpace(stdout)
-	segments := strings.Split(branch, slash)
-	branch = segments[len(segments)-1]
 
 	if len(branch) == 0 {
 		return "", nil, errors.New("Can not create branch for issue")
 	}
 	// old-style notes
-	issueName := GetIssueNameByNumber(strIssueNum, parentrepo)
+	issueName := GetIssueNameByNumber(strIssueNum, parentRepoName)
 	comment := IssuePRTtilePrefix + " '" + issueName + "' "
 	body := ""
 	if len(issueName) > 0 {
@@ -945,16 +934,13 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 		}
 	}
 
-	if err := pullOrigin(wd); err != nil {
-		return err
-	}
-
 	// If branch is not in fork, then pull from origin/main
 	remote := "origin"
 	if branchIsInFork {
 		// otherwise pull from upstream/main
 		remote = "upstream"
 	}
+
 	// Pull from UpstreamRepo to MainBranch with rebase
 	err = new(exec.PipedExec).
 		Command(git, pull, "--rebase", remote, mainBranch, "--no-edit").
@@ -1034,11 +1020,11 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Verbose(stderr)
+		logger.Error(stderr)
 
 		return err
 	}
-	logger.Verbose(stdout)
+	logger.Error(stdout)
 
 	if helper.IsTest() {
 		helper.Delay()
@@ -1953,6 +1939,36 @@ func GetCurrentBranchName(wd string) string {
 	return strings.TrimSpace(branchName)
 }
 
+// createRemote creates a remote in the cloned repository
+func CreateRemote(wd, remote, account, token, repoName string, isUpstream bool) error {
+	repo, err := goGitPkg.PlainOpen(wd)
+	if err != nil {
+		return fmt.Errorf("failed to open cloned repository: %w", err)
+	}
+
+	if err = repo.DeleteRemote(remote); err != nil {
+		if !errors.Is(err, goGitPkg.ErrRemoteNotFound) {
+			return fmt.Errorf("failed to delete %s remote: %w", remote, err)
+		}
+	}
+
+	remoteURL := BuildRemoteURL(account, token, repoName, isUpstream)
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: remote,
+		URLs: []string{remoteURL},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create %s remote: %w", remote, err)
+	}
+
+	return nil
+}
+
+// buildRemoteURL constructs the remote URL for cloning
+func BuildRemoteURL(account, token, repoName string, isUpstream bool) string {
+	return "https://" + account + ":" + token + "@github.com/" + account + "/" + repoName + ".git"
+}
+
 // IamInMainBranch checks if current branch is main branch
 // Returns:
 // - the name of current branch
@@ -1969,15 +1985,4 @@ func IamInMainBranch(wd string) (string, bool, error) {
 	mainbr := GetMainBranch(wd)
 
 	return curBr, strings.EqualFold(curBrOrigin, mainbr), err
-}
-
-func pullOrigin(wd string) error {
-
-	mainbr := GetMainBranch(wd)
-	_, _, err := new(exec.PipedExec).
-		Command(git, pull, origin, mainbr).
-		WorkingDir(wd).
-		RunToStrings()
-
-	return err
 }

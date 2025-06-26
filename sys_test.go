@@ -163,7 +163,29 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationBranchLinkedToIssue},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDev_PrFromOtherClone(t *testing.T) {
+	require := require.New(t)
+
+	ghConfig := getGithubConfig(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: ghConfig,
+		CommandConfig: systrun.CommandConfig{
+			Command: "dev",
+			Stdin:   "y",
+		},
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPrFromCloneIsSucceeded},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -227,7 +249,6 @@ func TestPR_Synchronized(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
-			Stdin:   "y",
 		},
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
