@@ -3,6 +3,7 @@
 ## Installation Prerequisites
 
 ### gh    version > 2.27
+
 - https://github.com/cli/cli
 - MSI: https://github.com/cli/cli/releases/tag/v2.3.0
 - chocolatey: choco install ghhttps://github.com/untillpro/qs/blob/main/README.md
@@ -18,15 +19,14 @@
   - gives `yes`, `grep`, `sed`, `jq` and other Unix utilities
 
 ### xclip
+
 For linux additionally:   sudo apt install xclip
 
 ## Installation
 
 go install github.com/untillpro/qs@latest
 
-## Basic Usage
-Must be run in cloned github repo folder.
-Path qs.exe should be added to system PATH env variable.
+## Basic usage
 
 - `qs`: show status of current folder
 
@@ -56,20 +56,24 @@ Path qs.exe should be added to system PATH env variable.
 - `qs version`  	          : Shows version of currently installed qs
 
 ## Usage with JIRA
+
 Create branch from Jira issue use "qs dev https://untill.atlassian.net/browse/Issue-Number"
 Example:
+
+```bash
+qs dev https://untill.atlassian.net/browse/AIR-270
 ```
-1. qs dev https://untill.atlassian.net/browse/AIR-270
-```
+
 In order it works define the following env variables:
-- JIRA_EMAIL=[user email]
-- JIRA_API_TOKEN=[user jira api token] - it's genertated [here]([url](https://id.atlassian.com/manage-profile/security/api-tokens)).
+
+- JIRA_EMAIL: user email
+- JIRA_API_TOKEN: user [jira api token](https://id.atlassian.com/manage-profile/security/api-tokens)
 
 If JIRA_EMAIL is not defined qs tries to get it from local git settings.
 If it's not defined, qs gives error "Error: Please export JIRA_EMAIL."
 If JIRA_API_TOKEN is not found, qs gives error:
 
-```
+```text
 --------------------------------------------------------------------------------
 Error: JIRA API token not found. Please set environment variable JIRA_API_TOKEN.
             Jira API token can generate on this page:
@@ -80,16 +84,17 @@ Error: JIRA API token not found. Please set environment variable JIRA_API_TOKEN.
 2. "qs pr" creates Pull Request with link on Jira issue.
   
 > **Note**
-  - `qs u` takes comment from clipboard. If current branch is "main/master", 
-           and message is empty or very short (<3 symbols), qs willask to enter message.
-           If the message is too short, it shows error:   
-                  ----  Too short comment not allowed! --- 
+
+- `qs u` takes comment from clipboard. If current branch is "main/master", 
+         and message is empty or very short (<3 symbols), qs willask to enter message.
+         If the message is too short, it shows error:
+                ----  Too short comment not allowed! ---
 
 ## Prevent large commits
 
 Command 'qs dev' creates a developer branch and after success, it shows the following question:
 
-```
+```bash
    Git pre-commit hook, preventing commit large files does not exist.
    Do you want to set hook(y/n)?
 ```
@@ -97,5 +102,3 @@ Command 'qs dev' creates a developer branch and after success, it shows the foll
 - On 'y', qs creates github local pre-commit hook script for current repository.
 
 If local pre-commit hook found, 'qs dev' does not asks to create the hook.
-
-
