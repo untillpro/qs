@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	contextPkg "github.com/untillpro/qs/internal/context"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 	"strings"
 
 	"github.com/untillpro/qs/gitcmds"
-	"github.com/untillpro/qs/internal/types"
 	"github.com/untillpro/qs/vcs"
 )
 
@@ -27,7 +27,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	// find out type of the branch
 	branchType := gitcmds.GetBranchType(wd)
 	// if branch type is unknown, we cannot proceed
-	if branchType == types.BranchTypeUnknown {
+	if branchType == notesPkg.BranchTypeUnknown {
 		return errors.New("You must be on either a pr or dev branch")
 	}
 
@@ -40,14 +40,14 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	// each branch type has different tolerance to the length of the commit message
 	finalCommitMessages := make([]string, 0, len(cfgUpload.Message))
 	switch branchType {
-	case types.BranchTypeDev:
+	case notesPkg.BranchTypeDev:
 		if totalLength == 0 {
 			// for dev branch default commit message is "dev"
 			finalCommitMessages = append(finalCommitMessages, gitcmds.PushDefaultMsg)
 		} else {
 			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 		}
-	case types.BranchTypePr:
+	case notesPkg.BranchTypePr:
 		// if commit message is not specified or is shorter than 8 characters
 		if totalLength < 8 {
 			return errors.New("Commit message is missing or too short (minimum 8 characters)")

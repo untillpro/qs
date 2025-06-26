@@ -21,7 +21,6 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
-	"github.com/untillpro/qs/internal/types"
 	"github.com/untillpro/qs/utils"
 )
 
@@ -785,7 +784,7 @@ func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber
 		body = IssueSign + strIssueNum + oneSpace + issueName
 	}
 	// Prepare new notes
-	notesObj, err := notesPkg.Serialize(githubIssueURL, "", types.BranchTypeDev)
+	notesObj, err := notesPkg.Serialize(githubIssueURL, "", notesPkg.BranchTypeDev)
 	if err != nil {
 		return "", nil, err
 	}
@@ -794,14 +793,14 @@ func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber
 }
 
 // getBranchTypeByName returns branch type based on branch name
-func getBranchTypeByName(branchName string) types.BranchType {
+func getBranchTypeByName(branchName string) notesPkg.BranchType {
 	switch {
 	case strings.HasSuffix(branchName, "-dev"):
-		return types.BranchTypeDev
+		return notesPkg.BranchTypeDev
 	case strings.HasSuffix(branchName, "-pr"):
-		return types.BranchTypePr
+		return notesPkg.BranchTypePr
 	default:
-		return types.BranchTypeUnknown
+		return notesPkg.BranchTypeUnknown
 	}
 }
 
@@ -861,13 +860,13 @@ func buildDevBranchName(issueURL string) (string, error) {
 }
 
 // GetBranchType returns branch type based on notes or branch name
-func GetBranchType(wd string) types.BranchType {
+func GetBranchType(wd string) notesPkg.BranchType {
 	notes, ok := GetNotes(wd)
 	if ok {
 		notesObj, ok := notesPkg.Deserialize(notes)
 		if !ok {
 			if isOldStyledBranch(notes) {
-				return types.BranchTypeDev
+				return notesPkg.BranchTypeDev
 			}
 		}
 

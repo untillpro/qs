@@ -7,14 +7,20 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/untillpro/qs/internal/types"
 )
 
 // current version of the Notes struct
 // This version is used to track changes in the Notes structure and ensure compatibility.
 // It should be updated whenever there are changes to the structure or its fields.
 var version = "1.0"
+
+type BranchType int
+
+const (
+	BranchTypeUnknown BranchType = iota
+	BranchTypeDev
+	BranchTypePr
+)
 
 // Notes represents the structure for storing metadata related to branch.
 type Notes struct {
@@ -23,8 +29,8 @@ type Notes struct {
 	// GithubIssueURL is the URL of the GitHub issue associated with the branch.
 	GithubIssueURL string `json:"github_issue_url"`
 	// JiraTicketURL is the URL of the Jira ticket associated with the branch.
-	JiraTicketURL string           `json:"jira_ticket_url"`
-	BranchType    types.BranchType `json:"branch_type"` // Optional field to specify the type of branch (`dev` or `pr`)
+	JiraTicketURL string     `json:"jira_ticket_url"`
+	BranchType    BranchType `json:"branch_type"` // Optional field to specify the type of branch (`dev` or `pr`)
 }
 
 // Serialize is a function for serializing given notes field into a JSON string representation.
@@ -46,7 +52,7 @@ func (nt *Notes) String() string {
 func Serialize(
 	githubIssueURL string,
 	jiraTicketURL string,
-	branchType types.BranchType,
+	branchType BranchType,
 ) (string, error) {
 	n := Notes{
 		Version:        version,

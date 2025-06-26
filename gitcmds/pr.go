@@ -8,7 +8,6 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
-	"github.com/untillpro/qs/internal/types"
 	"os"
 	"strings"
 )
@@ -16,7 +15,7 @@ import (
 func Pr(wd string, needDraft bool) error {
 	// find out type of the branch
 	branchType := GetBranchType(wd)
-	if branchType != types.BranchTypeDev {
+	if branchType != notesPkg.BranchTypeDev {
 		return errors.New("You must be on dev branch")
 	}
 
@@ -202,7 +201,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", errors.New("error deserializing notes")
 	}
 	// update branch type in notes object
-	notesObj.BranchType = types.BranchTypePr
+	notesObj.BranchType = notesPkg.BranchTypePr
 
 	issueDescription, err := getIssueDescription(notesObj.GithubIssueURL)
 	if err != nil {

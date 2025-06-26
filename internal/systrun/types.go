@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	notesPkg "github.com/untillpro/qs/internal/notes"
-	"github.com/untillpro/qs/internal/types"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,9 +13,11 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+
 	goUtilsExec "github.com/untillpro/goutils/exec"
 	"github.com/untillpro/qs/gitcmds"
 	contextCfg "github.com/untillpro/qs/internal/context"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
 // SystemTest represents a single system test for the qs utility
@@ -491,7 +491,7 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 		return errors.New("error: No notes found in dev branch")
 	}
 
-	if notesObj.BranchType != types.BranchTypeDev {
+	if notesObj.BranchType != notesPkg.BranchTypeDev {
 		return fmt.Errorf("notes downloaded but branch type is not dev")
 	}
 
@@ -605,7 +605,7 @@ func ExpectationPrFromCloneIsSucceeded(ctx context.Context) error {
 		return errors.New("error: No notes found in dev branch")
 	}
 
-	if notesObj.BranchType != types.BranchTypePr {
+	if notesObj.BranchType != notesPkg.BranchTypePr {
 		return fmt.Errorf("notes downloaded but branch type is not pr")
 	}
 

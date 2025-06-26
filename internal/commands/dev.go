@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/untillpro/qs/internal/helper"
 	"io"
 	"net/http"
 	"os"
@@ -20,12 +19,13 @@ import (
 	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
-	contextPkg "github.com/untillpro/qs/internal/context"
 
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
+	contextPkg "github.com/untillpro/qs/internal/context"
+	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/notes"
-	"github.com/untillpro/qs/internal/types"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
 func Dev(cmd *cobra.Command, wd string, args []string) error {
@@ -285,7 +285,7 @@ func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 	}
 	branch = cleanArgfromSpecSymbols(branch)
 	// Prepare new notes
-	notesObj, err := notes.Serialize("", "", types.BranchTypeDev)
+	notesObj, err := notes.Serialize("", "", notesPkg.BranchTypeDev)
 	if err != nil {
 		return "", []string{}, err
 	}
@@ -351,7 +351,7 @@ func getJiraBranchName(wd string, args ...string) (branch string, comments []str
 			} else {
 				jiraTicketURL := matches[0] // Full JIRA ticket URL
 				// Prepare new notes
-				notesObj, err := notes.Serialize("", jiraTicketURL, types.BranchTypeDev)
+				notesObj, err := notes.Serialize("", jiraTicketURL, notesPkg.BranchTypeDev)
 				if err != nil {
 					return "", nil, err
 				}
