@@ -1018,8 +1018,8 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 // Parameters:
 // branch - branch name
 // comments - comments for branch
-// branchIsInFork - if true, then branch is in forked repo
-func Dev(wd, branchName string, comments []string, branchIsInFork bool) error {
+// checkRemoteBranchExistence - if true, checks if branch already exists in remote
+func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bool) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf("failed to get main branch: %w", err)
@@ -1043,6 +1043,24 @@ func Dev(wd, branchName string, comments []string, branchIsInFork bool) error {
 	}
 	if err != nil {
 		return err
+	}
+
+	if checkRemoteBranchExistence {
+		// check if branch already exists in remote
+		stdout, stderr, err := new(exec.PipedExec).
+			Command(git, "ls-remote", "--heads", "origin", branchName).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			logger.Error(stderr)
+
+			return err
+		}
+		logger.Verbose(stdout)
+
+		if len(stdout) > 0 {
+			return fmt.Errorf("branch %s already exists in origin remote", branchName)
+		}
 	}
 
 	err = new(exec.PipedExec).

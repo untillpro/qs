@@ -54,7 +54,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		clipargs := strings.TrimSpace(getArgStringFromClipboard(cmd.Context()))
 		args = append(args, clipargs)
 	}
-	remoteURL := gitcmds.GetRemoteUpstreamURL(wd)
+
 	noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == trueStr)
 	if !noForkAllowed {
 		parentRepo, err := gitcmds.GetParentRepoName(wd)
@@ -110,6 +110,8 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	checkRemoteBranchExistence := true
 	if ok { // github issue
 		fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
 		_, _ = fmt.Scanln(&response)
@@ -118,6 +120,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			if err != nil {
 				return err
 			}
+			checkRemoteBranchExistence = false // no need to check remote branch existence for issue branch
 		}
 	} else { // PK topic or Jira issue
 		if _, ok := GetJiraTicketIDFromArgs(args...); ok { // Jira issue
@@ -169,11 +172,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			}
 		}
 
-		branchIsInFork := false
-		if len(remoteURL) > 0 {
-			branchIsInFork = true
-		}
-		if err := gitcmds.Dev(wd, branch, notes, branchIsInFork); err != nil {
+		if err := gitcmds.Dev(wd, branch, notes, checkRemoteBranchExistence); err != nil {
 			return err
 		}
 	default:
