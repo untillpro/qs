@@ -636,17 +636,34 @@ func PopStashedFiles(wd string) error {
 	return nil
 }
 
-func GetMainBranch(wd string) string {
-	_, _, err := new(exec.PipedExec).
+func GetMainBranch(wd string) (string, error) {
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, branch, "-r").
 		WorkingDir(wd).
-		Command("grep", "/main").
+		Command("grep", "-E", "(/main|/master)([^a-zA-Z0-9]|$)").
 		RunToStrings()
-	if err == nil {
-		return mainBrachName
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, stderr)
+		_, _ = fmt.Fprintln(os.Stderr, stdout)
+
+		return "", err
 	}
 
-	return "master"
+	// Check if the output contains "main" or "master"
+	mainBranchFound := strings.Contains(stdout, "main")
+	masterBranchFound := strings.Contains(stdout, "master")
+
+	switch {
+	case mainBranchFound && masterBranchFound:
+		_, _ = fmt.Fprintln(os.Stderr, "Both main and master branches found")
+		os.Exit(1)
+	case mainBranchFound:
+		return "main", nil
+	case masterBranchFound:
+		return "master", nil
+	}
+
+	return "", errors.New("neither main nor master branches found")
 }
 
 func getUserName(wd string) (string, error) {
@@ -679,7 +696,11 @@ func MakeUpstream(wd string, repo string) error {
 		return errors.New(userNotFound)
 	}
 
-	mainBranch := GetMainBranch(wd)
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch: %w", err)
+	}
+
 	err = new(exec.PipedExec).
 		Command(git, "remote", "rename", "origin", "upstream").
 		WorkingDir(wd).
@@ -913,7 +934,11 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 // comments - comments for branch
 // branchIsInFork - if true, then branch is in forked repo
 func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
-	mainBranch := GetMainBranch(wd)
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch: %w", err)
+	}
+
 	_, chExist, err := ChangedFilesExist(wd)
 	if err != nil {
 		return err
@@ -1139,11 +1164,15 @@ func GetMergedBranchList(wd string) (brlist []string, err error) {
 	}
 
 	mbrlistraw := strings.Split(stdout, caret)
-	mainbr := GetMainBranch(wd)
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get main branch: %w", err)
+	}
+
 	curbr := GetCurrentBranchName(wd)
 	for _, mbranchstr := range mbrlistraw {
 		arrstr := strings.TrimSpace(mbranchstr)
-		if (strings.TrimSpace(arrstr) != "") && !strings.Contains(arrstr, curbr) && !strings.Contains(arrstr, mainbr) {
+		if (strings.TrimSpace(arrstr) != "") && !strings.Contains(arrstr, curbr) && !strings.Contains(arrstr, mainBranch) {
 			mbrlist = append(mbrlist, arrstr)
 		}
 	}
@@ -1169,7 +1198,7 @@ func GetMergedBranchList(wd string) (brlist []string, err error) {
 		mybranch = strings.ReplaceAll(strings.TrimSpace(mybranch), originSlash, "")
 		mybranch = strings.TrimSpace(mybranch)
 		bfound := false
-		if !strings.Contains(mybranch, mainbr) && !strings.Contains(mybranch, "HEAD") {
+		if !strings.Contains(mybranch, mainBranch) && !strings.Contains(mybranch, "HEAD") {
 			for _, mbranch := range mbrlist {
 				mbranch = strings.ReplaceAll(strings.TrimSpace(mbranch), "MERGED", "")
 				mbranch = strings.TrimSpace(mbranch)
@@ -1210,8 +1239,12 @@ func DeleteBranchesRemote(wd string, brs []string) error {
 }
 
 func PullUpstream(wd string) error {
-	mainBranch := GetMainBranch(wd)
-	err := new(exec.PipedExec).
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch: %w", err)
+	}
+
+	err = new(exec.PipedExec).
 		Command(git, pull, "-q", "upstream", mainBranch, "--no-edit").
 		Run(os.Stdout, os.Stdout)
 
@@ -1267,7 +1300,11 @@ func GetGoneBranchesLocal(wd string) (*[]string, error) {
 		return nil, err
 	}
 	myremotelist := strings.Split(stdout, caret)
-	mainbr := GetMainBranch(wd)
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get main branch: %w", err)
+	}
+
 	curbr := GetCurrentBranchName(wd)
 	for _, mylocalbranch := range mbrlocallist {
 		mybranch := strings.TrimSpace(mylocalbranch)
@@ -1275,7 +1312,7 @@ func GetGoneBranchesLocal(wd string) (*[]string, error) {
 		if strings.Contains(mybranch, curbr) {
 			bfound = true
 		} else {
-			if !strings.Contains(mybranch, mainbr) && !strings.Contains(mybranch, "HEAD") {
+			if !strings.Contains(mybranch, mainBranch) && !strings.Contains(mybranch, "HEAD") {
 				for _, mbranch := range myremotelist {
 					mbranch = strings.TrimSpace(mbranch)
 					if mybranch == mbranch {
@@ -1984,9 +2021,12 @@ func IamInMainBranch(wd string) (string, bool, error) {
 		Command("gawk", "-F/", "{print $2}").
 		RunToStrings()
 	curBrOrigin := strings.TrimSpace(stdout)
-	mainbr := GetMainBranch(wd)
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get main branch: %w", err)
+	}
 
-	return curBr, strings.EqualFold(curBrOrigin, mainbr), err
+	return curBr, strings.EqualFold(curBrOrigin, mainBranch), err
 }
 
 // RemoveRepo removes a repository from GitHub

@@ -1120,9 +1120,6 @@ func (st *SystemTest) Run() error {
 		if err := st.validateStderr(stderr); err != nil {
 			return err
 		}
-		_, _ = fmt.Fprint(os.Stderr, stderr)
-
-		return err
 	}
 
 	if err := st.validateStdout(stdout); err != nil {
