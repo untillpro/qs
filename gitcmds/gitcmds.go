@@ -1752,10 +1752,7 @@ func SetLocalPreCommitHook(wd string) error {
 	if err != nil {
 		return err
 	}
-
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("error closing file %s: %w", filepath, err)
-	}
+	_ = f.Close()
 
 	if !largeFileHookExist(filepath) {
 		return fillPreCommitFile(wd, filepath)
@@ -1786,33 +1783,39 @@ func createOrOpenFile(filepath string) (*os.File, error) {
 }
 
 func fillPreCommitFile(wd, myFilePath string) error {
-	f, err := createOrOpenFile(myFilePath)
+	fPreCommit, err := createOrOpenFile(myFilePath)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = f.Close()
+		_ = fPreCommit.Close()
 	}()
-
-	pathLargeFile := "https://raw.githubusercontent.com/untillpro/ci-action/master/scripts/large-file-hook.sh"
 
 	dir, err := GetRootFolder(wd)
 	if err != nil {
 		return err
 	}
 	fName := "/.git/hooks/large-file-hook.sh"
-	lf := dir + fName
+	lfPath := dir + fName
 
-	if err := new(exec.PipedExec).
-		Command("curl", "-s", "-o", lf, pathLargeFile).
-		Run(os.Stdout, os.Stdout); err != nil {
+	lf, err := os.Create(lfPath)
+	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = lf.Close()
+	}()
 
-	hookCode := "\n#Here is large files commit prevent is added by [qs]\n"
-	hookCode = hookCode + "bash " + lf + caret
-	if _, err := f.WriteString(hookCode); err != nil {
-		return err
+	if _, err := lf.WriteString(largeFileHookContent); err != nil {
+		return fmt.Errorf("failed to write large file hook content: %w", err)
+	}
+
+	preCommitContentBuf := strings.Builder{}
+	preCommitContentBuf.WriteString("#!/bin/bash\n")
+	preCommitContentBuf.WriteString("\n#Here is large files commit prevent is added by [qs]\n")
+	preCommitContentBuf.WriteString("bash " + lfPath + caret)
+	if _, err := fPreCommit.WriteString(preCommitContentBuf.String()); err != nil {
+		return fmt.Errorf("failed to write pre-commit hook content: %w", err)
 	}
 
 	return new(exec.PipedExec).Command("chmod", "+x", myFilePath).Run(os.Stdout, os.Stdout)
