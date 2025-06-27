@@ -916,6 +916,11 @@ func (st *SystemTest) setSyncState(
 		return errors.New("failed to determine github issue URL. Use ClipboardContentGithubIssue")
 	}
 
+	// authenticate with GitHub using the fork token
+	if err := os.Setenv("GITHUB_TOKEN", st.cfg.GHConfig.ForkToken); err != nil {
+		return err
+	}
+
 	stdout, stderr, err := st.runCommand(CommandConfig{
 		Command: "dev",
 		Stdin:   "y",

@@ -167,6 +167,34 @@ func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 	return nil
 }
 
+// ExpectationLargeFileHooksInstalled checks if the large file hooks are installed
+func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
+	// Check if the large file hooks are installed
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return fmt.Errorf("clone repo path not found in context")
+	}
+
+	hookPath := filepath.Join(cloneRepoPath, ".git", "hooks", "pre-commit")
+	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
+		return fmt.Errorf("pre-commit hook is not installed at %s", hookPath)
+	}
+
+	substring := "large-file-hook.sh"
+	stdout, _, err := new(goUtilsExec.PipedExec).
+		Command("grep", "-l", substring, hookPath).
+		RunToStrings()
+	if err != nil {
+		return fmt.Errorf("failed to check if large file hook is installed: %w", err)
+	}
+
+	if len(stdout) == 0 {
+		return fmt.Errorf("large file hook is not installed")
+	}
+
+	return nil
+}
+
 // ExpectationCurrentBranchHasPrefix checks if the current branch has the expected prefix
 func ExpectationCurrentBranchHasPrefix(ctx context.Context) error {
 	// Open the repository

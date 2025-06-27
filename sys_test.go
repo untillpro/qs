@@ -87,7 +87,10 @@ func TestDev_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateOK,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCustomBranchIsCurrentBranch},
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationCustomBranchIsCurrentBranch,
+			systrun.ExpectationLargeFileHooksInstalled,
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -110,7 +113,10 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentCustom,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCustomBranchIsCurrentBranch},
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationCustomBranchIsCurrentBranch,
+			systrun.ExpectationLargeFileHooksInstalled,
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -162,6 +168,10 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
 		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationBranchLinkedToIssue,
+			systrun.ExpectationLargeFileHooksInstalled,
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)

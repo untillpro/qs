@@ -101,7 +101,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		stashedUncommittedChanges = true
 	}
 
-	// sync main branch to ensure it's up to date
+	// sync local MainBranch to ensure it's up to date with origin and upstream remotes
 	if err := gitcmds.SyncMainBranch(wd); err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
 		_, _ = fmt.Scanln(&response)
 		if response == pushYes {
-			branch, notes, err = gitcmds.GenerateDevBranchNameAndNotes(wd, githubIssueURL, issueNum, args...)
+			branch, notes, err = gitcmds.DevIssue(wd, githubIssueURL, issueNum, args...)
 			if err != nil {
 				return err
 			}

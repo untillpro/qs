@@ -9,6 +9,7 @@ import (
 	"os"
 	osExec "os/exec"
 	"os/user"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -56,7 +57,6 @@ const (
 	ErrSomethigWrong        = "something went wrong"
 	ErrUnknowGHResponse     = "unknown response from gh"
 	PushDefaultMsg          = "dev"
-	mainBrachName           = "main"
 
 	IssuePRTtilePrefix = "Resolves issue"
 	IssueSign          = "Resolves #"
@@ -753,9 +753,9 @@ func GetIssueRepoFromURL(url string) (repoName string) {
 	return
 }
 
-// GenerateDevBranchNameAndNotes
-func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
-	repo, _, err := GetRepoAndOrgName(wd)
+// DevIssue create link between upstream Guthub issue and dev branch
+func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
+	repo, org, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
 	}
@@ -765,7 +765,8 @@ func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber
 	}
 
 	strIssueNum := strconv.Itoa(issueNumber)
-	parentRepoName, err := GetParentRepoName(wd)
+	myrepo := org + slash + repo
+	parentrepo, err := GetParentRepoName(wd)
 	if err != nil {
 		return "", nil, err
 	}
@@ -774,11 +775,19 @@ func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber
 		url := args[0]
 		issuerepo := GetIssueRepoFromURL(url)
 		if len(issuerepo) > 0 {
-			parentRepoName = issuerepo
+			parentrepo = issuerepo
 		}
 	}
 
-	branch, err = buildDevBranchName(githubIssueURL)
+	err = new(exec.PipedExec).
+		Command("gh", "repo", "set-default", myrepo).
+		WorkingDir(wd).
+		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return "", nil, err
+	}
+
+	branchName, err := buildDevBranchName(githubIssueURL)
 	if err != nil {
 		return "", nil, err
 	}
@@ -797,11 +806,33 @@ func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber
 		return "", nil, fmt.Errorf("branch %s already exists in origin remote", branch)
 	}
 
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get main branch: %w", err)
+	}
+
+	stdout, stderr, err = new(exec.PipedExec).
+		Command("gh", "issue", "develop", strIssueNum, "--branch-repo", myrepo, "--repo="+parentrepo, "--name", branchName, "--base", mainBranch).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+		return "", nil, err
+	}
+	// delay to ensure branch is created
+	if helper.IsTest() {
+		helper.Delay()
+	}
+
+	branch = strings.TrimSpace(stdout)
+	segments := strings.Split(branch, slash)
+	branch = segments[len(segments)-1]
+
 	if len(branch) == 0 {
 		return "", nil, errors.New("Can not create branch for issue")
 	}
 	// old-style notes
-	issueName := GetIssueNameByNumber(strIssueNum, parentRepoName)
+	issueName := GetIssueNameByNumber(strIssueNum, parentrepo)
 	comment := IssuePRTtilePrefix + " '" + issueName + "' "
 	body := ""
 	if len(issueName) > 0 {
@@ -816,25 +847,24 @@ func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber
 	return branch, []string{comment, body, notesObj}, nil
 }
 
-// SyncMainBranch syncs the main branch with upstream and origin
-//
-//	Flow:
-//	pull UpstreamMain->LocalMain
-//	pull ForkMain->LocalMain
-//
-// push LocalMain->ForkMain
+// SyncMainBranch syncs the local main branch with upstream and origin
+// Flow:
+// 1. Pull from UpstreamMain to MainBranch with rebase
+// 2. If upstream exists
+// - Pull from origin to MainBranch with rebase
+// - Push to origin from MainBranch
 func SyncMainBranch(wd string) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	// Pull from upstream/main if upstream exists
+	// Pull from UpstreamMain to MainBranch with rebase
 	remoteUpstreamURL := GetRemoteUpstreamURL(wd)
 
 	if len(remoteUpstreamURL) > 0 {
 		stdout, stderr, err := new(exec.PipedExec).
-			Command(git, pull, "upstream", mainBranch).
+			Command(git, pull, "--rebase", "upstream", mainBranch, "--no-edit").
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -845,9 +875,9 @@ func SyncMainBranch(wd string) error {
 		logger.Verbose(stdout)
 	}
 
-	// Pull from origin/main
+	// Pull from origin to MainBranch with rebase
 	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, pull, "origin", mainBranch).
+		Command(git, pull, "--rebase", "origin", mainBranch, "--no-edit").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -857,7 +887,7 @@ func SyncMainBranch(wd string) error {
 	}
 	logger.Verbose(stdout)
 
-	// Push to origin/main
+	// Push to origin from MainBranch
 	stdout, stderr, err = new(exec.PipedExec).
 		Command(git, push, "origin", mainBranch).
 		WorkingDir(wd).
@@ -989,60 +1019,10 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 // branch - branch name
 // comments - comments for branch
 // branchIsInFork - if true, then branch is in forked repo
-func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
+func Dev(wd, branchName string, comments []string, branchIsInFork bool) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf("failed to get main branch: %w", err)
-	}
-
-	_, chExist, err := ChangedFilesExist(wd)
-	if err != nil {
-		return err
-	}
-
-	if chExist {
-		err = new(exec.PipedExec).
-			Command(git, "add", ".").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-		if err != nil {
-			return err
-		}
-		err = new(exec.PipedExec).
-			Command(git, "stash").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-		if err != nil {
-			return err
-		}
-	}
-
-	// If branch is not in fork, then pull from origin/main
-	remote := "origin"
-	if branchIsInFork {
-		// otherwise pull from upstream/main
-		remote = "upstream"
-	}
-
-	// Pull from UpstreamRepo to MainBranch with rebase
-	err = new(exec.PipedExec).
-		Command(git, pull, "--rebase", remote, mainBranch, "--no-edit").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
-	if err != nil {
-		return err
-	}
-
-	err = new(exec.PipedExec).
-		Command(git, push, origin, mainBranch).
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
-	if err != nil {
-		return err
-	}
-
-	if helper.IsTest() {
-		helper.Delay()
 	}
 
 	_, stderr, err := new(exec.PipedExec).
@@ -1066,7 +1046,7 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	}
 
 	err = new(exec.PipedExec).
-		Command(git, "checkout", "-B", branch).
+		Command(git, "checkout", "-B", branchName).
 		WorkingDir(wd).
 		Run(os.Stdout, os.Stdout)
 	if err != nil {
@@ -1099,7 +1079,7 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 	}
 
 	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, push, "-u", origin, branch).
+		Command(git, push, "-u", origin, branchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -1111,16 +1091,6 @@ func Dev(wd, branch string, comments []string, branchIsInFork bool) error {
 
 	if helper.IsTest() {
 		helper.Delay()
-	}
-
-	if chExist {
-		err = new(exec.PipedExec).
-			Command(git, "stash", "pop").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -1615,8 +1585,13 @@ func GetFilesForCommit(wd string) []string {
 }
 
 func setUpstreamBranch(wd string, repo string, branch string) error {
+	mainBranchName, err := GetMainBranch(wd)
+	if err != nil {
+		return err
+	}
+
 	if branch == "" {
-		branch = mainBrachName
+		branch = mainBranchName
 	}
 
 	return new(exec.PipedExec).
@@ -1800,18 +1775,23 @@ func SetLocalPreCommitHook(wd string) error {
 	if err != nil {
 		return err
 	}
-	filename := "/.git/hooks/pre-commit"
-	filepath := dir + filename
+	PreCommitHooksDirPath := filepath.Join(dir, ".git/hooks")
+
+	if err := os.MkdirAll(PreCommitHooksDirPath, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create hooks directory: %w", err)
+	}
+
+	PreCommitFilePath := filepath.Join(PreCommitHooksDirPath, "pre-commit")
 
 	// Check if the file already exists
-	f, err := createOrOpenFile(filepath)
+	f, err := createOrOpenFile(PreCommitFilePath)
 	if err != nil {
 		return err
 	}
 	_ = f.Close()
 
-	if !largeFileHookExist(filepath) {
-		return fillPreCommitFile(wd, filepath)
+	if !largeFileHookExist(PreCommitFilePath) {
+		return fillPreCommitFile(wd, PreCommitFilePath)
 	}
 
 	return nil

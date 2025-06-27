@@ -17,7 +17,7 @@ func IsTest() bool {
 }
 
 func Delay() {
-	time.Sleep(1000 * time.Millisecond)
+	time.Sleep(1500 * time.Millisecond)
 }
 
 func CheckGH() bool {

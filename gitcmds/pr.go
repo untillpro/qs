@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
-	"os"
-	"strings"
 )
 
 func Pr(wd string, needDraft bool) error {
@@ -120,15 +121,20 @@ func createPRBranch(wd string) (string, error) {
 	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
 
 	upstreamRemote := "upstream"
-	exists, err := HasRemote(wd, upstreamRemote)
+	upstreamExists, err := HasRemote(wd, upstreamRemote)
 	if err != nil {
 		return "", err
 	}
 
-	if !exists {
+	mainBranchName, err := GetMainBranch(wd)
+	if err != nil {
+		return "", fmt.Errorf("failed to get main branch: %w", err)
+	}
+
+	if !upstreamExists {
 		upstreamRemote = "origin"
 	}
-	upstreamMain := upstreamRemote + "/main"
+	upstreamMain := upstreamRemote + "/" + mainBranchName
 
 	// Step 1: Fetch latest upstream
 	_, _, err = new(exec.PipedExec).
@@ -166,13 +172,24 @@ func createPRBranch(wd string) (string, error) {
 		return "", err
 	}
 
-	// Step 3: Merge upstream/main into dev branch (non-rebase)
+	// Step 3: Merge from origin/main + upstream/main
 	_, _, err = new(exec.PipedExec).
-		Command("git", "merge", upstreamMain).
+		Command("git", "merge", "origin/"+mainBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		return "", err
+	}
+
+	// Step 3.1
+	if upstreamExists {
+		_, _, err = new(exec.PipedExec).
+			Command("git", "merge", "upstream/"+mainBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// Step 4: Create new PR branch from upstream/main
