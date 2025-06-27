@@ -816,6 +816,62 @@ func GenerateDevBranchNameAndNotes(wd string, githubIssueURL string, issueNumber
 	return branch, []string{comment, body, notesObj}, nil
 }
 
+// SyncMainBranch syncs the main branch with upstream and origin
+//
+//	Flow:
+//	pull UpstreamMain->LocalMain
+//	pull ForkMain->LocalMain
+//
+// push LocalMain->ForkMain
+func SyncMainBranch(wd string) error {
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch: %w", err)
+	}
+
+	// Pull from upstream/main if upstream exists
+	remoteUpstreamURL := GetRemoteUpstreamURL(wd)
+
+	if len(remoteUpstreamURL) > 0 {
+		stdout, stderr, err := new(exec.PipedExec).
+			Command(git, pull, "upstream", mainBranch).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			logger.Error(stderr)
+
+			return fmt.Errorf("failed to pull from upstream/main: %w, stdout: %s", err, stdout)
+		}
+		logger.Verbose(stdout)
+	}
+
+	// Pull from origin/main
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, pull, "origin", mainBranch).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Error(stderr)
+
+		return fmt.Errorf("failed to pull from origin/main: %w, stdout: %s", err, stdout)
+	}
+	logger.Verbose(stdout)
+
+	// Push to origin/main
+	stdout, stderr, err = new(exec.PipedExec).
+		Command(git, push, "origin", mainBranch).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Error(stderr)
+
+		return fmt.Errorf("failed to push to origin/main: %w, stdout: %s", err, stdout)
+	}
+	logger.Verbose(stdout)
+
+	return nil
+}
+
 // getBranchTypeByName returns branch type based on branch name
 func getBranchTypeByName(branchName string) notesPkg.BranchType {
 	switch {

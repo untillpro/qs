@@ -19,7 +19,6 @@ import (
 	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
-
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	contextPkg "github.com/untillpro/qs/internal/context"
@@ -100,6 +99,11 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			return fmt.Errorf("error stashing changes: %w", err)
 		}
 		stashedUncommittedChanges = true
+	}
+
+	// sync main branch to ensure it's up to date
+	if err := gitcmds.SyncMainBranch(wd); err != nil {
+		return err
 	}
 
 	issueNum, githubIssueURL, ok, err := argContainsGithubIssueLink(wd, args...)
