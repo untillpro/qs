@@ -650,8 +650,8 @@ func GetMainBranch(wd string) (string, error) {
 	}
 
 	// Check if the output contains "main" or "master"
-	mainBranchFound := strings.Contains(stdout, "main")
-	masterBranchFound := strings.Contains(stdout, "master")
+	mainBranchFound := strings.Contains(stdout, "/main")
+	masterBranchFound := strings.Contains(stdout, "/master")
 
 	switch {
 	case mainBranchFound && masterBranchFound:
