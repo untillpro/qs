@@ -655,8 +655,7 @@ func GetMainBranch(wd string) (string, error) {
 
 	switch {
 	case mainBranchFound && masterBranchFound:
-		_, _ = fmt.Fprintln(os.Stderr, "Both main and master branches found")
-		os.Exit(1)
+		return "", fmt.Errorf("both main and master branches found")
 	case mainBranchFound:
 		return "main", nil
 	case masterBranchFound:
