@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"github.com/untillpro/qs/git"
-	"github.com/untillpro/qs/vcs"
+	"github.com/untillpro/qs/gitcmds"
 )
 
-func D(cfg vcs.CfgDownload) {
+func D(wd string) error {
 	globalConfig()
-	git.Download(cfg)
+
+	return gitcmds.Download(wd)
 }

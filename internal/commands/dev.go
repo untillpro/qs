@@ -2,41 +2,48 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/atotto/clipboard"
 	"github.com/fatih/color"
+	gitPkg "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
-	"github.com/untillpro/qs/git"
-	"github.com/untillpro/qs/internal/commands/helper"
+	"github.com/untillpro/qs/gitcmds"
+	contextPkg "github.com/untillpro/qs/internal/context"
+	"github.com/untillpro/qs/internal/helper"
+	"github.com/untillpro/qs/internal/notes"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
-func Dev(cmd *cobra.Command, args []string) {
+func Dev(cmd *cobra.Command, wd string, args []string) error {
 	globalConfig()
-	git.CheckIfGitRepo()
-	if !helper.CheckQSver() {
-		return
+	_, err := gitcmds.CheckIfGitRepo(wd)
+	if err != nil {
+		return err
+	}
+
+	if !helper.CheckQsVer() {
+		return fmt.Errorf("qs version check failed")
 	}
 	if !helper.CheckGH() {
-		return
+		return fmt.Errorf("GitHub CLI check failed")
 	}
 
 	// qs dev -d is running
 	if cmd.Flag(devDelParamFull).Value.String() == trueStr {
-		deleteBranches()
-		return
-	}
-	var needAskHook bool = true
-	if cmd.Flag(ignorehookDelParamFull).Value.String() == trueStr {
-		needAskHook = false
+		return deleteBranches(wd)
 	}
 	// qs dev is running
 	var branch string
@@ -44,186 +51,328 @@ func Dev(cmd *cobra.Command, args []string) {
 	var response string
 
 	if len(args) == 0 {
-		clipargs := strings.TrimSpace(getArgStringFromClipboard())
+		clipargs := strings.TrimSpace(getArgStringFromClipboard(cmd.Context()))
 		args = append(args, clipargs)
 	}
-	remoteURL := git.GetRemoteUpstreamURL()
+
 	noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == trueStr)
 	if !noForkAllowed {
-		parentrepo := git.GetParentRepoName()
-		if len(parentrepo) == 0 { // main repository, not forked
-			repo, org := git.GetRepoAndOrgName()
-			fmt.Printf("You are in %s/%s repo\nExecute 'qs fork' first\n", org, repo)
-			return
+		parentRepo, err := gitcmds.GetParentRepoName(wd)
+		if err != nil {
+			return err
+		}
+		if len(parentRepo) == 0 { // main repository, not forked
+			repo, org, err := gitcmds.GetRepoAndOrgName(wd)
+			if err != nil {
+				return err
+			}
+
+			return fmt.Errorf("You are in %s/%s repo\nExecute 'qs fork' first\n", org, repo)
 		}
 	}
-	curBranch, isMain := git.IamInMainBranch()
+
+	curBranch, isMain, err := gitcmds.IamInMainBranch(wd)
+	if err != nil {
+		return err
+	}
 	if !isMain {
 		fmt.Println("--------------------------------------------------------")
 		fmt.Println("You are in")
-		color.New(color.FgHiCyan).Println(curBranch)
-		fmt.Println("Switch to main branch before running 'qs dev'")
-		return
+		repo, org, err := gitcmds.GetRepoAndOrgName(wd)
+		if err != nil {
+			return err
+		}
+
+		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
+
+		return errors.New("Switch to main branch before running 'qs dev'")
 	}
 
-	issueNum, githubIssueURL, ok := argContainsGithubIssueLink(args...)
+	// Stash current changes if needed
+	stashedUncommittedChanges := false
+	if ok, err := gitcmds.HaveUncommittedChanges(wd); ok {
+		if err != nil {
+			return err
+		}
+
+		if err := gitcmds.Stash(wd); err != nil {
+			return fmt.Errorf("error stashing changes: %w", err)
+		}
+		stashedUncommittedChanges = true
+	}
+
+	// sync local MainBranch to ensure it's up to date with origin and upstream remotes
+	if err := gitcmds.SyncMainBranch(wd); err != nil {
+		return err
+	}
+
+	issueNum, githubIssueURL, ok, err := argContainsGithubIssueLink(wd, args...)
+	if err != nil {
+		return err
+	}
+
+	checkRemoteBranchExistence := true
 	if ok { // github issue
 		fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response == pushYes {
-			// Remote developer branch, linked to issue is created
-			branch, notes = git.DevIssue(githubIssueURL, issueNum, args...)
+			branch, notes, err = gitcmds.DevIssue(wd, githubIssueURL, issueNum, args...)
+			if err != nil {
+				return err
+			}
+			checkRemoteBranchExistence = false // no need to check remote branch existence for issue branch
 		}
 	} else { // PK topic or Jira issue
 		if _, ok := GetJiraTicketIDFromArgs(args...); ok { // Jira issue
-			branch, notes = getJiraBranchName(args...)
+			branch, notes, err = getJiraBranchName(wd, args...)
 		} else {
-			branch, notes = getBranchName(false, args...)
+			branch, notes, err = getBranchName(false, args...)
+			branch += "-dev" // Add suffix "-dev" for a dev branch
 		}
+		if err != nil {
+			return err
+		}
+
 		devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
 		fmt.Print(devMsg)
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 	}
+
+	// put branch name to command context
+	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyDevBranchName, branch))
+
+	exists, err := branchExists(wd, branch)
+	if err != nil {
+		return fmt.Errorf("error checking branch existence: %w", err)
+	}
+	if exists {
+		return fmt.Errorf("dev branch '%s' already exists", branch)
+	}
+
 	switch response {
 	case pushYes:
 		// Remote developer branch, linked to issue is created
 		var response string
-		parentrepo := git.GetParentRepoName()
+		parentrepo, err := gitcmds.GetParentRepoName(wd)
+		if err != nil {
+			return err
+		}
 		if len(parentrepo) > 0 {
-			if git.UpstreamNotExist(parentrepo) {
+			if gitcmds.UpstreamNotExist(wd) {
 				fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
-				fmt.Scanln(&response)
+				_, _ = fmt.Scanln(&response)
 				if response != pushYes {
 					fmt.Print(pushFail)
-					return
+					return nil
 				}
 				response = ""
-				git.MakeUpstreamForBranch(parentrepo)
+				if err := gitcmds.MakeUpstreamForBranch(wd, parentrepo); err != nil {
+					return err
+				}
 			}
 		}
-		if len(remoteURL) == 0 {
-			git.Dev(branch, notes, false)
-		} else {
-			git.Dev(branch, notes, true)
+
+		if err := gitcmds.Dev(wd, branch, notes, checkRemoteBranchExistence); err != nil {
+			return err
 		}
 	default:
 		fmt.Print(pushFail)
+
+		return nil
 	}
 
 	// Create pre-commit hook to control committing file size
-	if needAskHook {
-		setPreCommitHook()
+	if err := setPreCommitHook(wd); err != nil {
+		logger.Error("Error setting pre-commit hook:", err)
+	}
+	// Unstash changes
+	if stashedUncommittedChanges {
+		if err := gitcmds.Unstash(wd); err != nil {
+			return fmt.Errorf("error unstashing changes: %w", err)
+		}
 	}
 
+	return nil
 }
 
-func getArgStringFromClipboard() string {
-	arg, err := clipboard.ReadAll()
+// branchExists checks if a branch with the given name already exists in the current git repository.
+func branchExists(wd, branchName string) (bool, error) {
+	repo, err := gitPkg.PlainOpen(wd)
 	if err != nil {
-		return ""
+		return false, fmt.Errorf("failed to open cloned repository: %w", err)
 	}
+
+	branches, err := repo.Branches()
+	if err != nil {
+		return false, fmt.Errorf("failed to get branches: %w", err)
+	}
+
+	// Find development branch name that starts with the issue ID
+	exists := false
+	_ = branches.ForEach(func(ref *plumbing.Reference) error {
+		nextBranchName := ref.Name().Short()
+		if nextBranchName == branchName {
+			exists = true
+
+			return nil
+		}
+
+		return nil
+	})
+
+	return exists, nil
+}
+
+// getArgStringFromClipboard retrieves a string from the clipboard, or uses the context value if available.
+func getArgStringFromClipboard(ctx context.Context) string {
+	var err error
+	// context value is first
+	arg, ok := ctx.Value(contextPkg.CtxKeyClipboard).(string)
+	if !ok || len(arg) == 0 {
+		arg, err = clipboard.ReadAll()
+		if err != nil {
+			return ""
+		}
+	}
+
 	args := strings.Split(arg, "\n")
-	var newarg string
+	var newArg string
 	for _, str := range args {
-		newarg += str
-		newarg += oneSpace
+		newArg += str
+		newArg += oneSpace
 	}
-	return newarg
+
+	return newArg
 }
 
-func setPreCommitHook() {
-	var response string
-	if git.LocalPreCommitHookExist() {
-		return
+func setPreCommitHook(wd string) error {
+	if ok, err := gitcmds.LocalPreCommitHookExist(wd); ok || err != nil {
+		return err
 	}
 
-	fmt.Print("\nGit pre-commit hook, preventing commit large files does not exist.\nDo you want to set hook(y/n)?")
-	fmt.Scanln(&response)
-	switch response {
-	case pushYes:
-		git.SetLocalPreCommitHook()
-	default:
-		return
-	}
+	return gitcmds.SetLocalPreCommitHook(wd)
 }
 
-func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string) {
+func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string, err error) {
 
 	args = clearEmptyArgs(args)
 	if len(args) == 0 {
 		if ignoreEmptyArg {
-			return "", []string{}
+			return "", []string{}, nil
 		}
-		fmt.Println("Need branch name for dev")
-		os.Exit(1)
+
+		return "", []string{}, errors.New("Need branch name for dev")
 	}
 
-	newargs := splitQuotedArgs(args...)
-	comments = newargs
-	for i, arg := range newargs {
+	newArgs := splitQuotedArgs(args...)
+	comments = make([]string, 0, len(newArgs)+1) // 1 for json notes
+	comments = append(comments, newArgs...)
+	for i, arg := range newArgs {
 		arg = strings.TrimSpace(arg)
 		if i == 0 {
 			branch = arg
 			continue
 		}
-		if i == len(newargs)-1 {
+		if i == len(newArgs)-1 {
 			// Retrieve taskID from url and add it first to branch name
 			url := arg
-			topicid := getTaskIDFromURL(url)
-			if topicid == arg {
-				branch = branch + msymbol + topicid
+			topicID := getTaskIDFromURL(url)
+			if topicID == arg {
+				branch = branch + msymbol + topicID
 			} else {
-				branch = topicid + msymbol + branch
+				branch = topicID + msymbol + branch
 			}
 			break
 		}
 		branch = branch + "-" + arg
 	}
 	branch = cleanArgfromSpecSymbols(branch)
-	return branch, comments
+	// Prepare new notes
+	notesObj, err := notes.Serialize("", "", notesPkg.BranchTypeDev)
+	if err != nil {
+		return "", []string{}, err
+	}
+	comments = append(comments, notesObj)
+
+	return branch, comments, nil
 }
 
-func argContainsGithubIssueLink(args ...string) (issueNum int, issueURL string, ok bool) {
+func argContainsGithubIssueLink(wd string, args ...string) (issueNum int, issueURL string, ok bool, err error) {
 	ok = false
 	if len(args) != 1 {
 		return
 	}
 	url := args[0]
 	if strings.Contains(url, "/issues") {
+		if err := checkIssueLink(wd, url); err != nil {
+			return 0, "", false, fmt.Errorf("Invalid GitHub issue link: %w", err)
+		}
 		segments := strings.Split(url, "/")
 		strIssueNum := segments[len(segments)-1]
 		i, err := strconv.Atoi(strIssueNum)
 		if err != nil {
-			return
+			return 0, "", false, fmt.Errorf("failed to convert issue number from string to int: %w", err)
 		}
-		return i, url, true
+
+		return i, url, true, nil
 	}
 
-	return
+	return 0, "", false, nil
+}
+
+func checkIssueLink(wd, issueURL string) error {
+	// This function checks if the provided issueURL is a valid GitHub issue link via `gh issue view`.
+	cmd := exec.Command("gh", "issue", "view", issueURL)
+	cmd.Dir = wd
+	if _, err := cmd.Output(); err != nil {
+		return fmt.Errorf("failed to check issue link: %v", err)
+	}
+
+	return nil
 }
 
 // getJiraBranchName generates a branch name based on a JIRA issue URL in the arguments.
 // If a JIRA URL is found, it generates a branch name in the format "<ISSUE-KEY>-<cleaned-description>".
 // Additionally, it generates comments in the format "[<ISSUE-KEY>] <original-line>".
-func getJiraBranchName(args ...string) (branch string, comments []string) {
+func getJiraBranchName(wd string, args ...string) (branch string, comments []string, err error) {
+	comments = make([]string, 0, len(args)+1) // 1 for json notes
 	re := regexp.MustCompile(`https://([a-zA-Z0-9-]+)\.atlassian\.net/browse/([A-Z]+-[A-Z0-9-]+)`)
 	for _, arg := range args {
 		if matches := re.FindStringSubmatch(arg); matches != nil {
 			issueKey := matches[2] // Extract the JIRA issue key (e.g., "AIR-270")
 
-			var brname string
-			issuename := getJiraIssueNameByNumber(issueKey)
-			if issuename == "" {
-				branch, _ = getBranchName(false, args...)
-			} else {
-				brname, _ = getBranchName(false, issuename)
-				branch = issueKey + "-" + brname
+			var brName string
+			issueName, err := getJiraIssueNameByNumber(issueKey)
+			if err != nil {
+				return "", nil, err
 			}
-			comments = append(comments, "["+issueKey+"] "+issuename)
+			if issueName == "" {
+				branch, _, err = getBranchName(false, args...)
+				if err != nil {
+					return "", nil, err
+				}
+			} else {
+				jiraTicketURL := matches[0] // Full JIRA ticket URL
+				// Prepare new notes
+				notesObj, err := notes.Serialize("", jiraTicketURL, notesPkg.BranchTypeDev)
+				if err != nil {
+					return "", nil, err
+				}
+				comments = append(comments, notesObj)
+				brName, _, err = getBranchName(false, issueName)
+				if err != nil {
+					return "", nil, err
+				}
+				branch = issueKey + "-" + brName
+			}
+			comments = append(comments, "["+issueKey+"] "+issueName)
 		}
 	}
+	// Add suffix "-dev" for a dev branch
+	branch += "-dev"
 	comments = append(comments, args...)
-	return branch, comments
+
+	return branch, comments, nil
 }
 
 func clearEmptyArgs(args []string) (newargs []string) {
@@ -291,11 +440,10 @@ func deleteDupMinus(str string) string {
 	return buf.String()
 }
 
-func getJiraIssueNameByNumber(issueNum string) (name string) {
+func getJiraIssueNameByNumber(issueNum string) (name string, err error) {
 	// Validate the issue key
 	if issueNum == "" {
-		fmt.Println("Error: Issue key is required.")
-		return ""
+		return "", errors.New("Error: Issue key is required.")
 	}
 
 	// Retrieve API token and email from environment variables
@@ -306,16 +454,19 @@ func getJiraIssueNameByNumber(issueNum string) (name string) {
 		fmt.Println("            Jira API token can generate on this page:")
 		fmt.Println("          https://id.atlassian.com/manage-profile/security/api-tokens           ")
 		fmt.Println("--------------------------------------------------------------------------------")
-		return ""
+
+		return "", errors.New("Error: JIRA API token not found.")
 	}
 	var email string
 	email = os.Getenv("JIRA_EMAIL")
 	if email == "" {
-		email = git.GetUserEmail() // Replace with your email
+		email, err = gitcmds.GetUserEmail() // Replace with your email
+	}
+	if err != nil {
+		return "", err
 	}
 	if email == "" {
-		fmt.Println("Error: Please export JIRA_EMAIL.")
-		return ""
+		return "", errors.New("Error: Please export JIRA_EMAIL.")
 	}
 	fmt.Println("User email: ", email)
 	jiraDomain := "https://untill.atlassian.net"
@@ -326,7 +477,7 @@ func getJiraIssueNameByNumber(issueNum string) (name string) {
 	// Create HTTP client and request
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	req.SetBasicAuth(email, apiToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -334,18 +485,18 @@ func getJiraIssueNameByNumber(issueNum string) (name string) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	// Read and parse the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return "", err
 	}
 
 	var result struct {
@@ -354,16 +505,15 @@ func getJiraIssueNameByNumber(issueNum string) (name string) {
 		} `json:"fields"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		fmt.Println("Error parsing JSON response:", err)
-		return ""
+		return "", fmt.Errorf("Error parsing JSON response: %w", err)
 	}
 
 	// Check if the summary field exists
 	if result.Fields.Summary == "" {
-		return ""
+		return "", nil
 	}
 
-	return result.Fields.Summary
+	return result.Fields.Summary, nil
 }
 
 func getTaskIDFromURL(url string) string {
@@ -401,19 +551,22 @@ func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
 }
 
 func globalConfig() {
+	logLevel := logger.LogLevelInfo
 	if verbose {
-		logger.SetLogLevel(logger.LogLevelVerbose)
-	} else {
-		logger.SetLogLevel(logger.LogLevelInfo)
+		logLevel = logger.LogLevelVerbose
 	}
+
+	logger.SetLogLevel(logLevel)
 }
 
-func deleteBranches() {
-	git.PullUpstream()
-	lst, err := git.GetMergedBranchList()
+func deleteBranches(wd string) error {
+	if err := gitcmds.PullUpstream(wd); err != nil {
+		return err
+	}
+
+	lst, err := gitcmds.GetMergedBranchList(wd)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 
 	var response string
@@ -427,18 +580,25 @@ func deleteBranches() {
 		fmt.Print(devider)
 
 		fmt.Print(delBranchConfirm)
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		switch response {
 		case pushYes:
-			git.DeleteBranchesRemote(lst)
+			if err := gitcmds.DeleteBranchesRemote(wd, lst); err != nil {
+				return err
+			}
 		default:
 			fmt.Print(pushFail)
 		}
 	}
-	git.PullUpstream()
+	if err := gitcmds.PullUpstream(wd); err != nil {
+		return err
+	}
 
 	fmt.Print("\nChecking if unused local branches exist...")
-	var strs = git.GetGoneBranchesLocal()
+	strs, err := gitcmds.GetGoneBranchesLocal(wd)
+	if err != nil {
+		return err
+	}
 
 	var strFin []string
 
@@ -449,8 +609,7 @@ func deleteBranches() {
 	}
 
 	if len(strFin) == 0 {
-		fmt.Println(delLocalBranchNothing)
-		return
+		return errors.New(delLocalBranchNothing)
 	}
 
 	fmt.Print(devider)
@@ -461,15 +620,15 @@ func deleteBranches() {
 
 	fmt.Print(devider)
 	fmt.Print(delLocalBranchConfirm)
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 	switch response {
 	case pushYes:
-
-		git.DeleteBranchesLocal(strs)
-
+		if err := gitcmds.DeleteBranchesLocal(wd, strs); err != nil {
+			return err
+		}
 	default:
-
 		fmt.Print(pushFail)
 	}
 
+	return nil
 }

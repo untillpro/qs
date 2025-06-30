@@ -1,8 +1,9 @@
 package commands
 
-import "github.com/untillpro/qs/git"
+import "github.com/untillpro/qs/gitcmds"
 
-func G() {
+func G(wd string) error {
 	globalConfig()
-	git.Gui()
+
+	return gitcmds.Gui(wd)
 }

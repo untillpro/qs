@@ -36,3 +36,15 @@ const (
 	trueStr  = "true"
 	oneSpace = " "
 )
+
+const (
+	CommandNameFork    = "fork"
+	CommandNameDev     = "dev"
+	CommandNameUpgrade = "upgrade"
+	CommandNameVersion = "version"
+	CommandNamePR      = "pr"
+	CommandNameD       = "d"
+	CommandNameU       = "u"
+	CommandNameR       = "r"
+	CommandNameG       = "g"
+)

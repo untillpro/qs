@@ -1,137 +1,104 @@
-# options for analysis running
-# https://golangci-lint.run/usage/linters/
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    - megacheck
-    - govet
-    - revive
-    - gosec
-    - stylecheck
-    - misspell
+    - asciicheck
+    - bidichk
+    - durationcheck
     - errcheck
-    - bidichk 
-
-# First stage linters
-    - asciicheck      # Checks that all code identifiers does not have non-ASCII symbols in the name
-    - durationcheck   # Check for two durations multiplied together
-    - gochecknoinits  # Checks that no init functions are present in Go code.
-    - gomnd
-
-# Second stage linters
-    - unconvert    # Remove unnecessary type conversions.
-    - predeclared  # Find code that shadows one of Go's predeclared identifiers.
-    - mirror       # Reports wrong mirror patterns of bytes/strings usage.
-#    - nilerr       # Finds the code that returns nil even if it checks that the error is not nil.
-    - testifylint  # Checks usage of github.com/stretchr/testify.
-
-
-# Third stage linters
-#------------------------------------
-    - prealloc
-    - perfsprint
-    - nilnil
-    - gocritic
-    - exportloopref
     - errorlint
+    - gochecknoinits
     - goconst
-#------------------------------------
-
-# For the future:
-#------------------------------------
-#    - testpackage
-#    - nonamedreturns
-#    - noctx 
-#?    - nestif
-#    - musttag
-#    - makezero
-#    - inamedparam
-#    - goerr113      
-#    - godox       #- searches FixMe,TODO in code
-#    - forbidigo
-#    - exhaustruct
-#    - unparam
-#------------------------------------
-  fast: true
-linters-settings:
-  gosec:
-    excludes:
-      - G101
-      - G601
-      - G602
-  staticcheck:
-    checks: [ "all", "-SA1019"]    
-  stylecheck:
-    checks: [ "all", "-ST1003", "-ST1023" ]    
-  unparam:
-    check-exported: true
-  misspell:
-    ignore-words:
-      - untill
-  revive:
-  # see https://github.com/mgechev/revive#available-rules for details.
-    ignore-generated-header: true
-    severity: warning
+    - gocritic
+    - gosec
+    - govet
+    - mirror
+    - misspell
+    - nilnil
+    - nosprintfhostport
+    - prealloc
+    - predeclared
+    - revive
+    - staticcheck
+    - testifylint
+    - unconvert
+    - unused
+  settings:
+    gocritic:
+      disabled-checks:
+        - appendAssign
+        - dupArg
+        - ifElseChain
+        - singleCaseSwitch
+        - exitAfterDefer
+        - commentFormatting
+    gosec:
+      excludes:
+        - G101
+        - G601
+        - G602
+    misspell:
+      ignore-rules:
+        - untill
+    nilnil:
+      checked-types:
+        - func
+    revive:
+      severity: warning
+      rules:
+        - name: indent-error-flow
+          severity: warning
+        - name: add-constant
+          arguments:
+            - allowFloats: 0.0,0.,1.0,1.,2.0,2.
+              allowInts: 0,1,2
+              allowStrs: '""'
+              maxLitCount: "3"
+          severity: warning
+    staticcheck:
+      checks:
+        - all
+        - '-SA1019'
+        - '-ST1003'
+        - '-QF1008' # possibly dangerous: could remove embedded field ... from selector
+    testifylint:
+      disable-all: true
+      enable:
+        - bool-compare
+        - compares
+        - empty
+        - error-is-as
+        - error-nil
+        - expected-actual
+        - len
+        - require-error
+        - suite-dont-use-pkg
+        - suite-extra-assert-call
+        - suite-thelper
+    unparam:
+      check-exported: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: indent-error-flow
-        severity: warning	
-      - name: add-constant
-        severity: warning
-        arguments:
-          - maxLitCount: "3"
-            allowStrs: '""'
-            allowInts: "0,1,2"
-            allowFloats: "0.0,0.,1.0,1.,2.0,2."
-  gomnd:
-    ignored-files:
-      - "pkg/vit/consts.go"
-    ignored-numbers:
-      - "0"
-      - "1"
-      - "2"
-      - "3"
-      - "4"
-      - "5"
-      - "10"
-      - "32"
-      - "42"
-      - "100"
-  testifylint:
-    disable-all: true
-    enable:
-      - bool-compare
-      - compares
-      - empty
-      - error-is-as
-      - error-nil
-      - expected-actual
-      - len
-      - require-error
-      - suite-dont-use-pkg
-      - suite-extra-assert-call
-      - suite-thelper
-  gocritic:
-    disabled-checks:
-      - appendAssign
-      - dupArg
-      - ifElseChain
-      - singleCaseSwitch
-      - exitAfterDefer
-      - commentFormatting
-  nilnil:
-    checked-types:
-      - func
-  goconst:
-    ignore-tests: true
-issues:
-  exclude:
-   - underscore
-   - underscores
-  exclude-rules:
-   - path: _test.go
-     linters:
-       - revive
-       - gosec
-       - errcheck
-       - forcetypeassert
+      - linters:
+          - errcheck
+          - forcetypeassert
+          - gosec
+          - revive
+        path: _test.go
+      - path: (.+)\.go$
+        text: underscore
+      - path: (.+)\.go$
+        text: underscores
+      - linters:
+          - goconst
+        path: (.+)_test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
