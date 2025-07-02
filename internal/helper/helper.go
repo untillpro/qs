@@ -37,6 +37,7 @@ func Delay() {
 			timeoutMs = defaultGhTimeoutMs
 		}
 	}
+	logger.Verbose("timeoutMs: %d", timeoutMs)
 
 	time.Sleep(time.Duration(timeoutMs) * time.Millisecond)
 }
