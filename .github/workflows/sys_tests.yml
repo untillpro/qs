@@ -77,6 +77,18 @@ jobs:
             choco install gh
           fi
 
+      - name: Check GitHub credentials
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+        run: |
+          if [ -z "$UPSTREAM_GH_TOKEN" ] || [ -z "$FORK_GH_TOKEN" ] || [ -z "$UPSTREAM_GH_ACCOUNT" ] || [ -z "$FORK_GH_ACCOUNT" ]; then
+            echo "Missing GitHub credentials"
+            exit 1
+          fi
+
       - name: Run system tests
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
