@@ -35,7 +35,7 @@ jobs:
           git config --global user.email "actions@github.com"
 
       - name: Install GitHub CLI
-        uses: cli/cli-action@v1
+        uses: cli/setup-gh@v1
 
       - name: Run system tests
         env:
