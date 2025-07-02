@@ -35,7 +35,18 @@ jobs:
           git config --global user.email "actions@github.com"
 
       - name: Install GitHub CLI
-        uses: cli/setup-gh@v1
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install gh
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            choco install gh
+          fi
 
       - name: Run system tests
         env:
