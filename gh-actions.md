@@ -35,6 +35,7 @@ Workflow requires the following environment variables to be set in secrets:
 - JIRA_EMAIL: The email address associated with the JIRA account.
 - JIRA_API_TOKEN: The API token for the JIRA account.
 - JIRA_TICKET_URL: The URL of the JIRA ticket used in the system tests.
+- GH_TIMEOUT_MS: The timeout for the GitHub actions in milliseconds.
 
 
 

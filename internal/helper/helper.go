@@ -3,7 +3,9 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,12 +14,31 @@ import (
 	"github.com/untillpro/goutils/logger"
 )
 
+const (
+	defaultGhTimeoutMs = 1500
+	ghTimeoutMsEnv     = "GH_TIMEOUT_MS"
+)
+
 func IsTest() bool {
 	return testing.Testing()
 }
 
+// Delay is a helper function to delay execution for a specified time.
+// It reads the timeout from the environment variable GH_TIMEOUT_MS, defaulting to 1500 ms if not set.
 func Delay() {
-	time.Sleep(1500 * time.Millisecond)
+	var err error
+	timeoutMs := defaultGhTimeoutMs
+
+	ghTimeoutMsString := os.Getenv(ghTimeoutMsEnv)
+	if ghTimeoutMsString != "" {
+		timeoutMs, err = strconv.Atoi(ghTimeoutMsString)
+		if err != nil {
+			logger.Error("Error converting %s to int: %s", ghTimeoutMsString, err)
+			timeoutMs = defaultGhTimeoutMs
+		}
+	}
+
+	time.Sleep(time.Duration(timeoutMs) * time.Millisecond)
 }
 
 func CheckGH() bool {
