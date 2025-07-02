@@ -47,6 +47,12 @@ jobs:
             brew install git
           fi
     
+      - name: Install clipboard utility on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xclip
+      
       - name: Install qs
         run: |
           go install github.com/untillpro/qs@latest
@@ -78,7 +84,7 @@ jobs:
           UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
           FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JIRA_TICKET_URL: ${{ env.JIRA_TICKET_URL }}
-          JIRA_EMAIL: ${{ env.JIRA_EMAIL }}          
+          JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}          
         run: |
           go test -v sys_test.go
