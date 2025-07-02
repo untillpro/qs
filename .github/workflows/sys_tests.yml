@@ -77,5 +77,8 @@ jobs:
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
           UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
           FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_TICKET_URL: ${{ env.JIRA_TICKET_URL }}
+          JIRA_EMAIL: ${{ env.JIRA_EMAIL }}
         run: |
           go test -v sys_test.go
