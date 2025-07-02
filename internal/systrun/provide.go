@@ -14,7 +14,7 @@ import (
 // New creates a new SystemTest instance
 func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 	timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
-	repoName := fmt.Sprintf("%s-%s", testConfig.TestID, timestamp)
+	repoName := fmt.Sprintf("%s-%s-%s", testConfig.TestID, runtime.GOOS, timestamp)
 	t.Logf("Repo name: %s", repoName)
 
 	wd, err := os.Getwd()
