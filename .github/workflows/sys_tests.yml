@@ -29,6 +29,22 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Install git
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt update && sudo apt install git -y
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install git
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            choco install git
+          fi
+    
+      - name: Install qs
+        run: |
+          go install github.com/untillpro/qs@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+    
       - name: Configure git identity
         run: |
           git config --global user.name "GitHub Actions Bot"
