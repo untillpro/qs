@@ -55,4 +55,4 @@ jobs:
           UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
           FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
         run: |
-          go test -v ./qs/sys_test.go
+          go test -v sys_test.go
