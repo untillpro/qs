@@ -78,17 +78,33 @@ jobs:
             choco install gh
           fi
 
-      - name: Check GitHub credentials
+      - name: Check GitHub credentials (Linux/macOS)
+        if: runner.os != 'Windows'
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
           UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
           FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+        shell: bash
         run: |
           if [ -z "$UPSTREAM_GH_TOKEN" ] || [ -z "$FORK_GH_TOKEN" ] || [ -z "$UPSTREAM_GH_ACCOUNT" ] || [ -z "$FORK_GH_ACCOUNT" ]; then
             echo "Missing GitHub credentials"
             exit 1
           fi
+
+      - name: Check GitHub credentials (Windows)
+        if: runner.os == 'Windows'
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+        shell: pwsh
+        run: |
+          if (-not $env:UPSTREAM_GH_TOKEN -or -not $env:FORK_GH_TOKEN -or -not $env:UPSTREAM_GH_ACCOUNT -or -not $env:FORK_GH_ACCOUNT) {
+            Write-Host "Missing GitHub credentials"
+            exit 1
+          }
 
       - name: Run system tests
         env:
