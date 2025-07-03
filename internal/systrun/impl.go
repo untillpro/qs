@@ -500,14 +500,16 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 			return fmt.Errorf("failed to set remote: %w", err)
 		}
 
-		// Push changes
-		err = repo.Push(&git.PushOptions{
-			RemoteName: "origin",
-			Auth: &http.BasicAuth{
-				Username: "x-access-token",
-				Password: st.cfg.GHConfig.UpstreamToken,
-			},
-		})
+		// Push changes with retry
+		err = helper.RetryWithMaxAttempts(func() error {
+			return repo.Push(&git.PushOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: "x-access-token",
+					Password: st.cfg.GHConfig.UpstreamToken,
+				},
+			})
+		}, 3) // Retry up to 3 times for pushing changes
 		if err != nil {
 			return fmt.Errorf("failed to push changes: %w", err)
 		}
@@ -608,14 +610,16 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 				return fmt.Errorf("failed to set remote: %w", err)
 			}
 
-			// Push changes
-			err = repo.Push(&git.PushOptions{
-				RemoteName: "origin",
-				Auth: &http.BasicAuth{
-					Username: "x-access-token",
-					Password: st.cfg.GHConfig.ForkToken,
-				},
-			})
+			// Push changes with retry
+			err = helper.RetryWithMaxAttempts(func() error {
+				return repo.Push(&git.PushOptions{
+					RemoteName: "origin",
+					Auth: &http.BasicAuth{
+						Username: "x-access-token",
+						Password: st.cfg.GHConfig.ForkToken,
+					},
+				})
+			}, 3) // Retry up to 3 times for pushing changes
 			if err != nil {
 				return fmt.Errorf("failed to push changes: %w", err)
 			}
@@ -940,12 +944,18 @@ func (st *SystemTest) setSyncState(
 
 	if needSync {
 		devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
-		// Push the dev branch to the remote
-		pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
-		pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
-		pushOutput, err := pushCmd.CombinedOutput()
+		// Push the dev branch to the remote with retry logic
+		err := helper.RetryWithMaxAttempts(func() error {
+			pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
+			pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+			pushOutput, pushErr := pushCmd.CombinedOutput()
+			if pushErr != nil {
+				return fmt.Errorf("failed to push dev branch: %w, output: %s", pushErr, pushOutput)
+			}
+			return nil
+		}, 3) // Retry up to 3 times for pushing dev branch
 		if err != nil {
-			return fmt.Errorf("failed to push dev branch: %w, output: %s", err, pushOutput)
+			return err
 		}
 	}
 
