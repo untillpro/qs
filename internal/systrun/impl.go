@@ -430,15 +430,29 @@ func checkoutOnBranch(wd, branchName string) error {
 
 // createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
-	// GitHub Authentication
-	cmd := exec.Command("gh", "repo", "create",
-		fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-		"--public")
+	// GitHub Authentication and repo creation with retry
+	err := helper.RetryWithMaxAttempts(func() error {
+		cmd := exec.Command("gh", "repo", "create",
+			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
+			"--public")
 
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
 
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", err, output)
+		if output, createErr := cmd.CombinedOutput(); createErr != nil {
+			return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", createErr, output)
+		}
+		return nil
+	}, 3) // Retry up to 3 times for repo creation
+	if err != nil {
+		return err
+	}
+
+	// Verify repository was created and is accessible with retry
+	err = helper.RetryWithMaxAttempts(func() error {
+		return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.UpstreamAccount, repoName, st.cfg.GHConfig.UpstreamToken)
+	}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+	if err != nil {
+		return fmt.Errorf("upstream repository verification failed: %w", err)
 	}
 
 	// Initialize repo with a README if state should be OK
@@ -521,34 +535,62 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 // createForkRepo creates or configures the fork repository
 func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 	if st.cfg.UpstreamState != RemoteStateNull {
-		// Fork the upstream repo
-		cmd := exec.Command(
-			"gh",
-			"repo",
-			"fork",
-			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-			"--clone=false",
-		)
+		// Fork the upstream repo with retry
+		err := helper.RetryWithMaxAttempts(func() error {
+			cmd := exec.Command(
+				"gh",
+				"repo",
+				"fork",
+				fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
+				"--clone=false",
+			)
 
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+			cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to fork upstream repo: %w\nOutput: %s", err, output)
+			if output, forkErr := cmd.CombinedOutput(); forkErr != nil {
+				return fmt.Errorf("failed to fork upstream repo: %w\nOutput: %s", forkErr, output)
+			}
+			return nil
+		}, 3) // Retry up to 3 times for repo fork
+		if err != nil {
+			return err
+		}
+
+		// Verify fork was created and is accessible with retry
+		err = helper.RetryWithMaxAttempts(func() error {
+			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
+		}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+		if err != nil {
+			return fmt.Errorf("fork repository verification failed: %w", err)
 		}
 	} else {
-		// Create an independent repo
-		cmd := exec.Command(
-			"gh",
-			"repo",
-			"create",
-			fmt.Sprintf("%s/%s", st.cfg.GHConfig.ForkAccount, repoName),
-			"--public",
-		)
+		// Create an independent repo with retry
+		err := helper.RetryWithMaxAttempts(func() error {
+			cmd := exec.Command(
+				"gh",
+				"repo",
+				"create",
+				fmt.Sprintf("%s/%s", st.cfg.GHConfig.ForkAccount, repoName),
+				"--public",
+			)
 
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+			cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to create fork repo: %w\nOutput: %s", err, output)
+			if output, createErr := cmd.CombinedOutput(); createErr != nil {
+				return fmt.Errorf("failed to create fork repo: %w\nOutput: %s", createErr, output)
+			}
+			return nil
+		}, 3) // Retry up to 3 times for repo creation
+		if err != nil {
+			return err
+		}
+
+		// Verify repository was created and is accessible with retry
+		err = helper.RetryWithMaxAttempts(func() error {
+			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
+		}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+		if err != nil {
+			return fmt.Errorf("fork repository verification failed: %w", err)
 		}
 
 		// Initialize repo with a README if state should be OK

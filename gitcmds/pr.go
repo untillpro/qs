@@ -66,7 +66,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Create a new branch for the PR
-	prTitle, err := createPRBranch(wd)
+	prBranchName, err := createPRBranch(wd)
 	if err != nil {
 		return fmt.Errorf("failed to create PR branch: %w", err)
 	}
@@ -76,7 +76,7 @@ func Pr(wd string, needDraft bool) error {
 		return errors.New("Error: No notes found in dev branch")
 	}
 
-	stdout, stderr, err := MakePR(wd, prTitle, notes, needDraft)
+	stdout, stderr, err := MakePR(wd, prBranchName, notes, needDraft)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stdout, stdout)
 		_, _ = fmt.Fprintln(os.Stderr, stderr)
@@ -126,7 +126,7 @@ func doesPrExist(wd string) (bool, error) {
 
 // createPRBranch creates a new branch for the pull request and checks out on it.
 // Returns:
-// - title of the pull request
+// - name of the PR branch
 // - error if any operation fails
 func createPRBranch(wd string) (string, error) {
 	// Save current branch name (dev branch)
@@ -325,12 +325,13 @@ func createPRBranch(wd string) (string, error) {
 	}, 3) // Retry up to 3 times for deleting dev branch from upstream
 	if err != nil {
 		if strings.Contains(stderr, "ref does not exist") {
-			return issueDescription, nil
+			return prBranchName, nil
 		}
+
 		return "", err
 	}
 
-	return issueDescription, nil
+	return prBranchName, nil
 }
 
 // getIssueDescription retrieves the title and body of a GitHub issue from its URL.

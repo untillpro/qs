@@ -592,8 +592,32 @@ func Fork(wd string) (string, error) {
 		logger.Error("Fork error:", err)
 		return repo, err
 	}
-	logger.Info("Fork error:", err)
 
+	// Get current user name to verify fork
+	userName, err := getUserName(wd)
+	if err != nil {
+		logger.Error("Failed to get user name for verification:", err)
+		return repo, err
+	}
+
+	// Verify fork was created and is accessible with retry
+	err = helper.RetryWithMaxAttempts(func() error {
+		// Try to get user email to get a valid token context, then verify repo
+		userEmail, emailErr := GetUserEmail()
+		if emailErr != nil {
+			return fmt.Errorf("failed to verify GitHub authentication: %w", emailErr)
+		}
+		logger.Verbose("Verified GitHub authentication for user: %s", userEmail)
+
+		// Verify the forked repository exists and is accessible
+		return helper.VerifyGitHubRepoExists(userName, repo, "")
+	}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+	if err != nil {
+		logger.Error("Fork verification failed:", err)
+		return repo, fmt.Errorf("fork verification failed: %w", err)
+	}
+
+	logger.Info("Fork created and verified successfully")
 	return repo, nil
 }
 
@@ -723,10 +747,12 @@ func MakeUpstream(wd string, repo string) error {
 		helper.Delay()
 	}
 
-	err = new(exec.PipedExec).
-		Command(git, "fetch", "origin").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.RetryWithMaxAttempts(func() error {
+		return new(exec.PipedExec).
+			Command(git, "fetch", "origin").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	}, 3) // Retry up to 3 times for fetching from origin
 	if err != nil {
 		return err
 	}
@@ -1444,17 +1470,28 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
 
-	var strnotes string
+	// get json notes object from dev branch
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		return "", "", errors.New("error deserializing notes")
+	}
+
+	prTitle, err := getIssueDescription(notesObj.GithubIssueURL)
+	if err != nil {
+		return "", "", fmt.Errorf("Error retrieving issue description: %w", err)
+	}
+
+	var strNotes string
 	var url string
-	strnotes, url = GetNoteAndURL(notes)
+	strNotes, url = GetNoteAndURL(notes)
 	b := GetBodyFromNotes(notes)
 	if len(b) == 0 {
-		b = strnotes
+		b = strNotes
 	}
 	if len(url) > 0 {
 		b = b + caret + url
@@ -1473,7 +1510,7 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 	}
 	defer os.Remove(scriptFile.Name())
 
-	normalizedTitle := strings.ReplaceAll(title, " ", "-")
+	normalizedTitle := strings.ReplaceAll(prTitle, " ", "-")
 	// Write a shell script that handles quoting properly
 	scriptContent := "#!/bin/bash\n"
 	scriptContent += fmt.Sprintf("cd %s\n", wd)
@@ -1512,6 +1549,28 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 
 		return cmd.Run()
 	}, 3) // Retry up to 3 times for PR creation
+
+	var prList []map[string]interface{}
+	err = helper.RetryWithMaxAttempts(func() error {
+		stdout, stderr, err := new(exec.PipedExec).
+			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", prBranchName, "--json", "number").
+			RunToStrings()
+
+		if err != nil {
+			return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
+		}
+
+		// Parse JSON response
+		if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
+			return fmt.Errorf("failed to parse PR list: %w", err)
+		}
+
+		if len(prList) == 0 {
+			return fmt.Errorf("no pull request found for branch %s", prBranchName)
+		}
+
+		return nil
+	}, 3) // Retry up to 5 times for PR existence check
 
 	return outBuf.String(), errBuf.String(), err
 }

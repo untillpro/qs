@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	osExec "os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -283,4 +284,32 @@ func RetryConfigWithMaxAttempts(maxAttempts int) *RetryConfig {
 func RetryWithMaxAttempts(fn func() error, maxAttempts int) error {
 	config := RetryConfigWithMaxAttempts(maxAttempts)
 	return RetryWithConfig(fn, config)
+}
+
+// VerifyGitHubRepoExists checks if a GitHub repository exists and is accessible
+func VerifyGitHubRepoExists(owner, repo, token string) error {
+	cmd := osExec.Command("gh", "repo", "view", fmt.Sprintf("%s/%s", owner, repo))
+
+	// Only set GITHUB_TOKEN if a token is provided, otherwise use current gh auth
+	if token != "" {
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
+	}
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("repository %s/%s not accessible: %w, output: %s", owner, repo, err, output)
+	}
+
+	return nil
+}
+
+// VerifyGitRemoteAccessible checks if a git remote URL is accessible
+func VerifyGitRemoteAccessible(remoteURL string) error {
+	cmd := osExec.Command("git", "ls-remote", remoteURL)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("remote URL %s not accessible: %w, output: %s", remoteURL, err, output)
+	}
+
+	return nil
 }
