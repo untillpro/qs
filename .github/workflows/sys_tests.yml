@@ -114,10 +114,10 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
             # Login for upstream account on Windows
-            pwsh -Command '$env:GH_TOKEN = $env:UPSTREAM_GH_TOKEN; $env:GH_TOKEN | gh auth login --with-token'
-          
+            pwsh -Command "Remove-Item Env:\GH_TOKEN; $env:GH_TOKEN = $env:UPSTREAM_GH_TOKEN; $env:GH_TOKEN | gh auth login --with-token"
+            
             # Login for fork account on Windows
-            pwsh -Command '$env:GH_TOKEN = $env:FORK_GH_TOKEN; $env:GH_TOKEN | gh auth login --with-token'
+            pwsh -Command "Remove-Item Env:\GH_TOKEN; $env:GH_TOKEN = $env:FORK_GH_TOKEN; $env:GH_TOKEN | gh auth login --with-token"
           else
             # Login for upstream account on Linux and macOS
             echo "$UPSTREAM_GH_TOKEN" | gh auth login --with-token
