@@ -38,9 +38,9 @@ const (
 	defaultMaxRetryDelay = 30 * time.Second
 
 	// Retry configuration environment variables
-	maxRetriesEnv    = "QS_MAX_RETRIES"
-	retryDelayEnv    = "QS_RETRY_DELAY_SECONDS"
-	maxRetryDelayEnv = "QS_MAX_RETRY_DELAY_SECONDS"
+	maxRetriesEnv      = "QS_MAX_RETRIES"
+	retryDelayMsEnv    = "QS_RETRY_DELAY_MS"
+	maxRetryDelayMsEnv = "QS_MAX_RETRY_DELAY_MS"
 )
 
 func IsTest() bool {
@@ -183,28 +183,31 @@ func getMaxRetries() int {
 		}
 		logger.Verbose("Invalid %s value: %s, using default: %d", maxRetriesEnv, envVal, defaultMaxRetries)
 	}
+
 	return defaultMaxRetries
 }
 
 // getRetryDelay returns the initial retry delay from environment or default
 func getRetryDelay() time.Duration {
-	if envVal := os.Getenv(retryDelayEnv); envVal != "" {
+	if envVal := os.Getenv(retryDelayMsEnv); envVal != "" {
 		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
-			return time.Duration(val) * time.Second
+			return time.Duration(val) * time.Millisecond
 		}
-		logger.Verbose("Invalid %s value: %s, using default: %v", retryDelayEnv, envVal, defaultRetryDelay)
+		logger.Verbose("Invalid %s value: %s, using default: %v", retryDelayMsEnv, envVal, defaultRetryDelay)
 	}
+
 	return defaultRetryDelay
 }
 
 // getMaxRetryDelay returns the maximum retry delay from environment or default
 func getMaxRetryDelay() time.Duration {
-	if envVal := os.Getenv(maxRetryDelayEnv); envVal != "" {
+	if envVal := os.Getenv(maxRetryDelayMsEnv); envVal != "" {
 		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
-			return time.Duration(val) * time.Second
+			return time.Duration(val) * time.Millisecond
 		}
-		logger.Verbose("Invalid %s value: %s, using default: %v", maxRetryDelayEnv, envVal, defaultMaxRetryDelay)
+		logger.Verbose("Invalid %s value: %s, using default: %v", maxRetryDelayMsEnv, envVal, defaultMaxRetryDelay)
 	}
+
 	return defaultMaxRetryDelay
 }
 
