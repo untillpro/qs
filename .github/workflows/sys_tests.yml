@@ -59,6 +59,20 @@ jobs:
         run: |
           go install github.com/untillpro/qs@latest
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          # Verify qs is installed and in PATH
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            qs --version || echo "qs command not found in PATH"
+          else
+            qs --version || echo "qs command not found in PATH"
+          fi
+
+      # Add explicit PATH export for macOS
+      - name: Set PATH for macOS
+        if: runner.os == 'macOS'
+        run: |
+          echo "PATH=$(go env GOPATH)/bin:$PATH" >> $GITHUB_ENV
+          echo "Current PATH: $PATH"
+          which qs || echo "qs not found in PATH"
 
       - name: Configure git identity
         run: |
