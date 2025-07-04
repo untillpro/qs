@@ -38,6 +38,7 @@ jobs:
             choco upgrade chocolatey -y
             choco install git -y --ignore-dependencies
           }
+
       - name: Install git on Linux and macOS
         if: runner.os != 'Windows'
         shell: bash
@@ -105,6 +106,26 @@ jobs:
             Write-Host "Missing GitHub credentials"
             exit 1
           }
+
+      - name: GitHub CLI login
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Login for upstream account on Windows
+            pwsh -Command '$env:GH_TOKEN = $env:UPSTREAM_GH_TOKEN; $env:GH_TOKEN | gh auth login --with-token'
+          
+            # Login for fork account on Windows
+            pwsh -Command '$env:GH_TOKEN = $env:FORK_GH_TOKEN; $env:GH_TOKEN | gh auth login --with-token'
+          else
+            # Login for upstream account on Linux and macOS
+            echo "$UPSTREAM_GH_TOKEN" | gh auth login --with-token
+          
+            # Login for fork account on Linux and macOS
+            echo "$FORK_GH_TOKEN" | gh auth login --with-token
+          fi
+        shell: bash
 
       - name: Run system tests
         env:
