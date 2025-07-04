@@ -78,23 +78,6 @@ type gchResponse struct {
 	_err    error
 }
 
-// ExitIfFalse s.e.
-func ExitIfFalse(cond bool, args ...interface{}) {
-	if !cond {
-		_, _ = fmt.Fprintln(os.Stderr, args...)
-		os.Exit(1)
-	}
-}
-
-// ExitIfError s.e.
-func ExitIfError(err error, args ...interface{}) {
-	if nil != err {
-		_, _ = fmt.Fprintln(os.Stderr, args...)
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
 func CheckIfGitRepo(wd string) (string, error) {
 	stdout, _, err := new(exec.PipedExec).
 		Command("git", "status", "-s").
@@ -267,10 +250,12 @@ func Release(wd string) error {
 	logger.Info("Pushing to origin")
 	{
 		params := []string{push, "--follow-tags", origin}
-		err = new(exec.PipedExec).
-			Command(git, params...).
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		err = helper.RetryWithMaxAttempts(func() error {
+			return new(exec.PipedExec).
+				Command(git, params...).
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		}, 3) // Retry up to 3 times for push with tags
 		if err != nil {
 			return err
 		}
@@ -331,10 +316,12 @@ func Upload(wd string, commitMessageParts []string) error {
 	}
 
 	// Push notes to origin
-	err = new(exec.PipedExec).
-		Command(git, push, origin, "refs/notes/*:refs/notes/*").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.RetryWithMaxAttempts(func() error {
+		return new(exec.PipedExec).
+			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	}, 3) // Retry up to 3 times for pushing notes
 	if err != nil {
 		return err
 	}
@@ -344,13 +331,17 @@ func Upload(wd string, commitMessageParts []string) error {
 	}
 
 	// Push branch to origin
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, push, "-u", origin, brName).
-		WorkingDir(wd).
-		RunToStrings()
+	var stdout string
+	err = helper.RetryWithMaxAttempts(func() error {
+		var pushErr error
+		stdout, stderr, pushErr = new(exec.PipedExec).
+			Command(git, push, "-u", origin, brName).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	}, 3) // Retry up to 3 times for pushing branch
 	if err != nil {
 		logger.Error(stderr)
-
 		return err
 	}
 	logger.Error(stdout)
@@ -419,26 +410,32 @@ func Download(wd string) error {
 	// pull from origin for dev branch
 	if !isMain {
 		// Fetch notes from origin
-		err := new(exec.PipedExec).
-			Command(git, fetch, "origin", "refs/notes/*:refs/notes/*").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		err := helper.RetryWithMaxAttempts(func() error {
+			return new(exec.PipedExec).
+				Command(git, fetch, "origin", "refs/notes/*:refs/notes/*").
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		}, 3) // Retry up to 3 times for fetching notes
 		if err != nil {
 			return err
 		}
 
-		return new(exec.PipedExec).
-			Command(git, pull, "origin").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		return helper.RetryWithMaxAttempts(func() error {
+			return new(exec.PipedExec).
+				Command(git, pull, "origin").
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		}, 3) // Retry up to 3 times for pulling from origin
 	}
 
 	// pull from upstream if exists and current branch is main
 	if !UpstreamNotExist(wd) {
-		err := new(exec.PipedExec).
-			Command(git, pull, "upstream", branchName).
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		err := helper.RetryWithMaxAttempts(func() error {
+			return new(exec.PipedExec).
+				Command(git, pull, "upstream", branchName).
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		}, 3) // Retry up to 3 times for pulling from upstream
 
 		return err
 	}
@@ -585,25 +582,55 @@ func Fork(wd string) (string, error) {
 		}
 	}
 
-	err = new(exec.PipedExec).
-		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.RetryWithMaxAttempts(func() error {
+		return new(exec.PipedExec).
+			Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	}, 3) // Retry up to 3 times for repository fork
 	if err != nil {
 		logger.Error("Fork error:", err)
-
 		return repo, err
 	}
-	logger.Info("Fork error:", err)
 
+	// Get current user name to verify fork
+	userName, err := getUserName(wd)
+	if err != nil {
+		logger.Error("Failed to get user name for verification:", err)
+		return repo, err
+	}
+
+	// Verify fork was created and is accessible with retry
+	err = helper.RetryWithMaxAttempts(func() error {
+		// Try to get user email to get a valid token context, then verify repo
+		userEmail, emailErr := GetUserEmail()
+		if emailErr != nil {
+			return fmt.Errorf("failed to verify GitHub authentication: %w", emailErr)
+		}
+		logger.Verbose("Verified GitHub authentication for user: %s", userEmail)
+
+		// Verify the forked repository exists and is accessible
+		return helper.VerifyGitHubRepoExists(userName, repo, "")
+	}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+	if err != nil {
+		logger.Error("Fork verification failed:", err)
+		return repo, fmt.Errorf("fork verification failed: %w", err)
+	}
+
+	logger.Info("Fork created and verified successfully")
 	return repo, nil
 }
 
 // GetUserEmail - github user email
 func GetUserEmail() (string, error) {
-	stdout, _, err := new(exec.PipedExec).
-		Command("gh", "api", "user", "--jq", ".email").
-		RunToStrings()
+	var stdout string
+	err := helper.RetryWithMaxAttempts(func() error {
+		var apiErr error
+		stdout, _, apiErr = new(exec.PipedExec).
+			Command("gh", "api", "user", "--jq", ".email").
+			RunToStrings()
+		return apiErr
+	}, 3) // Retry up to 3 times for GitHub API call
 
 	return strings.TrimSpace(stdout), err
 }
@@ -720,10 +747,12 @@ func MakeUpstream(wd string, repo string) error {
 		helper.Delay()
 	}
 
-	err = new(exec.PipedExec).
-		Command(git, "fetch", "origin").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.RetryWithMaxAttempts(func() error {
+		return new(exec.PipedExec).
+			Command(git, "fetch", "origin").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	}, 3) // Retry up to 3 times for fetching from origin
 	if err != nil {
 		return err
 	}
@@ -887,13 +916,16 @@ func SyncMainBranch(wd string) error {
 	logger.Verbose(stdout)
 
 	// Push to origin from MainBranch
-	stdout, stderr, err = new(exec.PipedExec).
-		Command(git, push, "origin", mainBranch).
-		WorkingDir(wd).
-		RunToStrings()
+	err = helper.RetryWithMaxAttempts(func() error {
+		var pushErr error
+		stdout, stderr, pushErr = new(exec.PipedExec).
+			Command(git, push, "origin", mainBranch).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	}, 3) // Retry up to 3 times for pushing to origin/main
 	if err != nil {
 		logger.Error(stderr)
-
 		return fmt.Errorf("failed to push to origin/main: %w, stdout: %s", err, stdout)
 	}
 	logger.Verbose(stdout)
@@ -1095,13 +1127,17 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 		helper.Delay()
 	}
 
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, push, "-u", origin, branchName).
-		WorkingDir(wd).
-		RunToStrings()
+	var stdout string
+	err = helper.RetryWithMaxAttempts(func() error {
+		var pushErr error
+		stdout, stderr, pushErr = new(exec.PipedExec).
+			Command(git, push, "-u", origin, branchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	}, 3) // Retry up to 3 times for pushing branch
 	if err != nil {
 		logger.Error(stderr)
-
 		return err
 	}
 	logger.Error(stdout)
@@ -1267,12 +1303,15 @@ func DeleteBranchesRemote(wd string, brs []string) error {
 	}
 
 	for _, br := range brs {
-		_, _, err := new(exec.PipedExec).
-			Command(git, push, origin, ":"+br).
-			WorkingDir(wd).
-			RunToStrings()
+		err := helper.RetryWithMaxAttempts(func() error {
+			_, _, deleteErr := new(exec.PipedExec).
+				Command(git, push, origin, ":"+br).
+				WorkingDir(wd).
+				RunToStrings()
+			return deleteErr
+		}, 3) // Retry up to 3 times for branch deletion
 		if err != nil {
-			return fmt.Errorf("Branch %s was not deleted", br)
+			return fmt.Errorf("Branch %s was not deleted: %w", br, err)
 		}
 
 		fmt.Printf("Branch %s deleted\n", br)
@@ -1431,17 +1470,28 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
 
-	var strnotes string
+	// get json notes object from dev branch
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		return "", "", errors.New("error deserializing notes")
+	}
+
+	prTitle, err := getIssueDescription(notesObj.GithubIssueURL)
+	if err != nil {
+		return "", "", fmt.Errorf("Error retrieving issue description: %w", err)
+	}
+
+	var strNotes string
 	var url string
-	strnotes, url = GetNoteAndURL(notes)
+	strNotes, url = GetNoteAndURL(notes)
 	b := GetBodyFromNotes(notes)
 	if len(b) == 0 {
-		b = strnotes
+		b = strNotes
 	}
 	if len(url) > 0 {
 		b = b + caret + url
@@ -1460,7 +1510,7 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 	}
 	defer os.Remove(scriptFile.Name())
 
-	normalizedTitle := strings.ReplaceAll(title, " ", "-")
+	normalizedTitle := strings.ReplaceAll(prTitle, " ", "-")
 	// Write a shell script that handles quoting properly
 	scriptContent := "#!/bin/bash\n"
 	scriptContent += fmt.Sprintf("cd %s\n", wd)
@@ -1485,13 +1535,43 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 	}
 	scriptFile.Close()
 
-	// Execute the shell script directly
-	cmd := osExec.Command("/bin/bash", scriptFile.Name())
+	// Execute the shell script directly with retry logic
 	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
 
-	err = cmd.Run()
+	err = helper.RetryWithMaxAttempts(func() error {
+		// Reset buffers for each attempt
+		outBuf.Reset()
+		errBuf.Reset()
+
+		cmd := osExec.Command("/bin/bash", scriptFile.Name())
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
+
+		return cmd.Run()
+	}, 3) // Retry up to 3 times for PR creation
+
+	var prList []map[string]interface{}
+	err = helper.RetryWithMaxAttempts(func() error {
+		stdout, stderr, err := new(exec.PipedExec).
+			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", prBranchName, "--json", "number").
+			RunToStrings()
+
+		if err != nil {
+			return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
+		}
+
+		// Parse JSON response
+		if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
+			return fmt.Errorf("failed to parse PR list: %w", err)
+		}
+
+		if len(prList) == 0 {
+			return fmt.Errorf("no pull request found for branch %s", prBranchName)
+		}
+
+		return nil
+	}, 3) // Retry up to 5 times for PR existence check
+
 	return outBuf.String(), errBuf.String(), err
 }
 
