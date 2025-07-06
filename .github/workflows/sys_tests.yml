@@ -107,34 +107,6 @@ jobs:
             exit 1
           }
 
-      - name: GitHub CLI login (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
-          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-        run: |
-          Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
-          $env:GH_TOKEN = $env:UPSTREAM_GH_TOKEN
-          $env:GH_TOKEN | gh auth login --with-token
-      
-          Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
-          $env:GH_TOKEN = $env:FORK_GH_TOKEN
-          $env:GH_TOKEN | gh auth login --with-token
-
-      - name: GitHub CLI login (Linux/macOS)
-        if: runner.os != 'Windows'
-        env:
-          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
-          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-        run: |
-          # Login for upstream account on Linux and macOS
-          echo "$UPSTREAM_GH_TOKEN" | gh auth login --with-token
-        
-          # Login for fork account on Linux and macOS
-          echo "$FORK_GH_TOKEN" | gh auth login --with-token
-        shell: bash
-
       - name: Run system tests
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
