@@ -43,6 +43,7 @@ type TestConfig struct {
 	DevBranchState             DevBranchState       // if true then create dev branch
 	ClipboardContent           ClipboardContentType // Content to be set in clipboard before running the test
 	RunCommandFromAnotherClone bool                 //
+	NeedCollaboration          bool
 	// If ExpectedStderr is not empty then check exit code of qs it must be != 0
 	ExpectedStderr string
 	ExpectedStdout string

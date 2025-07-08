@@ -195,6 +195,7 @@ func TestPR_FromOtherClone(t *testing.T) {
 		ClipboardContent:           systrun.ClipboardContentGithubIssue,
 		SyncState:                  systrun.SyncStateSynchronized,
 		RunCommandFromAnotherClone: true,
+		NeedCollaboration:          true,
 		Expectations:               []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
@@ -260,11 +261,12 @@ func TestPR_Synchronized(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateSynchronized,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateSynchronized,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -281,11 +283,12 @@ func TestPR_ForkChanged(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateForkChanged,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateForkChanged,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)

@@ -133,8 +133,10 @@ func (st *SystemTest) createTestEnvironment() error {
 		return err
 	}
 
-	if err := st.configureCollaboration(); err != nil {
-		return err
+	if st.cfg.NeedCollaboration {
+		if err := st.configureCollaboration(); err != nil {
+			return err
+		}
 	}
 
 	if err := st.processClipboardContent(); err != nil {
