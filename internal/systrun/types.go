@@ -155,12 +155,12 @@ func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 	// Run gh issue develop --list command with retry logic
 	var output []byte
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		cmd := exec.Command("gh", "issue", "develop", "--list", "--repo", repoURL, issueNum)
 		var cmdErr error
 		output, cmdErr = cmd.Output()
 		return cmdErr
-	}, 3) // Retry up to 3 times for checking linked branches
+	})
 	if err != nil {
 		return fmt.Errorf("failed to check linked branches: %w", err)
 	}
@@ -392,7 +392,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 	// Use gh CLI to check if PR exists with retry logic
 	var prList []map[string]interface{}
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		stdout, stderr, err := new(goUtilsExec.PipedExec).
 			Command("gh", "pr", "list", "--repo", fmt.Sprintf("%s/%s", owner, repoName), "--head", expectedPRBranch, "--json", "number").
 			RunToStrings()
@@ -411,7 +411,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 		}
 
 		return nil
-	}, 5) // Retry up to 5 times for PR existence check
+	})
 
 	if err != nil {
 		return err
@@ -435,14 +435,14 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 
 	// Check if branch exists on the remote with retry logic
 	var stdout, stderr string
-	err := helper.RetryWithMaxAttempts(func() error {
+	err := helper.Retry(func() error {
 		var lsErr error
 		stdout, stderr, lsErr = new(goUtilsExec.PipedExec).
 			Command("git", "ls-remote", "--heads", "origin", remoteBranchName).
 			WorkingDir(cloneRepoPath).
 			RunToStrings()
 		return lsErr
-	}, 3) // Retry up to 3 times for checking remote branches
+	})
 
 	if err != nil {
 		return fmt.Errorf("failed to check remote branches: %w: %s", err, stderr)

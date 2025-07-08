@@ -431,7 +431,7 @@ func checkoutOnBranch(wd, branchName string) error {
 // createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 	// GitHub Authentication and repo creation with retry
-	err := helper.RetryWithMaxAttempts(func() error {
+	err := helper.Retry(func() error {
 		cmd := exec.Command("gh", "repo", "create",
 			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
 			"--public")
@@ -442,15 +442,15 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 			return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", createErr, output)
 		}
 		return nil
-	}, 3) // Retry up to 3 times for repo creation
+	})
 	if err != nil {
 		return err
 	}
 
 	// Verify repository was created and is accessible with retry
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.UpstreamAccount, repoName, st.cfg.GHConfig.UpstreamToken)
-	}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+	}) // Retry up to 5 times for verification (GitHub eventual consistency)
 	if err != nil {
 		return fmt.Errorf("upstream repository verification failed: %w", err)
 	}
@@ -515,7 +515,7 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 		}
 
 		// Push changes with retry
-		err = helper.RetryWithMaxAttempts(func() error {
+		err = helper.Retry(func() error {
 			return repo.Push(&git.PushOptions{
 				RemoteName: "origin",
 				Auth: &http.BasicAuth{
@@ -523,7 +523,7 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 					Password: st.cfg.GHConfig.UpstreamToken,
 				},
 			})
-		}, 3) // Retry up to 3 times for pushing changes
+		})
 		if err != nil {
 			return fmt.Errorf("failed to push changes: %w", err)
 		}
@@ -536,7 +536,7 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 	if st.cfg.UpstreamState != RemoteStateNull {
 		// Fork the upstream repo with retry
-		err := helper.RetryWithMaxAttempts(func() error {
+		err := helper.Retry(func() error {
 			cmd := exec.Command(
 				"gh",
 				"repo",
@@ -551,21 +551,21 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 				return fmt.Errorf("failed to fork upstream repo: %w\nOutput: %s", forkErr, output)
 			}
 			return nil
-		}, 3) // Retry up to 3 times for repo fork
+		})
 		if err != nil {
 			return err
 		}
 
 		// Verify fork was created and is accessible with retry
-		err = helper.RetryWithMaxAttempts(func() error {
+		err = helper.Retry(func() error {
 			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
-		}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+		})
 		if err != nil {
 			return fmt.Errorf("fork repository verification failed: %w", err)
 		}
 	} else {
 		// Create an independent repo with retry
-		err := helper.RetryWithMaxAttempts(func() error {
+		err := helper.Retry(func() error {
 			cmd := exec.Command(
 				"gh",
 				"repo",
@@ -580,15 +580,15 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 				return fmt.Errorf("failed to create fork repo: %w\nOutput: %s", createErr, output)
 			}
 			return nil
-		}, 3) // Retry up to 3 times for repo creation
+		})
 		if err != nil {
 			return err
 		}
 
 		// Verify repository was created and is accessible with retry
-		err = helper.RetryWithMaxAttempts(func() error {
+		err = helper.Retry(func() error {
 			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
-		}, 5) // Retry up to 5 times for verification (GitHub eventual consistency)
+		})
 		if err != nil {
 			return fmt.Errorf("fork repository verification failed: %w", err)
 		}
@@ -653,7 +653,7 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 			}
 
 			// Push changes with retry
-			err = helper.RetryWithMaxAttempts(func() error {
+			err = helper.Retry(func() error {
 				return repo.Push(&git.PushOptions{
 					RemoteName: "origin",
 					Auth: &http.BasicAuth{
@@ -661,7 +661,7 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 						Password: st.cfg.GHConfig.ForkToken,
 					},
 				})
-			}, 3) // Retry up to 3 times for pushing changes
+			})
 			if err != nil {
 				return fmt.Errorf("failed to push changes: %w", err)
 			}
@@ -1191,9 +1191,9 @@ func (st *SystemTest) Run() error {
 		return err
 	}
 
-	//if err := st.cleanupTestEnvironment(); err != nil {
-	//	return err
-	//}
+	if err := st.cleanupTestEnvironment(); err != nil {
+		return err
+	}
 
 	return err
 }
