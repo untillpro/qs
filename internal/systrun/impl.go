@@ -687,7 +687,12 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 		},
 	}
 
-	if _, err := git.PlainClone(clonePath, false, cloneOpts); err != nil {
+	err := helper.Retry(func() error {
+		_, err := git.PlainClone(clonePath, false, cloneOpts)
+
+		return err
+	})
+	if err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
