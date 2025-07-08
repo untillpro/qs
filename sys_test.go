@@ -165,9 +165,10 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateNull,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
 		Expectations: []systrun.ExpectationFunc{
 			systrun.ExpectationBranchLinkedToIssue,
 			systrun.ExpectationLargeFileHooksInstalled,
@@ -306,10 +307,11 @@ func TestDownload(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "d",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateForkChanged,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateForkChanged,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
 		Expectations: []systrun.ExpectationFunc{
 			systrun.ExpectationCloneIsSyncedWithFork,
 			systrun.ExpectationNotesDownloaded,
@@ -331,11 +333,12 @@ func TestUpload(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "u",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateUncommitedChangesInClone,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationRemoteBranchWithCommitMessage},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateUncommitedChangesInClone,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationRemoteBranchWithCommitMessage},
 	}
 
 	sysTest := systrun.New(t, testConfig)
