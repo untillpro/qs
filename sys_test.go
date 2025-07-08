@@ -137,7 +137,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: systrun.CommandConfig{
 			Command: "dev",
-			Args:    []string{branchName, "-v"},
+			Args:    []string{branchName},
 			Stdin:   "y",
 		},
 		UpstreamState:  systrun.RemoteStateOK,
