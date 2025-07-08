@@ -790,15 +790,17 @@ func (st *SystemTest) setupDevBranch() error {
 
 	// Push dev branch to remote (if fork exists)
 	if st.cfg.ForkState != RemoteStateNull {
-		err = repo.Push(&git.PushOptions{
-			RemoteName: "origin",
-			Auth: &http.BasicAuth{
-				Username: "x-access-token",
-				Password: st.cfg.GHConfig.ForkToken,
-			},
-			RefSpecs: []config.RefSpec{
-				config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", devBranchName, devBranchName)),
-			},
+		err = helper.Retry(func() error {
+			return repo.Push(&git.PushOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: "x-access-token",
+					Password: st.cfg.GHConfig.ForkToken,
+				},
+				RefSpecs: []config.RefSpec{
+					config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", devBranchName, devBranchName)),
+				},
+			})
 		})
 		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return fmt.Errorf("failed to push dev branch to fork: %w", err)
