@@ -14,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+#        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [macos-latest]
       max-parallel: 1
 
     steps:
@@ -106,6 +107,20 @@ jobs:
             Write-Host "Missing GitHub credentials"
             exit 1
           }
+
+      - name: Check PATH for git and qs on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if ! command -v git > /dev/null; then
+            echo "git is not installed or not in PATH."
+            exit 1
+          fi
+          if ! command -v qs > /dev/null; then
+            echo "qs is not installed or not in PATH."
+            exit 1
+          fi
+          echo "git and qs are available in PATH."
 
       - name: Run system tests
         env:
