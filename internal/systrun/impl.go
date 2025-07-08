@@ -991,15 +991,16 @@ func (st *SystemTest) setSyncState(
 	if needSync {
 		devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
 		// Push the dev branch to the remote with retry logic
-		err := helper.RetryWithMaxAttempts(func() error {
+		err := helper.Retry(func() error {
 			pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
 			pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 			pushOutput, pushErr := pushCmd.CombinedOutput()
 			if pushErr != nil {
 				return fmt.Errorf("failed to push dev branch: %w, output: %s", pushErr, pushOutput)
 			}
+
 			return nil
-		}, 3) // Retry up to 3 times for pushing dev branch
+		}) // Retry up to 3 times for pushing dev branch
 		if err != nil {
 			return err
 		}
@@ -1020,7 +1021,6 @@ func (st *SystemTest) setSyncState(
 		if err := st.pushFromAnotherClone(remoteURL, devBranchName, headerOfFilesInFork, idFilesInFork...); err != nil {
 			return err
 		}
-
 	}
 
 	if helper.IsTest() {

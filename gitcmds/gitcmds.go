@@ -1,7 +1,6 @@
 package gitcmds
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -250,12 +249,12 @@ func Release(wd string) error {
 	logger.Info("Pushing to origin")
 	{
 		params := []string{push, "--follow-tags", origin}
-		err = helper.RetryWithMaxAttempts(func() error {
+		err = helper.Retry(func() error {
 			return new(exec.PipedExec).
 				Command(git, params...).
 				WorkingDir(wd).
 				Run(os.Stdout, os.Stdout)
-		}, 3) // Retry up to 3 times for push with tags
+		}) // Retry up to 3 times for push with tags
 		if err != nil {
 			return err
 		}
@@ -1475,6 +1474,7 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
 
+	//ParseGitRemoteURL()
 	// get json notes object from dev branch
 	notesObj, ok := notesPkg.Deserialize(notes)
 	if !ok {
@@ -1503,52 +1503,37 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 		return "", "", err
 	}
 
-	// Create a temporary shell script that properly handles all quoting issues
-	scriptFile, err := os.CreateTemp("", "gh-pr-*.sh")
+	_, forkAccount, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", "", err
 	}
-	defer os.Remove(scriptFile.Name())
 
 	normalizedTitle := strings.ReplaceAll(prTitle, " ", "-")
-	// Write a shell script that handles quoting properly
-	scriptContent := "#!/bin/bash\n"
-	scriptContent += fmt.Sprintf("cd %s\n", wd)
-	scriptContent += fmt.Sprintf(
-		`gh pr create --title "%s" --body "%s" --repo %s`,
-		normalizedTitle,
-		strBody,
+	args := []string{
+		"pr",
+		"create",
+		"--head",
+		forkAccount + ":" + prBranchName,
+		"--repo",
 		parentRepoName,
-	)
-
+		"--body",
+		strBody,
+		"--title",
+		normalizedTitle,
+	}
 	if asDraft {
-		scriptContent += " --draft"
+		args = append(args, "--draft")
 	}
-	scriptContent += "\n"
-
-	if _, err := scriptFile.WriteString(scriptContent); err != nil {
-		return "", "", err
-	}
-
-	if err := scriptFile.Chmod(0755); err != nil {
-		return "", "", err
-	}
-	scriptFile.Close()
-
-	// Execute the shell script directly with retry logic
-	var outBuf, errBuf bytes.Buffer
-
 	err = helper.Retry(func() error {
-		// Reset buffers for each attempt
-		outBuf.Reset()
-		errBuf.Reset()
+		stdout, stderr, err = new(exec.PipedExec).
+			Command("gh", args...).
+			RunToStrings()
 
-		cmd := osExec.Command("/bin/bash", scriptFile.Name())
-		cmd.Stdout = &outBuf
-		cmd.Stderr = &errBuf
-
-		return cmd.Run()
+		return err
 	})
+	if err != nil {
+		return stdout, stderr, err
+	}
 
 	var prList []map[string]interface{}
 	err = helper.Retry(func() error {
@@ -1572,7 +1557,7 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 		return nil
 	})
 
-	return outBuf.String(), errBuf.String(), err
+	return stdout, stderr, err
 }
 
 func retrieveRepoNameFromUPL(prurl string) string {

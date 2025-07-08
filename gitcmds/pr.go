@@ -92,7 +92,7 @@ func doesPrExist(wd string) (bool, error) {
 	branchName := GetCurrentBranchName(wd)
 	var prExists bool
 
-	err := helper.RetryWithMaxAttempts(func() error {
+	err := helper.Retry(func() error {
 		stdout, _, err := new(exec.PipedExec).
 			Command("gh", "pr", "list", "--head", branchName).
 			WorkingDir(wd).
@@ -115,7 +115,7 @@ func doesPrExist(wd string) (bool, error) {
 
 		prExists = true
 		return nil
-	}, 3) // Retry up to 3 times for PR existence check
+	}) // Retry up to 3 times for PR existence check
 
 	if err != nil {
 		return false, err
@@ -150,27 +150,27 @@ func createPRBranch(wd string) (string, error) {
 	upstreamMain := upstreamRemote + "/" + mainBranchName
 
 	// Step 1: Fetch latest upstream
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		_, _, fetchErr := new(exec.PipedExec).
 			Command("git", "fetch", upstreamRemote).
 			WorkingDir(wd).
 			RunToStrings()
 		return fetchErr
-	}, 3) // Retry up to 3 times for fetching upstream
+	}) // Retry up to 3 times for fetching upstream
 	if err != nil {
 		return "", err
 	}
 
 	// Step 1.1: Fetch notes from origin
 	var stdout, stderr string
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		var fetchErr error
 		stdout, stderr, fetchErr = new(exec.PipedExec).
 			Command("git", "fetch", "origin", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
 			RunToStrings()
 		return fetchErr
-	}, 3) // Retry up to 3 times for fetching notes
+	}) // Retry up to 3 times for fetching notes
 	if err != nil {
 		logger.Error(stdout)
 		logger.Error(stderr)
@@ -263,12 +263,12 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	// Step 8: Push notes to origin
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		return new(exec.PipedExec).
 			Command("git", "push", "origin", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
 			Run(os.Stdout, os.Stdout)
-	}, 3) // Retry up to 3 times for pushing notes
+	}) // Retry up to 3 times for pushing notes
 	if err != nil {
 		return "", err
 	}
@@ -278,13 +278,13 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	// Step 9: Push PR branch to origin
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		_, _, pushErr := new(exec.PipedExec).
 			Command("git", "push", "-u", "origin", prBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		return pushErr
-	}, 3) // Retry up to 3 times for pushing PR branch
+	}) // Retry up to 3 times for pushing PR branch
 	if err != nil {
 		return "", err
 	}
@@ -303,26 +303,26 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	// Step 11: Delete dev branch from origin
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		_, _, deleteErr := new(exec.PipedExec).
 			Command("git", "push", "origin", "--delete", devBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		return deleteErr
-	}, 3) // Retry up to 3 times for deleting dev branch from origin
+	}) // Retry up to 3 times for deleting dev branch from origin
 	if err != nil {
 		return "", err
 	}
 
 	// Step 11: Delete dev branch from upstream
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		var deleteErr error
 		_, stderr, deleteErr = new(exec.PipedExec).
 			Command("git", "push", "upstream", "--delete", devBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		return deleteErr
-	}, 3) // Retry up to 3 times for deleting dev branch from upstream
+	}) // Retry up to 3 times for deleting dev branch from upstream
 	if err != nil {
 		if strings.Contains(stderr, "ref does not exist") {
 			return prBranchName, nil
@@ -362,7 +362,7 @@ func getIssueDescription(issueURL string) (string, error) {
 		Body  string `json:"body"`
 	}
 
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		stdout, stderr, err := new(exec.PipedExec).
 			Command("gh", "issue", "view", issueNumber, "--repo", fmt.Sprintf("%s/%s", owner, repo), "--json", "title,body").
 			RunToStrings()
@@ -377,7 +377,7 @@ func getIssueDescription(issueURL string) (string, error) {
 		}
 
 		return nil
-	}, 3) // Retry up to 3 times for issue retrieval
+	}) // Retry up to 3 times for issue retrieval
 
 	if err != nil {
 		return "", err
