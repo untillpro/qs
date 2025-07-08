@@ -891,7 +891,7 @@ func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr st
 }
 
 func (st *SystemTest) validateStdout(stdout string) error {
-	_, _ = fmt.Fprintln(os.Stdout, stdout)
+	logger.Verbose(stdout)
 
 	// Check stdout if specified
 	if st.cfg.ExpectedStdout != "" {
@@ -905,7 +905,7 @@ func (st *SystemTest) validateStdout(stdout string) error {
 }
 
 func (st *SystemTest) validateStderr(stderr string) error {
-	_, _ = fmt.Fprintln(os.Stderr, stderr)
+	logger.Verbose(stderr)
 
 	// Check stderr if specified
 	if st.cfg.ExpectedStderr != "" {

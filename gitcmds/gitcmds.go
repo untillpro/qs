@@ -1538,7 +1538,7 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 	// Execute the shell script directly with retry logic
 	var outBuf, errBuf bytes.Buffer
 
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		// Reset buffers for each attempt
 		outBuf.Reset()
 		errBuf.Reset()
@@ -1548,10 +1548,10 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 		cmd.Stderr = &errBuf
 
 		return cmd.Run()
-	}, 3) // Retry up to 3 times for PR creation
+	})
 
 	var prList []map[string]interface{}
-	err = helper.RetryWithMaxAttempts(func() error {
+	err = helper.Retry(func() error {
 		stdout, stderr, err := new(exec.PipedExec).
 			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", prBranchName, "--json", "number").
 			RunToStrings()
@@ -1570,7 +1570,7 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 		}
 
 		return nil
-	}, 3) // Retry up to 5 times for PR existence check
+	})
 
 	return outBuf.String(), errBuf.String(), err
 }
