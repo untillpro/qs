@@ -33,8 +33,9 @@ const (
 	confMsgModFiles2      = "All will be kept not commted. Continue(y/n)?"
 	errMsgPRNotesNotFound = "Comments for Pull request not found. Please add comments manually:"
 
-	trueStr  = "true"
-	oneSpace = " "
+	trueStr               = "true"
+	oneSpace              = " "
+	EnvSkipQsVersionCheck = "QS_SKIP_QS_VERSION_CHECK"
 )
 
 const (

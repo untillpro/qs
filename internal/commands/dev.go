@@ -34,7 +34,8 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		return err
 	}
 
-	if !helper.CheckQsVer() {
+	skipQsVerCheck, _ := strconv.ParseBool(os.Getenv(EnvSkipQsVersionCheck))
+	if !skipQsVerCheck && !helper.CheckQsVer() {
 		return fmt.Errorf("qs version check failed")
 	}
 	if !helper.CheckGH() {
