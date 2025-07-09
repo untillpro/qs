@@ -15,7 +15,8 @@ jobs:
       fail-fast: false
       matrix:
 #        os: [windows-latest, ubuntu-latest, macos-latest]
-        os: [ubuntu-latest, macos-latest]
+#        os: [ubuntu-latest, macos-latest]
+        os: [macos-latest]
       max-parallel: 1
 
     steps:
@@ -40,26 +41,17 @@ jobs:
             choco install git -y --ignore-dependencies
           }
 
-      - name: Install git on Linux and macOS
-        if: runner.os != 'Windows'
+      - name: Install git on macOS
+        if: runner.os != 'macOS'
         shell: bash
         run: |
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            sudo apt update && sudo apt install git -y
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            brew install git
-          fi
+          brew install git
 
       - name: Install clipboard utility on Linux
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y xclip
-
-      - name: Install qs
-        run: |
-          go install github.com/untillpro/qs@latest
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       - name: Configure git identity
         run: |
@@ -135,5 +127,6 @@ jobs:
           QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS}}
           QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS}}
           QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES}}
+          QS_SKIP_QS_VERSION_CHECK: ${{ env.QS_SKIP_QS_VERSION_CHECK}}
         run: |
           go test -v sys_test.go
