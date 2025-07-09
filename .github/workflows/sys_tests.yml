@@ -53,6 +53,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xclip
 
+      - name: Install qs
+        run: |
+          go install github.com/untillpro/qs@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
       - name: Configure git identity
         run: |
           git config --global user.name "GitHub Actions Bot"
