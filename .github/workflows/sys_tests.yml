@@ -104,7 +104,6 @@ jobs:
 
       # ─────────────────────────────────────────── Run tests ──────────────────────────────────────────
       - name: Run system tests (Windows/macOS)
-        if: runner.os != 'Linux'
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
@@ -119,26 +118,4 @@ jobs:
           QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES }}
           QS_SKIP_QS_VERSION_CHECK: "true"
         run: |
-          go test -v sys_test.go
-
-      - name: Run system tests
-        if: runner.os == 'Linux'
-        env:
-          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
-          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          GH_TIMEOUT_MS: ${{ env.GH_TIMEOUT_MS }}
-          QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS }}
-          QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS }}
-          QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES }}
-          QS_SKIP_QS_VERSION_CHECK: "true"
-        run: |
-          # wrap go test so it logs at DEBUG into journald
-          sudo systemd-cat -t system-tests -p debug go test -v sys_test.go
-          echo "─── journalctl output (DEBUG) ───"
-          sudo journalctl -t system-tests -p debug --no-pager --since "$(date --iso-8601=seconds)"
-
+          go test sys_test.go

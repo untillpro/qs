@@ -16,7 +16,7 @@ import (
 	"github.com/untillpro/qs/vcs"
 )
 
-func updateCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
+func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cfgUpload vcs.CfgUpload
 	var uploadCmd = &cobra.Command{
 		Use:   commands.CommandNameU,
@@ -35,7 +35,7 @@ func updateCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	return uploadCmd
 }
 
-func downloadCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
+func downloadCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameD,
 		Short: pullParamDesc,
@@ -52,7 +52,7 @@ func downloadCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func releaseCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
+func releaseCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameR,
 		Short: releaseParamDesc,
@@ -69,7 +69,7 @@ func releaseCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func guiCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
+func guiCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameG,
 		Short: guiParamDesc,
@@ -86,7 +86,7 @@ func guiCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func prCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
+func prCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNamePR,
 		Short: prParamDesc,
@@ -109,7 +109,7 @@ func prCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func versionCmd(ctx context.Context) *cobra.Command {
+func versionCmd(_ context.Context) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameVersion,
 		Short: versionParamDesc,
@@ -121,7 +121,7 @@ func versionCmd(ctx context.Context) *cobra.Command {
 	return cmd
 }
 
-func upgradeCmd(ctx context.Context) *cobra.Command {
+func upgradeCmd(_ context.Context) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameUpgrade,
 		Short: upgradeParamDesc,
@@ -133,7 +133,7 @@ func upgradeCmd(ctx context.Context) *cobra.Command {
 	return cmd
 }
 
-func devCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
+func devCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameDev,
 		Short: devParamDesc,
@@ -153,7 +153,7 @@ func devCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-func forkCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
+func forkCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameFork,
 		Short: forkParamDesc,

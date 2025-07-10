@@ -24,37 +24,31 @@ import (
 )
 
 const (
-	mimm                  = "-m"
-	slash                 = "/"
-	caret                 = "\n"
-	git                   = "git"
-	push                  = "push"
-	pull                  = "pull"
-	fetch                 = "fetch"
-	branch                = "branch"
-	checkout              = "checkout"
-	origin                = "origin"
-	originSlash           = "origin/"
-	httppref              = "https"
-	pushYes               = "y"
-	nochecksmsg           = "no checks reported"
-	msgWaitingPR          = "Waiting PR checks.."
-	msgPRCheckNotFoundYet = "..not found yet"
-	msgPRCheckNotFound    = "No checks for PR found, merge without checks"
-	MsgPreCommitError     = "Attempt to commit too"
-	MsgCommitForNotes     = "Commit for keeping notes in branch"
-	oneSpace              = " "
-	err128                = "128"
+	mimm              = "-m"
+	slash             = "/"
+	caret             = "\n"
+	git               = "git"
+	push              = "push"
+	pull              = "pull"
+	fetch             = "fetch"
+	branch            = "branch"
+	origin            = "origin"
+	originSlash       = "origin/"
+	httppref          = "https"
+	pushYes           = "y"
+	nochecksmsg       = "no checks reported"
+	msgWaitingPR      = "Waiting PR checks.."
+	MsgPreCommitError = "Attempt to commit too"
+	MsgCommitForNotes = "Commit for keeping notes in branch"
+	oneSpace          = " "
+	err128            = "128"
 
 	repoNotFound            = "git repo name not found"
 	userNotFound            = "git user name not found"
 	ErrAlreadyForkedMsg     = "you are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
-	ErrMsgPRMerge           = "URL of PR is needed"
-	ErrMsgPRBadFormat       = "pull request URL has bad format"
 	ErrTimer40Sec           = "time out 40 seconds"
 	ErrSomethigWrong        = "something went wrong"
-	ErrUnknowGHResponse     = "unknown response from gh"
 	PushDefaultMsg          = "dev"
 
 	IssuePRTtilePrefix = "Resolves issue"
@@ -64,7 +58,6 @@ const (
 	minIssueNoteLength             = 10
 	minRepoNameLength              = 4
 	bashFilePerm       os.FileMode = 0644
-	timeWaitPR                     = 5
 
 	issuelineLength  = 5
 	issuelinePosOrg  = 4
@@ -799,10 +792,10 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 	}
 
 	if len(args) > 0 {
-		url := args[0]
-		issuerepo := GetIssueRepoFromURL(url)
-		if len(issuerepo) > 0 {
-			parentrepo = issuerepo
+		issueURL := args[0]
+		issueRepo := GetIssueRepoFromURL(issueURL)
+		if len(issueRepo) > 0 {
+			parentrepo = issueRepo
 		}
 	}
 
