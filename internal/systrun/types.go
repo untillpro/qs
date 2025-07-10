@@ -16,6 +16,7 @@ import (
 	goUtilsExec "github.com/untillpro/goutils/exec"
 	"github.com/untillpro/qs/gitcmds"
 	contextCfg "github.com/untillpro/qs/internal/context"
+	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
@@ -42,6 +43,7 @@ type TestConfig struct {
 	DevBranchState             DevBranchState       // if true then create dev branch
 	ClipboardContent           ClipboardContentType // Content to be set in clipboard before running the test
 	RunCommandFromAnotherClone bool                 //
+	NeedCollaboration          bool
 	// If ExpectedStderr is not empty then check exit code of qs it must be != 0
 	ExpectedStderr string
 	ExpectedStdout string
@@ -152,9 +154,14 @@ func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 	}
 	// Build full repo URL
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
-	// Run gh issue develop --list command
-	cmd := exec.Command("gh", "issue", "develop", "--list", "--repo", repoURL, issueNum)
-	output, err := cmd.Output()
+	// Run gh issue develop --list command with retry logic
+	var output []byte
+	err = helper.Retry(func() error {
+		cmd := exec.Command("gh", "issue", "develop", "--list", "--repo", repoURL, issueNum)
+		var cmdErr error
+		output, cmdErr = cmd.Output()
+		return cmdErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to check linked branches: %w", err)
 	}
@@ -384,23 +391,31 @@ func ExpectationPRCreated(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse upstream URL: %w", err)
 	}
-	// Use gh CLI to check if PR exists
-	stdout, stderr, err = new(goUtilsExec.PipedExec).
-		Command("gh", "pr", "list", "--repo", fmt.Sprintf("%s/%s", owner, repoName), "--head", expectedPRBranch, "--json", "number").
-		RunToStrings()
+	// Use gh CLI to check if PR exists with retry logic
+	var prList []map[string]interface{}
+	err = helper.Retry(func() error {
+		stdout, stderr, err := new(goUtilsExec.PipedExec).
+			Command("gh", "pr", "list", "--repo", fmt.Sprintf("%s/%s", owner, repoName), "--head", expectedPRBranch, "--json", "number").
+			RunToStrings()
+
+		if err != nil {
+			return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
+		}
+
+		// Parse JSON response
+		if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
+			return fmt.Errorf("failed to parse PR list: %w", err)
+		}
+
+		if len(prList) == 0 {
+			return fmt.Errorf("no pull request found for branch %s", expectedPRBranch)
+		}
+
+		return nil
+	})
 
 	if err != nil {
-		return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
-	}
-
-	// Parse JSON response
-	var prList []map[string]interface{}
-	if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
-		return fmt.Errorf("failed to parse PR list: %w", err)
-	}
-
-	if len(prList) == 0 {
-		return fmt.Errorf("no pull request found for branch %s", expectedPRBranch)
+		return err
 	}
 
 	return nil
@@ -419,11 +434,16 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 		return fmt.Errorf("remote branch name not found in context")
 	}
 
-	// Check if branch exists on the remote
-	stdout, stderr, err := new(goUtilsExec.PipedExec).
-		Command("git", "ls-remote", "--heads", "origin", remoteBranchName).
-		WorkingDir(cloneRepoPath).
-		RunToStrings()
+	// Check if branch exists on the remote with retry logic
+	var stdout, stderr string
+	err := helper.Retry(func() error {
+		var lsErr error
+		stdout, stderr, lsErr = new(goUtilsExec.PipedExec).
+			Command("git", "ls-remote", "--heads", "origin", remoteBranchName).
+			WorkingDir(cloneRepoPath).
+			RunToStrings()
+		return lsErr
+	})
 
 	if err != nil {
 		return fmt.Errorf("failed to check remote branches: %w: %s", err, stderr)

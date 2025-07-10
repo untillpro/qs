@@ -1,0 +1,114 @@
+name: System Tests
+
+on:
+   push:
+     branches: [main, master]
+   pull_request:
+     branches: [main, master]
+   workflow_dispatch:
+
+jobs:
+  system-tests:
+    name: Run System Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+      max-parallel: 1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.2'
+          check-latest: false
+
+      - name: Install dependencies
+        run: go mod download
+
+      # ───────────────────────────────────────── Windows only ─────────────────────────────────────────
+      - name: Install git on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+            choco upgrade chocolatey -y
+            choco install git -y --ignore-dependencies
+          }
+
+      # ───────────────────────────────────────── Linux only ───────────────────────────────────────────
+      - name: Install clipboard utility on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xclip
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+      - name: Install GitHub CLI
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+            sudo apt update
+            sudo apt install gh
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install gh
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            choco install gh
+          fi
+
+      # ─────────────────────────────── Credential sanity checks ───────────────────────────────────────
+      - name: Check GitHub credentials (Linux/macOS)
+        if: runner.os != 'Windows'
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+        shell: bash
+        run: |
+          if [ -z "$UPSTREAM_GH_TOKEN" ] || [ -z "$FORK_GH_TOKEN" ] || [ -z "$UPSTREAM_GH_ACCOUNT" ] || [ -z "$FORK_GH_ACCOUNT" ]; then
+            echo "Missing GitHub credentials"
+            exit 1
+          fi
+
+      - name: Check GitHub credentials (Windows)
+        if: runner.os == 'Windows'
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+        shell: pwsh
+        run: |
+          if (-not $env:UPSTREAM_GH_TOKEN -or -not $env:FORK_GH_TOKEN -or -not $env:UPSTREAM_GH_ACCOUNT -or -not $env:FORK_GH_ACCOUNT) {
+            Write-Host "Missing GitHub credentials"
+            exit 1
+          }
+
+      # ─────────────────────────────────────────── Run tests ──────────────────────────────────────────
+      - name: Run system tests
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          GH_TIMEOUT_MS: ${{ env.GH_TIMEOUT_MS }}
+          QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS }}
+          QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS }}
+          QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES }}
+          QS_SKIP_QS_VERSION_CHECK: "true"
+        run: |
+          go test -v sys_test.go

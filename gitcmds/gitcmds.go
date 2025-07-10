@@ -1,7 +1,6 @@
 package gitcmds
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,37 +24,31 @@ import (
 )
 
 const (
-	mimm                  = "-m"
-	slash                 = "/"
-	caret                 = "\n"
-	git                   = "git"
-	push                  = "push"
-	pull                  = "pull"
-	fetch                 = "fetch"
-	branch                = "branch"
-	checkout              = "checkout"
-	origin                = "origin"
-	originSlash           = "origin/"
-	httppref              = "https"
-	pushYes               = "y"
-	nochecksmsg           = "no checks reported"
-	msgWaitingPR          = "Waiting PR checks.."
-	msgPRCheckNotFoundYet = "..not found yet"
-	msgPRCheckNotFound    = "No checks for PR found, merge without checks"
-	MsgPreCommitError     = "Attempt to commit too"
-	MsgCommitForNotes     = "Commit for keeping notes in branch"
-	oneSpace              = " "
-	err128                = "128"
+	mimm              = "-m"
+	slash             = "/"
+	caret             = "\n"
+	git               = "git"
+	push              = "push"
+	pull              = "pull"
+	fetch             = "fetch"
+	branch            = "branch"
+	origin            = "origin"
+	originSlash       = "origin/"
+	httppref          = "https"
+	pushYes           = "y"
+	nochecksmsg       = "no checks reported"
+	msgWaitingPR      = "Waiting PR checks.."
+	MsgPreCommitError = "Attempt to commit too"
+	MsgCommitForNotes = "Commit for keeping notes in branch"
+	oneSpace          = " "
+	err128            = "128"
 
 	repoNotFound            = "git repo name not found"
 	userNotFound            = "git user name not found"
 	ErrAlreadyForkedMsg     = "you are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
-	ErrMsgPRMerge           = "URL of PR is needed"
-	ErrMsgPRBadFormat       = "pull request URL has bad format"
 	ErrTimer40Sec           = "time out 40 seconds"
 	ErrSomethigWrong        = "something went wrong"
-	ErrUnknowGHResponse     = "unknown response from gh"
 	PushDefaultMsg          = "dev"
 
 	IssuePRTtilePrefix = "Resolves issue"
@@ -65,7 +58,6 @@ const (
 	minIssueNoteLength             = 10
 	minRepoNameLength              = 4
 	bashFilePerm       os.FileMode = 0644
-	timeWaitPR                     = 5
 
 	issuelineLength  = 5
 	issuelinePosOrg  = 4
@@ -76,23 +68,6 @@ type gchResponse struct {
 	_stdout string
 	_stderr string
 	_err    error
-}
-
-// ExitIfFalse s.e.
-func ExitIfFalse(cond bool, args ...interface{}) {
-	if !cond {
-		_, _ = fmt.Fprintln(os.Stderr, args...)
-		os.Exit(1)
-	}
-}
-
-// ExitIfError s.e.
-func ExitIfError(err error, args ...interface{}) {
-	if nil != err {
-		_, _ = fmt.Fprintln(os.Stderr, args...)
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
 }
 
 func CheckIfGitRepo(wd string) (string, error) {
@@ -267,10 +242,12 @@ func Release(wd string) error {
 	logger.Info("Pushing to origin")
 	{
 		params := []string{push, "--follow-tags", origin}
-		err = new(exec.PipedExec).
-			Command(git, params...).
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		err = helper.Retry(func() error {
+			return new(exec.PipedExec).
+				Command(git, params...).
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		})
 		if err != nil {
 			return err
 		}
@@ -331,10 +308,12 @@ func Upload(wd string, commitMessageParts []string) error {
 	}
 
 	// Push notes to origin
-	err = new(exec.PipedExec).
-		Command(git, push, origin, "refs/notes/*:refs/notes/*").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.Retry(func() error {
+		return new(exec.PipedExec).
+			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	})
 	if err != nil {
 		return err
 	}
@@ -344,13 +323,17 @@ func Upload(wd string, commitMessageParts []string) error {
 	}
 
 	// Push branch to origin
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, push, "-u", origin, brName).
-		WorkingDir(wd).
-		RunToStrings()
+	var stdout string
+	err = helper.Retry(func() error {
+		var pushErr error
+		stdout, stderr, pushErr = new(exec.PipedExec).
+			Command(git, push, "-u", origin, brName).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	})
 	if err != nil {
 		logger.Error(stderr)
-
 		return err
 	}
 	logger.Error(stdout)
@@ -419,26 +402,32 @@ func Download(wd string) error {
 	// pull from origin for dev branch
 	if !isMain {
 		// Fetch notes from origin
-		err := new(exec.PipedExec).
-			Command(git, fetch, "origin", "refs/notes/*:refs/notes/*").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		err := helper.Retry(func() error {
+			return new(exec.PipedExec).
+				Command(git, fetch, "origin", "refs/notes/*:refs/notes/*").
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		})
 		if err != nil {
 			return err
 		}
 
-		return new(exec.PipedExec).
-			Command(git, pull, "origin").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		return helper.Retry(func() error {
+			return new(exec.PipedExec).
+				Command(git, pull, "origin").
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		})
 	}
 
 	// pull from upstream if exists and current branch is main
 	if !UpstreamNotExist(wd) {
-		err := new(exec.PipedExec).
-			Command(git, pull, "upstream", branchName).
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+		err := helper.Retry(func() error {
+			return new(exec.PipedExec).
+				Command(git, pull, "upstream", branchName).
+				WorkingDir(wd).
+				Run(os.Stdout, os.Stdout)
+		})
 
 		return err
 	}
@@ -585,25 +574,55 @@ func Fork(wd string) (string, error) {
 		}
 	}
 
-	err = new(exec.PipedExec).
-		Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.Retry(func() error {
+		return new(exec.PipedExec).
+			Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	})
 	if err != nil {
 		logger.Error("Fork error:", err)
-
 		return repo, err
 	}
-	logger.Info("Fork error:", err)
 
+	// Get current user name to verify fork
+	userName, err := getUserName(wd)
+	if err != nil {
+		logger.Error("Failed to get user name for verification:", err)
+		return repo, err
+	}
+
+	// Verify fork was created and is accessible with retry
+	err = helper.Retry(func() error {
+		// Try to get user email to get a valid token context, then verify repo
+		userEmail, emailErr := GetUserEmail()
+		if emailErr != nil {
+			return fmt.Errorf("failed to verify GitHub authentication: %w", emailErr)
+		}
+		logger.Verbose("Verified GitHub authentication for user: %s", userEmail)
+
+		// Verify the forked repository exists and is accessible
+		return helper.VerifyGitHubRepoExists(userName, repo, "")
+	})
+	if err != nil {
+		logger.Error("Fork verification failed:", err)
+		return repo, fmt.Errorf("fork verification failed: %w", err)
+	}
+
+	logger.Info("Fork created and verified successfully")
 	return repo, nil
 }
 
 // GetUserEmail - github user email
 func GetUserEmail() (string, error) {
-	stdout, _, err := new(exec.PipedExec).
-		Command("gh", "api", "user", "--jq", ".email").
-		RunToStrings()
+	var stdout string
+	err := helper.Retry(func() error {
+		var apiErr error
+		stdout, _, apiErr = new(exec.PipedExec).
+			Command("gh", "api", "user", "--jq", ".email").
+			RunToStrings()
+		return apiErr
+	})
 
 	return strings.TrimSpace(stdout), err
 }
@@ -720,10 +739,12 @@ func MakeUpstream(wd string, repo string) error {
 		helper.Delay()
 	}
 
-	err = new(exec.PipedExec).
-		Command(git, "fetch", "origin").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.Retry(func() error {
+		return new(exec.PipedExec).
+			Command(git, "fetch", "origin").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	})
 	if err != nil {
 		return err
 	}
@@ -771,10 +792,10 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 	}
 
 	if len(args) > 0 {
-		url := args[0]
-		issuerepo := GetIssueRepoFromURL(url)
-		if len(issuerepo) > 0 {
-			parentrepo = issuerepo
+		issueURL := args[0]
+		issueRepo := GetIssueRepoFromURL(issueURL)
+		if len(issueRepo) > 0 {
+			parentrepo = issueRepo
 		}
 	}
 
@@ -887,13 +908,16 @@ func SyncMainBranch(wd string) error {
 	logger.Verbose(stdout)
 
 	// Push to origin from MainBranch
-	stdout, stderr, err = new(exec.PipedExec).
-		Command(git, push, "origin", mainBranch).
-		WorkingDir(wd).
-		RunToStrings()
+	err = helper.Retry(func() error {
+		var pushErr error
+		stdout, stderr, pushErr = new(exec.PipedExec).
+			Command(git, push, "origin", mainBranch).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	})
 	if err != nil {
 		logger.Error(stderr)
-
 		return fmt.Errorf("failed to push to origin/main: %w, stdout: %s", err, stdout)
 	}
 	logger.Verbose(stdout)
@@ -1095,13 +1119,17 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 		helper.Delay()
 	}
 
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, push, "-u", origin, branchName).
-		WorkingDir(wd).
-		RunToStrings()
+	var stdout string
+	err = helper.Retry(func() error {
+		var pushErr error
+		stdout, stderr, pushErr = new(exec.PipedExec).
+			Command(git, push, "-u", origin, branchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	})
 	if err != nil {
 		logger.Error(stderr)
-
 		return err
 	}
 	logger.Error(stdout)
@@ -1267,12 +1295,15 @@ func DeleteBranchesRemote(wd string, brs []string) error {
 	}
 
 	for _, br := range brs {
-		_, _, err := new(exec.PipedExec).
-			Command(git, push, origin, ":"+br).
-			WorkingDir(wd).
-			RunToStrings()
+		err := helper.Retry(func() error {
+			_, _, deleteErr := new(exec.PipedExec).
+				Command(git, push, origin, ":"+br).
+				WorkingDir(wd).
+				RunToStrings()
+			return deleteErr
+		})
 		if err != nil {
-			return fmt.Errorf("Branch %s was not deleted", br)
+			return fmt.Errorf("Branch %s was not deleted: %w", br, err)
 		}
 
 		fmt.Printf("Branch %s deleted\n", br)
@@ -1431,17 +1462,29 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
 
-	var strnotes string
+	//ParseGitRemoteURL()
+	// get json notes object from dev branch
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		return "", "", errors.New("error deserializing notes")
+	}
+
+	prTitle, err := getIssueDescription(notesObj.GithubIssueURL)
+	if err != nil {
+		return "", "", fmt.Errorf("Error retrieving issue description: %w", err)
+	}
+
+	var strNotes string
 	var url string
-	strnotes, url = GetNoteAndURL(notes)
+	strNotes, url = GetNoteAndURL(notes)
 	b := GetBodyFromNotes(notes)
 	if len(b) == 0 {
-		b = strnotes
+		b = strNotes
 	}
 	if len(url) > 0 {
 		b = b + caret + url
@@ -1453,46 +1496,61 @@ func MakePR(wd, title string, notes []string, asDraft bool) (stdout string, stde
 		return "", "", err
 	}
 
-	// Create a temporary shell script that properly handles all quoting issues
-	scriptFile, err := os.CreateTemp("", "gh-pr-*.sh")
+	_, forkAccount, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", "", err
 	}
-	defer os.Remove(scriptFile.Name())
 
-	normalizedTitle := strings.ReplaceAll(title, " ", "-")
-	// Write a shell script that handles quoting properly
-	scriptContent := "#!/bin/bash\n"
-	scriptContent += fmt.Sprintf("cd %s\n", wd)
-	scriptContent += fmt.Sprintf(
-		`gh pr create --title "%s" --body "%s" --repo %s`,
-		normalizedTitle,
-		strBody,
+	normalizedTitle := strings.ReplaceAll(prTitle, " ", "-")
+	args := []string{
+		"pr",
+		"create",
+		"--head",
+		forkAccount + ":" + prBranchName,
+		"--repo",
 		parentRepoName,
-	)
-
+		"--body",
+		strBody,
+		"--title",
+		normalizedTitle,
+	}
 	if asDraft {
-		scriptContent += " --draft"
+		args = append(args, "--draft")
 	}
-	scriptContent += "\n"
+	err = helper.Retry(func() error {
+		stdout, stderr, err = new(exec.PipedExec).
+			Command("gh", args...).
+			RunToStrings()
 
-	if _, err := scriptFile.WriteString(scriptContent); err != nil {
-		return "", "", err
+		return err
+	})
+	if err != nil {
+		return stdout, stderr, err
 	}
 
-	if err := scriptFile.Chmod(0755); err != nil {
-		return "", "", err
-	}
-	scriptFile.Close()
+	var prList []map[string]interface{}
+	err = helper.Retry(func() error {
+		stdout, stderr, err := new(exec.PipedExec).
+			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", prBranchName, "--json", "number").
+			RunToStrings()
 
-	// Execute the shell script directly
-	cmd := osExec.Command("/bin/bash", scriptFile.Name())
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
+		if err != nil {
+			return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
+		}
 
-	err = cmd.Run()
-	return outBuf.String(), errBuf.String(), err
+		// Parse JSON response
+		if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
+			return fmt.Errorf("failed to parse PR list: %w", err)
+		}
+
+		if len(prList) == 0 {
+			return fmt.Errorf("no pull request found for branch %s", prBranchName)
+		}
+
+		return nil
+	})
+
+	return stdout, stderr, err
 }
 
 func retrieveRepoNameFromUPL(prurl string) string {
@@ -2070,19 +2128,16 @@ func BuildRemoteURL(account, token, repoName string, isUpstream bool) string {
 // - true if current branch is main branch
 // - error if any
 func IamInMainBranch(wd string) (string, bool, error) {
-	curBr := GetCurrentBranchName(wd)
-	stdout, _, err := new(exec.PipedExec).
-		Command(git, "for-each-ref", "--format=%(upstream:short)", "refs/heads/"+curBr).
-		WorkingDir(wd).
-		Command("gawk", "-F/", "{print $2}").
-		RunToStrings()
-	curBrOrigin := strings.TrimSpace(stdout)
+	currentBranchName := GetCurrentBranchName(wd)
+	logger.Verbose("Current branch: " + currentBranchName)
+
 	mainBranch, err := GetMainBranch(wd)
+	logger.Verbose("Main branch: " + mainBranch)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	return curBr, strings.EqualFold(curBrOrigin, mainBranch), err
+	return currentBranchName, strings.EqualFold(currentBranchName, mainBranch), err
 }
 
 // RemoveRepo removes a repository from GitHub

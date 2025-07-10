@@ -34,7 +34,8 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		return err
 	}
 
-	if !helper.CheckQsVer() {
+	skipQsVerCheck, _ := strconv.ParseBool(os.Getenv(EnvSkipQsVersionCheck))
+	if !skipQsVerCheck && !helper.CheckQsVer() {
 		return fmt.Errorf("qs version check failed")
 	}
 	if !helper.CheckGH() {
@@ -85,7 +86,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 
 		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
 
-		return errors.New("Switch to main branch before running 'qs dev'")
+		return fmt.Errorf("Switch to main branch before running 'qs dev'. You are in %s branch ", curBranch)
 	}
 
 	// Stash current changes if needed
@@ -552,7 +553,7 @@ func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
 
 func globalConfig() {
 	logLevel := logger.LogLevelInfo
-	if verbose {
+	if Verbose {
 		logLevel = logger.LogLevelVerbose
 	}
 

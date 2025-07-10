@@ -40,11 +40,6 @@ func (st *SystemTest) checkPrerequisites() error {
 		return fmt.Errorf("gh not found in PATH: %w", err)
 	}
 
-	// Check for qs
-	if _, err := exec.LookPath("qs"); err != nil {
-		return fmt.Errorf("qs not found in PATH: %w", err)
-	}
-
 	// Check command validity
 	if err := st.checkCommand(); err != nil {
 		return err
@@ -133,8 +128,10 @@ func (st *SystemTest) createTestEnvironment() error {
 		return err
 	}
 
-	if err := st.configureCollaboration(); err != nil {
-		return err
+	if st.cfg.NeedCollaboration {
+		if err := st.configureCollaboration(); err != nil {
+			return err
+		}
 	}
 
 	if err := st.processClipboardContent(); err != nil {
@@ -276,10 +273,14 @@ func inviteCollaborator(owner, repo, username, token string) error {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Content-Type", "application/json")
 
-	// TODO: add retry logic
-	resp, err := netHttp.DefaultClient.Do(req)
-	if err != nil {
+	var resp *netHttp.Response
+	err = helper.Retry(func() error {
+		resp, err = netHttp.DefaultClient.Do(req)
+
 		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to invite collaborator: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -318,10 +319,15 @@ func acceptPendingInvitations(token string) error {
 		acceptReq.Header.Set("Authorization", "token "+token)
 		acceptReq.Header.Set("Accept", "application/vnd.github+json")
 
-		// TODO: add retry logic
-		acceptResp, err := netHttp.DefaultClient.Do(acceptReq)
-		if err != nil {
+		var acceptResp *netHttp.Response
+		err = helper.Retry(func() error {
+			var err error
+			acceptResp, err = netHttp.DefaultClient.Do(acceptReq)
+
 			return err
+		})
+		if err != nil {
+			return fmt.Errorf("failed to accept invitation: %w", err)
 		}
 		defer acceptResp.Body.Close()
 
@@ -430,15 +436,29 @@ func checkoutOnBranch(wd, branchName string) error {
 
 // createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
-	// GitHub Authentication
-	cmd := exec.Command("gh", "repo", "create",
-		fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-		"--public")
+	// GitHub Authentication and repo creation with retry
+	err := helper.Retry(func() error {
+		cmd := exec.Command("gh", "repo", "create",
+			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
+			"--public")
 
-	cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
 
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", err, output)
+		if output, createErr := cmd.CombinedOutput(); createErr != nil {
+			return fmt.Errorf("failed to create upstream repo: %w\nOutput: %s", createErr, output)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Verify repository was created and is accessible with retry
+	err = helper.Retry(func() error {
+		return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.UpstreamAccount, repoName, st.cfg.GHConfig.UpstreamToken)
+	}) // Retry up to 5 times for verification (GitHub eventual consistency)
+	if err != nil {
+		return fmt.Errorf("upstream repository verification failed: %w", err)
 	}
 
 	// Initialize repo with a README if state should be OK
@@ -500,13 +520,15 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 			return fmt.Errorf("failed to set remote: %w", err)
 		}
 
-		// Push changes
-		err = repo.Push(&git.PushOptions{
-			RemoteName: "origin",
-			Auth: &http.BasicAuth{
-				Username: "x-access-token",
-				Password: st.cfg.GHConfig.UpstreamToken,
-			},
+		// Push changes with retry
+		err = helper.Retry(func() error {
+			return repo.Push(&git.PushOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: "x-access-token",
+					Password: st.cfg.GHConfig.UpstreamToken,
+				},
+			})
 		})
 		if err != nil {
 			return fmt.Errorf("failed to push changes: %w", err)
@@ -519,34 +541,62 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 // createForkRepo creates or configures the fork repository
 func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 	if st.cfg.UpstreamState != RemoteStateNull {
-		// Fork the upstream repo
-		cmd := exec.Command(
-			"gh",
-			"repo",
-			"fork",
-			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-			"--clone=false",
-		)
+		// Fork the upstream repo with retry
+		err := helper.Retry(func() error {
+			cmd := exec.Command(
+				"gh",
+				"repo",
+				"fork",
+				fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
+				"--clone=false",
+			)
 
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+			cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to fork upstream repo: %w\nOutput: %s", err, output)
+			if output, forkErr := cmd.CombinedOutput(); forkErr != nil {
+				return fmt.Errorf("failed to fork upstream repo: %w\nOutput: %s", forkErr, output)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		// Verify fork was created and is accessible with retry
+		err = helper.Retry(func() error {
+			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
+		})
+		if err != nil {
+			return fmt.Errorf("fork repository verification failed: %w", err)
 		}
 	} else {
-		// Create an independent repo
-		cmd := exec.Command(
-			"gh",
-			"repo",
-			"create",
-			fmt.Sprintf("%s/%s", st.cfg.GHConfig.ForkAccount, repoName),
-			"--public",
-		)
+		// Create an independent repo with retry
+		err := helper.Retry(func() error {
+			cmd := exec.Command(
+				"gh",
+				"repo",
+				"create",
+				fmt.Sprintf("%s/%s", st.cfg.GHConfig.ForkAccount, repoName),
+				"--public",
+			)
 
-		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+			cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to create fork repo: %w\nOutput: %s", err, output)
+			if output, createErr := cmd.CombinedOutput(); createErr != nil {
+				return fmt.Errorf("failed to create fork repo: %w\nOutput: %s", createErr, output)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		// Verify repository was created and is accessible with retry
+		err = helper.Retry(func() error {
+			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
+		})
+		if err != nil {
+			return fmt.Errorf("fork repository verification failed: %w", err)
 		}
 
 		// Initialize repo with a README if state should be OK
@@ -608,13 +658,15 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 				return fmt.Errorf("failed to set remote: %w", err)
 			}
 
-			// Push changes
-			err = repo.Push(&git.PushOptions{
-				RemoteName: "origin",
-				Auth: &http.BasicAuth{
-					Username: "x-access-token",
-					Password: st.cfg.GHConfig.ForkToken,
-				},
+			// Push changes with retry
+			err = helper.Retry(func() error {
+				return repo.Push(&git.PushOptions{
+					RemoteName: "origin",
+					Auth: &http.BasicAuth{
+						Username: "x-access-token",
+						Password: st.cfg.GHConfig.ForkToken,
+					},
+				})
 			})
 			if err != nil {
 				return fmt.Errorf("failed to push changes: %w", err)
@@ -641,7 +693,12 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 		},
 	}
 
-	if _, err := git.PlainClone(clonePath, false, cloneOpts); err != nil {
+	err := helper.Retry(func() error {
+		_, err := git.PlainClone(clonePath, false, cloneOpts)
+
+		return err
+	})
+	if err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
@@ -739,15 +796,17 @@ func (st *SystemTest) setupDevBranch() error {
 
 	// Push dev branch to remote (if fork exists)
 	if st.cfg.ForkState != RemoteStateNull {
-		err = repo.Push(&git.PushOptions{
-			RemoteName: "origin",
-			Auth: &http.BasicAuth{
-				Username: "x-access-token",
-				Password: st.cfg.GHConfig.ForkToken,
-			},
-			RefSpecs: []config.RefSpec{
-				config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", devBranchName, devBranchName)),
-			},
+		err = helper.Retry(func() error {
+			return repo.Push(&git.PushOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: "x-access-token",
+					Password: st.cfg.GHConfig.ForkToken,
+				},
+				RefSpecs: []config.RefSpec{
+					config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", devBranchName, devBranchName)),
+				},
+			})
 		})
 		if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return fmt.Errorf("failed to push dev branch to fork: %w", err)
@@ -821,8 +880,9 @@ func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr st
 	}
 
 	// Prepare the qs command arguments
-	qsArgs := make([]string, 0, len(cmdCfg.Args)+1)
+	qsArgs := make([]string, 0, len(cmdCfg.Args)+2) // +2 for "qs" and "-v"
 	qsArgs = append(qsArgs, "qs")
+	qsArgs = append(qsArgs, "-v")
 	qsArgs = append(qsArgs, cmdCfg.Command)
 	qsArgs = append(qsArgs, cmdCfg.Args...)
 
@@ -845,6 +905,8 @@ func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr st
 }
 
 func (st *SystemTest) validateStdout(stdout string) error {
+	_, _ = fmt.Fprintln(os.Stdout, stdout)
+
 	// Check stdout if specified
 	if st.cfg.ExpectedStdout != "" {
 		if !strings.Contains(stdout, st.cfg.ExpectedStdout) {
@@ -857,6 +919,8 @@ func (st *SystemTest) validateStdout(stdout string) error {
 }
 
 func (st *SystemTest) validateStderr(stderr string) error {
+	_, _ = fmt.Fprintln(os.Stderr, stderr)
+
 	// Check stderr if specified
 	if st.cfg.ExpectedStderr != "" {
 		if !strings.Contains(stderr, st.cfg.ExpectedStderr) {
@@ -940,12 +1004,19 @@ func (st *SystemTest) setSyncState(
 
 	if needSync {
 		devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
-		// Push the dev branch to the remote
-		pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
-		pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
-		pushOutput, err := pushCmd.CombinedOutput()
+		// Push the dev branch to the remote with retry logic
+		err := helper.Retry(func() error {
+			pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
+			pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
+			pushOutput, pushErr := pushCmd.CombinedOutput()
+			if pushErr != nil {
+				return fmt.Errorf("failed to push dev branch: %w, output: %s", pushErr, pushOutput)
+			}
+
+			return nil
+		}) // Retry up to 3 times for pushing dev branch
 		if err != nil {
-			return fmt.Errorf("failed to push dev branch: %w, output: %s", err, pushOutput)
+			return err
 		}
 	}
 
@@ -964,7 +1035,6 @@ func (st *SystemTest) setSyncState(
 		if err := st.pushFromAnotherClone(remoteURL, devBranchName, headerOfFilesInFork, idFilesInFork...); err != nil {
 			return err
 		}
-
 	}
 
 	if helper.IsTest() {

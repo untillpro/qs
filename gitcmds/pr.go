@@ -66,7 +66,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Create a new branch for the PR
-	prTitle, err := createPRBranch(wd)
+	prBranchName, err := createPRBranch(wd)
 	if err != nil {
 		return fmt.Errorf("failed to create PR branch: %w", err)
 	}
@@ -76,7 +76,7 @@ func Pr(wd string, needDraft bool) error {
 		return errors.New("Error: No notes found in dev branch")
 	}
 
-	stdout, stderr, err := MakePR(wd, prTitle, notes, needDraft)
+	stdout, stderr, err := MakePR(wd, prBranchName, notes, needDraft)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stdout, stdout)
 		_, _ = fmt.Fprintln(os.Stderr, stderr)
@@ -90,30 +90,43 @@ func Pr(wd string, needDraft bool) error {
 // doesPrExist checks if a pull request exists for the current branch.
 func doesPrExist(wd string) (bool, error) {
 	branchName := GetCurrentBranchName(wd)
-	stdout, _, err := new(exec.PipedExec).
-		Command("gh", "pr", "list", "--head", branchName).
-		WorkingDir(wd).
-		RunToStrings()
+	var prExists bool
+
+	err := helper.Retry(func() error {
+		stdout, _, err := new(exec.PipedExec).
+			Command("gh", "pr", "list", "--head", branchName).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			return err
+		}
+
+		if strings.Contains(stdout, "no pull requests match your search") {
+			prExists = false
+			return nil
+		}
+
+		// Otherwise, assume PR exists
+		if stdout == "" {
+			// safety check: gh may sometimes return nothing at all
+			prExists = false
+			return nil
+		}
+
+		prExists = true
+		return nil
+	}) // Retry up to 3 times for PR existence check
+
 	if err != nil {
 		return false, err
 	}
 
-	if strings.Contains(stdout, "no pull requests match your search") {
-		return false, nil
-	}
-
-	// Otherwise, assume PR exists
-	if stdout == "" {
-		// safety check: gh may sometimes return nothing at all
-		return false, nil
-	}
-
-	return true, nil
+	return prExists, nil
 }
 
 // createPRBranch creates a new branch for the pull request and checks out on it.
 // Returns:
-// - title of the pull request
+// - name of the PR branch
 // - error if any operation fails
 func createPRBranch(wd string) (string, error) {
 	// Save current branch name (dev branch)
@@ -137,23 +150,30 @@ func createPRBranch(wd string) (string, error) {
 	upstreamMain := upstreamRemote + "/" + mainBranchName
 
 	// Step 1: Fetch latest upstream
-	_, _, err = new(exec.PipedExec).
-		Command("git", "fetch", upstreamRemote).
-		WorkingDir(wd).
-		RunToStrings()
+	err = helper.Retry(func() error {
+		_, _, fetchErr := new(exec.PipedExec).
+			Command("git", "fetch", upstreamRemote).
+			WorkingDir(wd).
+			RunToStrings()
+		return fetchErr
+	}) // Retry up to 3 times for fetching upstream
 	if err != nil {
 		return "", err
 	}
 
 	// Step 1.1: Fetch notes from origin
-	stdout, stderr, err := new(exec.PipedExec).
-		Command("git", "fetch", "origin", "refs/notes/*:refs/notes/*").
-		WorkingDir(wd).
-		RunToStrings()
+	var stdout, stderr string
+	err = helper.Retry(func() error {
+		var fetchErr error
+		stdout, stderr, fetchErr = new(exec.PipedExec).
+			Command("git", "fetch", "origin", "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			RunToStrings()
+		return fetchErr
+	}) // Retry up to 3 times for fetching notes
 	if err != nil {
 		logger.Error(stdout)
 		logger.Error(stderr)
-
 		return "", fmt.Errorf("failed to fetch notes: %w", err)
 	}
 
@@ -243,10 +263,12 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	// Step 8: Push notes to origin
-	err = new(exec.PipedExec).
-		Command("git", "push", "origin", "refs/notes/*:refs/notes/*").
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+	err = helper.Retry(func() error {
+		return new(exec.PipedExec).
+			Command("git", "push", "origin", "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	}) // Retry up to 3 times for pushing notes
 	if err != nil {
 		return "", err
 	}
@@ -256,10 +278,13 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	// Step 9: Push PR branch to origin
-	_, _, err = new(exec.PipedExec).
-		Command("git", "push", "-u", "origin", prBranchName).
-		WorkingDir(wd).
-		RunToStrings()
+	err = helper.Retry(func() error {
+		_, _, pushErr := new(exec.PipedExec).
+			Command("git", "push", "-u", "origin", prBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	}) // Retry up to 3 times for pushing PR branch
 	if err != nil {
 		return "", err
 	}
@@ -278,28 +303,35 @@ func createPRBranch(wd string) (string, error) {
 	}
 
 	// Step 11: Delete dev branch from origin
-	_, _, err = new(exec.PipedExec).
-		Command("git", "push", "origin", "--delete", devBranchName).
-		WorkingDir(wd).
-		RunToStrings()
+	err = helper.Retry(func() error {
+		_, _, deleteErr := new(exec.PipedExec).
+			Command("git", "push", "origin", "--delete", devBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return deleteErr
+	}) // Retry up to 3 times for deleting dev branch from origin
 	if err != nil {
 		return "", err
 	}
 
 	// Step 11: Delete dev branch from upstream
-	_, stderr, err = new(exec.PipedExec).
-		Command("git", "push", "upstream", "--delete", devBranchName).
-		WorkingDir(wd).
-		RunToStrings()
+	err = helper.Retry(func() error {
+		var deleteErr error
+		_, stderr, deleteErr = new(exec.PipedExec).
+			Command("git", "push", "upstream", "--delete", devBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return deleteErr
+	}) // Retry up to 3 times for deleting dev branch from upstream
 	if err != nil {
 		if strings.Contains(stderr, "ref does not exist") {
-			return issueDescription, nil
+			return prBranchName, nil
 		}
 
 		return "", err
 	}
 
-	return issueDescription, nil
+	return prBranchName, nil
 }
 
 // getIssueDescription retrieves the title and body of a GitHub issue from its URL.
@@ -324,23 +356,31 @@ func getIssueDescription(issueURL string) (string, error) {
 	owner := urlParts[3]
 	repo := urlParts[4]
 
-	// Use gh CLI to get issue details in JSON format
-	stdout, stderr, err := new(exec.PipedExec).
-		Command("gh", "issue", "view", issueNumber, "--repo", fmt.Sprintf("%s/%s", owner, repo), "--json", "title,body").
-		RunToStrings()
-
-	if err != nil {
-		return "", fmt.Errorf("failed to get issue: %w, stderr: %s", err, stderr)
-	}
-
-	// Parse JSON response
+	// Use gh CLI to get issue details in JSON format with retry logic
 	var issueData struct {
 		Title string `json:"title"`
 		Body  string `json:"body"`
 	}
 
-	if err := json.Unmarshal([]byte(stdout), &issueData); err != nil {
-		return "", fmt.Errorf("failed to parse issue data: %w", err)
+	err = helper.Retry(func() error {
+		stdout, stderr, err := new(exec.PipedExec).
+			Command("gh", "issue", "view", issueNumber, "--repo", fmt.Sprintf("%s/%s", owner, repo), "--json", "title,body").
+			RunToStrings()
+
+		if err != nil {
+			return fmt.Errorf("failed to get issue: %w, stderr: %s", err, stderr)
+		}
+
+		// Parse JSON response
+		if err := json.Unmarshal([]byte(stdout), &issueData); err != nil {
+			return fmt.Errorf("failed to parse issue data: %w", err)
+		}
+
+		return nil
+	}) // Retry up to 3 times for issue retrieval
+
+	if err != nil {
+		return "", err
 	}
 
 	return issueData.Title, nil

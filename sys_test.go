@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/require"
 	"github.com/untillpro/qs/internal/systrun"
 )
@@ -128,9 +126,6 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 func TestDev_ExistingBranch(t *testing.T) {
 	require := require.New(t)
 
-	err := clipboard.WriteAll("")
-	require.NoError(err)
-
 	branchName := "dev"
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
@@ -143,11 +138,12 @@ func TestDev_ExistingBranch(t *testing.T) {
 		UpstreamState:  systrun.RemoteStateOK,
 		ForkState:      systrun.RemoteStateOK,
 		DevBranchState: systrun.DevBranchStateExistsButNotCheckedOut,
-		ExpectedStderr: fmt.Sprintf("dev branch '%s' already exists", branchName),
+		ExpectedStderr: "dev branch dev-dev already exists",
 	}
 
 	sysTest := systrun.New(t, testConfig)
-	err = sysTest.Run()
+	err := sysTest.Run()
+
 	require.Error(err)
 }
 
@@ -165,9 +161,10 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateNull,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
 		Expectations: []systrun.ExpectationFunc{
 			systrun.ExpectationBranchLinkedToIssue,
 			systrun.ExpectationLargeFileHooksInstalled,
@@ -195,6 +192,7 @@ func TestPR_FromOtherClone(t *testing.T) {
 		ClipboardContent:           systrun.ClipboardContentGithubIssue,
 		SyncState:                  systrun.SyncStateSynchronized,
 		RunCommandFromAnotherClone: true,
+		NeedCollaboration:          true,
 		Expectations:               []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
@@ -260,11 +258,12 @@ func TestPR_Synchronized(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateSynchronized,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateSynchronized,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -281,11 +280,12 @@ func TestPR_ForkChanged(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "pr",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateForkChanged,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateForkChanged,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -303,10 +303,11 @@ func TestDownload(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "d",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateForkChanged,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateForkChanged,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
 		Expectations: []systrun.ExpectationFunc{
 			systrun.ExpectationCloneIsSyncedWithFork,
 			systrun.ExpectationNotesDownloaded,
@@ -328,11 +329,12 @@ func TestUpload(t *testing.T) {
 		CommandConfig: systrun.CommandConfig{
 			Command: "u",
 		},
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateOK,
-		SyncState:        systrun.SyncStateUncommitedChangesInClone,
-		ClipboardContent: systrun.ClipboardContentGithubIssue,
-		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationRemoteBranchWithCommitMessage},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateUncommitedChangesInClone,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationRemoteBranchWithCommitMessage},
 	}
 
 	sysTest := systrun.New(t, testConfig)
