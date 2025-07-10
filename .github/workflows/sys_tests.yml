@@ -1,10 +1,11 @@
 name: System Tests
 
 on:
-#  push:
-#    branches: [main, master]
-#  pull_request:
-#    branches: [main, master]
+  # Uncomment if you want CI to trigger on push / PR as well
+  # push:
+  #   branches: [main, master]
+  # pull_request:
+  #   branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-#        os: [windows-latest, ubuntu-latest, macos-latest]
+        # os: [windows-latest, ubuntu-latest, macos-latest]
         os: [ubuntu-latest]
       max-parallel: 1
 
@@ -31,6 +32,7 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      # ───────────────────────────────────────── Windows only ─────────────────────────────────────────
       - name: Install git on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -40,6 +42,7 @@ jobs:
             choco install git -y --ignore-dependencies
           }
 
+      # ───────────────────────────────────────── Linux only ───────────────────────────────────────────
       - name: Install clipboard utility on Linux
         if: runner.os == 'Linux'
         run: |
@@ -70,6 +73,7 @@ jobs:
             choco install gh
           fi
 
+      # ─────────────────────────────── Credential sanity checks ───────────────────────────────────────
       - name: Check GitHub credentials (Linux/macOS)
         if: runner.os != 'Windows'
         env:
@@ -98,6 +102,14 @@ jobs:
             exit 1
           }
 
+      # ───────────────────────────────── Dump DEBUG-priority logs (Linux) ──────────────────────────────
+      - name: Dump journalctl DEBUG logs
+        if: always() && runner.os == 'Linux'
+        run: |
+          # Show only priority 7 (debug) messages produced during this job
+          sudo journalctl -p debug --since "${{ github.job_started_at }}" --no-pager
+
+      # ─────────────────────────────────────────── Run tests ──────────────────────────────────────────
       - name: Run system tests
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
@@ -107,10 +119,11 @@ jobs:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          GH_TIMEOUT_MS: ${{ env.GH_TIMEOUT_MS}}
-          QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS}}
-          QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS}}
-          QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES}}
-          QS_SKIP_QS_VERSION_CHECK: true
+          GH_TIMEOUT_MS: ${{ env.GH_TIMEOUT_MS }}
+          QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS }}
+          QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS }}
+          QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES }}
+          QS_SKIP_QS_VERSION_CHECK: "true"
         run: |
           go test -v sys_test.go
+

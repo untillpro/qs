@@ -29,7 +29,6 @@ import (
 
 func Dev(cmd *cobra.Command, wd string, args []string) error {
 	globalConfig()
-	logger.SetLogLevel(logger.LogLevelVerbose)
 	_, err := gitcmds.CheckIfGitRepo(wd)
 	if err != nil {
 		return err
