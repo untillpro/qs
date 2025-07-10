@@ -40,11 +40,6 @@ func (st *SystemTest) checkPrerequisites() error {
 		return fmt.Errorf("gh not found in PATH: %w", err)
 	}
 
-	// Check for qs
-	if _, err := exec.LookPath("qs"); err != nil {
-		return fmt.Errorf("qs not found in PATH: %w", err)
-	}
-
 	// Check command validity
 	if err := st.checkCommand(); err != nil {
 		return err

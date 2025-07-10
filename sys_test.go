@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -152,6 +153,8 @@ func TestDev_ExistingBranch(t *testing.T) {
 
 	sysTest := systrun.New(t, testConfig)
 	err = sysTest.Run()
+
+	_, _ = fmt.Fprintf(os.Stdout, "failed: %v", err)
 	require.Error(err)
 }
 
