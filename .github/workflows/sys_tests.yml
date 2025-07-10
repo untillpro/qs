@@ -41,12 +41,6 @@ jobs:
             choco install git -y --ignore-dependencies
           }
 
-      - name: Install git on macOS
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          brew install git
-
       - name: Install clipboard utility on Linux
         if: runner.os == 'Linux'
         run: |

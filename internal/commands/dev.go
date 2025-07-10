@@ -553,7 +553,7 @@ func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
 
 func globalConfig() {
 	logLevel := logger.LogLevelInfo
-	if verbose {
+	if Verbose {
 		logLevel = logger.LogLevelVerbose
 	}
 

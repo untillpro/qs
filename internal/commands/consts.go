@@ -1,6 +1,6 @@
 package commands
 
-var verbose bool
+var Verbose bool
 
 const (
 	maxDevBranchName = 50

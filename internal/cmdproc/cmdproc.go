@@ -3,16 +3,17 @@ package cmdproc
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/untillpro/goutils/logger"
-	"github.com/untillpro/qs/gitcmds"
-	"github.com/untillpro/qs/internal/commands"
-	"github.com/untillpro/qs/vcs"
 	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
 	"sync"
+
+	"github.com/spf13/cobra"
+	"github.com/untillpro/goutils/logger"
+	"github.com/untillpro/qs/gitcmds"
+	"github.com/untillpro/qs/internal/commands"
+	"github.com/untillpro/qs/vcs"
 )
 
 func updateCmd(ctx context.Context, params *qsGlobalParams) *cobra.Command {
@@ -330,7 +331,7 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 		cmd.SetContext(ctx)
 	}
 
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&commands.Verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().Bool("trace", false, "Extremely verbose output")
 	rootCmd.SilenceUsage = true
 	return rootCmd

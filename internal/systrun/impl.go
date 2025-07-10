@@ -878,6 +878,7 @@ func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr st
 	// Prepare the qs command arguments
 	qsArgs := make([]string, 0, len(cmdCfg.Args)+2) // +2 for "qs" and "-v"
 	qsArgs = append(qsArgs, "qs")
+	qsArgs = append(qsArgs, "-v")
 	qsArgs = append(qsArgs, cmdCfg.Command)
 	qsArgs = append(qsArgs, cmdCfg.Args...)
 
