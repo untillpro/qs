@@ -15,8 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # os: [windows-latest, ubuntu-latest, macos-latest]
-        os: [ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
       max-parallel: 1
 
     steps:
@@ -103,8 +102,7 @@ jobs:
           }
 
       # ─────────────────────────────────────────── Run tests ──────────────────────────────────────────
-      - name: Run system tests (Windows/macOS)
-        if: runner.os != 'Linux'
+      - name: Run system tests
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
@@ -120,21 +118,3 @@ jobs:
           QS_SKIP_QS_VERSION_CHECK: "true"
         run: |
           go test -v sys_test.go
-
-      - name: Run system tests (Linux)
-        if: runner.os == 'Linux'
-        env:
-          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
-          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
-          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          GH_TIMEOUT_MS: ${{ env.GH_TIMEOUT_MS }}
-          QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS }}
-          QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS }}
-          QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES }}
-          QS_SKIP_QS_VERSION_CHECK: "true"
-        run: |
-          go test -v sys_test.go 2>&1 | grep '^DEBUG:' || true
