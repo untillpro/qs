@@ -86,7 +86,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 
 		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
 
-		return errors.New("Switch to main branch before running 'qs dev'")
+		return fmt.Errorf("Switch to main branch before running 'qs dev'. You are in %s branch ", curBranch)
 	}
 
 	// Stash current changes if needed
