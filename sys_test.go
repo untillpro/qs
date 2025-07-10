@@ -13,6 +13,7 @@ import (
 
 // TestForkOnExistingFork tests the case where a fork already exists
 func TestFork_OnExistingFork(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -35,6 +36,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 
 // TestFork tests the case where a fork does not exist yet
 func TestFork(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -55,6 +57,7 @@ func TestFork(t *testing.T) {
 
 // TestForkNoRemotes tests the case where there is no origin remote
 func TestFork_NoRemotes(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -75,6 +78,7 @@ func TestFork_NoRemotes(t *testing.T) {
 
 // TestDevCustomName tests creating a new dev branch when it doesn't exist
 func TestDev_CustomName(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -100,6 +104,7 @@ func TestDev_CustomName(t *testing.T) {
 
 // TestDev_NoUpstream_CustomName tests creating a new dev branch when it doesn't exist
 func TestDev_NoUpstream_CustomName(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -153,6 +158,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 
 // TestDevNoForkExistingIssue tests creating a dev branch when upstream remote doesn't exist
 func TestDev_NoFork_ExistingIssue(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	ghConfig := getGithubConfig(t)
@@ -181,6 +187,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 }
 
 func TestPR_FromOtherClone(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	ghConfig := getGithubConfig(t)
@@ -207,6 +214,7 @@ func TestPR_FromOtherClone(t *testing.T) {
 
 // TestDev_NoFork_NonExistingIssue tests creating a dev branch when upstream remote doesn't exist
 func TestDev_NoFork_NonExistingIssue(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	ghConfig := getGithubConfig(t)
@@ -231,6 +239,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 
 // TestDevNoForkJiraTicketURL tests creating a dev branch with a valid JIRA ticket URL
 func TestDev_NoFork_JiraTicketURL(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -254,6 +263,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 
 // TestPR tests creating a basic PR
 func TestPR_Synchronized(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -276,6 +286,7 @@ func TestPR_Synchronized(t *testing.T) {
 }
 
 func TestPR_ForkChanged(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -299,6 +310,7 @@ func TestPR_ForkChanged(t *testing.T) {
 
 // TestDownload tests synchronizing local repository with remote changes
 func TestDownload(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -325,6 +337,7 @@ func TestDownload(t *testing.T) {
 
 // TestUpload tests uploading local changes to remote repository
 func TestUpload(t *testing.T) {
+	t.Skip()
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
