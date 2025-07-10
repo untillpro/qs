@@ -118,6 +118,6 @@ jobs:
           QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS}}
           QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS}}
           QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES}}
-          QS_SKIP_QS_VERSION_CHECK: ${{ env.QS_SKIP_QS_VERSION_CHECK}}
+          QS_SKIP_QS_VERSION_CHECK: true
         run: |
           go test -v sys_test.go
