@@ -103,11 +103,11 @@ jobs:
           }
 
       # ───────────────────────────────── Dump DEBUG-priority logs (Linux) ──────────────────────────────
-      - name: Dump journalctl DEBUG logs
-        if: always() && runner.os == 'Linux'
+      - name: Dump journalctl debug logs in background
+        if: runner.os == 'Linux'
         run: |
-          # Show only priority 7 (debug) messages produced during this job
-          sudo journalctl -p debug --since "${{ github.job_started_at }}" --no-pager
+          # capture debug logs in background until tests complete
+          sudo journalctl -f -p debug --since "$(date --iso-8601=seconds)" --no-pager > debug.log &
 
       # ─────────────────────────────────────────── Run tests ──────────────────────────────────────────
       - name: Run system tests
@@ -127,3 +127,10 @@ jobs:
         run: |
           go test -v sys_test.go
 
+      - name: Dump journalctl debug logs after tests
+        if: always() && runner.os == 'Linux'
+        run: |
+          echo "
+          --- Debug journal logs ---
+          "
+          cat debug.log || true
