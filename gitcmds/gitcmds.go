@@ -2142,7 +2142,10 @@ func IamInMainBranch(wd string) (string, bool, error) {
 		Command("gawk", "-F/", "{print $2}").
 		RunToStrings()
 	curBrOrigin := strings.TrimSpace(stdout)
+	logger.Verbose("Current branch: " + curBr + " - " + curBrOrigin)
+
 	mainBranch, err := GetMainBranch(wd)
+	logger.Verbose("Main branch: " + mainBranch)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to get main branch: %w", err)
 	}
