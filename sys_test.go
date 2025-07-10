@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/require"
 	"github.com/untillpro/qs/internal/systrun"
 )
@@ -133,9 +132,6 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 func TestDev_ExistingBranch(t *testing.T) {
 	require := require.New(t)
 
-	err := clipboard.WriteAll("")
-	require.NoError(err)
-
 	branchName := "dev"
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
@@ -152,7 +148,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 	}
 
 	sysTest := systrun.New(t, testConfig)
-	err = sysTest.Run()
+	err := sysTest.Run()
 
 	_, _ = fmt.Fprintf(os.Stdout, "failed: %v", err)
 	require.Error(err)
