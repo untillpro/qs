@@ -2135,14 +2135,8 @@ func BuildRemoteURL(account, token, repoName string, isUpstream bool) string {
 // - true if current branch is main branch
 // - error if any
 func IamInMainBranch(wd string) (string, bool, error) {
-	curBr := GetCurrentBranchName(wd)
-	stdout, _, err := new(exec.PipedExec).
-		Command(git, "for-each-ref", "--format=%(upstream:short)", "refs/heads/"+curBr).
-		WorkingDir(wd).
-		Command("gawk", "-F/", "{print $2}").
-		RunToStrings()
-	curBrOrigin := strings.TrimSpace(stdout)
-	logger.Verbose("Current branch: " + curBr + " - " + curBrOrigin)
+	currentBranchName := GetCurrentBranchName(wd)
+	logger.Verbose("Current branch: " + currentBranchName)
 
 	mainBranch, err := GetMainBranch(wd)
 	logger.Verbose("Main branch: " + mainBranch)
@@ -2150,7 +2144,7 @@ func IamInMainBranch(wd string) (string, bool, error) {
 		return "", false, fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	return curBr, strings.EqualFold(curBrOrigin, mainBranch), err
+	return currentBranchName, strings.EqualFold(currentBranchName, mainBranch), err
 }
 
 // RemoveRepo removes a repository from GitHub
