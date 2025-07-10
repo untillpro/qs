@@ -1168,23 +1168,23 @@ func (st *SystemTest) getRepoName() string {
 
 // Run executes the complete system test
 func (st *SystemTest) Run() error {
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.begin")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.begin")
 	if err := st.checkPrerequisites(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.1")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.1")
 	if err := st.createTestEnvironment(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.2")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.2")
 	// authenticate with GitHub using the fork token
 	if err := os.Setenv("GITHUB_TOKEN", st.cfg.GHConfig.ForkToken); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.3")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.3")
 	stdout, stderr, err := st.runCommand(st.cfg.CommandConfig)
 	if err != nil {
 		if err := st.validateStderr(stderr); err != nil {
@@ -1192,22 +1192,22 @@ func (st *SystemTest) Run() error {
 		}
 	}
 
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.4")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.4")
 	if err := st.validateStdout(stdout); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.5")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.5")
 	if err := st.checkExpectations(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.6")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.6")
 	if err := st.cleanupTestEnvironment(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stdout, "SystemTest.Run.end")
+	fmt.Fprintln(os.Stderr, "SystemTest.Run.end")
 	return err
 }
 
