@@ -26,7 +26,6 @@ func TestGetNotes(t *testing.T) {
 	assert.Equal(t, "https://dev.untill.com/projects/#!361164", url)
 
 	// Test for GH Issue types
-
 	s1 = "Resolves issue #324 My Best problem ever"
 	s2 = "Resolves #324"
 	notes = []string{s1, s2}

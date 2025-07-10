@@ -1,12 +1,11 @@
 name: System Tests
 
 on:
-  # Uncomment if you want CI to trigger on push / PR as well
-  # push:
-  #   branches: [main, master]
-  # pull_request:
-  #   branches: [main, master]
-  workflow_dispatch:
+   push:
+     branches: [main, master]
+   pull_request:
+     branches: [main, master]
+   workflow_dispatch:
 
 jobs:
   system-tests:
@@ -15,8 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-#        os: [windows-latest, ubuntu-latest, macos-latest]
-        os: [ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
       max-parallel: 1
 
     steps:

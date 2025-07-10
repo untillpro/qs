@@ -247,7 +247,7 @@ func Release(wd string) error {
 				Command(git, params...).
 				WorkingDir(wd).
 				Run(os.Stdout, os.Stdout)
-		}) // Retry up to 3 times for push with tags
+		})
 		if err != nil {
 			return err
 		}

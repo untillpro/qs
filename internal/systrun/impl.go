@@ -273,10 +273,14 @@ func inviteCollaborator(owner, repo, username, token string) error {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Content-Type", "application/json")
 
-	// TODO: add retry logic
-	resp, err := netHttp.DefaultClient.Do(req)
-	if err != nil {
+	var resp *netHttp.Response
+	err = helper.Retry(func() error {
+		resp, err = netHttp.DefaultClient.Do(req)
+
 		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to invite collaborator: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -315,10 +319,15 @@ func acceptPendingInvitations(token string) error {
 		acceptReq.Header.Set("Authorization", "token "+token)
 		acceptReq.Header.Set("Accept", "application/vnd.github+json")
 
-		// TODO: add retry logic
-		acceptResp, err := netHttp.DefaultClient.Do(acceptReq)
-		if err != nil {
+		var acceptResp *netHttp.Response
+		err = helper.Retry(func() error {
+			var err error
+			acceptResp, err = netHttp.DefaultClient.Do(acceptReq)
+
 			return err
+		})
+		if err != nil {
+			return fmt.Errorf("failed to accept invitation: %w", err)
 		}
 		defer acceptResp.Body.Close()
 
@@ -1168,23 +1177,19 @@ func (st *SystemTest) getRepoName() string {
 
 // Run executes the complete system test
 func (st *SystemTest) Run() error {
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.begin")
 	if err := st.checkPrerequisites(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.1")
 	if err := st.createTestEnvironment(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.2")
 	// authenticate with GitHub using the fork token
 	if err := os.Setenv("GITHUB_TOKEN", st.cfg.GHConfig.ForkToken); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.3")
 	stdout, stderr, err := st.runCommand(st.cfg.CommandConfig)
 	if err != nil {
 		if err := st.validateStderr(stderr); err != nil {
@@ -1192,22 +1197,18 @@ func (st *SystemTest) Run() error {
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.4")
 	if err := st.validateStdout(stdout); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.5")
 	if err := st.checkExpectations(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.6")
 	if err := st.cleanupTestEnvironment(); err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stderr, "SystemTest.Run.end")
 	return err
 }
 
