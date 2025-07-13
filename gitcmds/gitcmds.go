@@ -774,7 +774,7 @@ func GetIssueRepoFromURL(url string) (repoName string) {
 }
 
 // DevIssue create link between upstream Guthub issue and dev branch
-func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
+func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
 	repo, org, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
@@ -786,7 +786,6 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 
 	strIssueNum := strconv.Itoa(issueNumber)
 	myrepo := org + slash + repo
-	parentrepo, err := GetParentRepoName(wd)
 	if err != nil {
 		return "", nil, err
 	}
@@ -795,7 +794,7 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 		issueURL := args[0]
 		issueRepo := GetIssueRepoFromURL(issueURL)
 		if len(issueRepo) > 0 {
-			parentrepo = issueRepo
+			parentRepo = issueRepo
 		}
 	}
 
@@ -832,7 +831,7 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 	}
 
 	stdout, stderr, err = new(exec.PipedExec).
-		Command("gh", "issue", "develop", strIssueNum, "--branch-repo", myrepo, "--repo="+parentrepo, "--name", branchName, "--base", mainBranch).
+		Command("gh", "issue", "develop", strIssueNum, "--branch-repo", myrepo, "--repo="+parentRepo, "--name", branchName, "--base", mainBranch).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -852,7 +851,7 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 		return "", nil, errors.New("Can not create branch for issue")
 	}
 	// old-style notes
-	issueName := GetIssueNameByNumber(strIssueNum, parentrepo)
+	issueName := GetIssueNameByNumber(strIssueNum, parentRepo)
 	comment := IssuePRTtilePrefix + " '" + issueName + "' "
 	body := ""
 	if len(issueName) > 0 {
