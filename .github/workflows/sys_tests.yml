@@ -67,13 +67,41 @@ jobs:
           fi
 
       # ─────────────────────────────── Credential sanity checks ───────────────────────────────────────
+      - name: Debug GitHub accounts (Linux/macOS)
+        if: runner.os != 'Windows'
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN:    ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT:    ${{ env.FORK_GH_ACCOUNT }}
+        shell: bash
+        run: |
+          echo "UPSTREAM_GH_ACCOUNT=$UPSTREAM_GH_ACCOUNT"
+          echo "FORK_GH_ACCOUNT=$FORK_GH_ACCOUNT"
+          echo "UPSTREAM_GH_TOKEN length=${#UPSTREAM_GH_TOKEN}"
+          echo "FORK_GH_TOKEN length=${#FORK_GH_TOKEN}"
+
+      - name: Debug GitHub accounts (Windows)
+        if: runner.os == 'Windows'
+        env:
+          UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+          FORK_GH_TOKEN:    ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT:    ${{ env.FORK_GH_ACCOUNT }}
+        shell: pwsh
+        run: |
+          Write-Host "UPSTREAM_GH_ACCOUNT=$env:UPSTREAM_GH_ACCOUNT"
+          Write-Host "FORK_GH_ACCOUNT=$env:FORK_GH_ACCOUNT"
+          Write-Host "UPSTREAM_GH_TOKEN length=$($env:UPSTREAM_GH_TOKEN.Length)"
+          Write-Host "FORK_GH_TOKEN length=$($env:FORK_GH_TOKEN.Length)"
+
       - name: Check GitHub credentials (Linux/macOS)
         if: runner.os != 'Windows'
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ env.FORK_GH_ACCOUNT }}
         shell: bash
         run: |
           if [ -z "$UPSTREAM_GH_TOKEN" ] || [ -z "$FORK_GH_TOKEN" ] || [ -z "$UPSTREAM_GH_ACCOUNT" ] || [ -z "$FORK_GH_ACCOUNT" ]; then
@@ -86,8 +114,8 @@ jobs:
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ env.FORK_GH_ACCOUNT }}
         shell: pwsh
         run: |
           if (-not $env:UPSTREAM_GH_TOKEN -or -not $env:FORK_GH_TOKEN -or -not $env:UPSTREAM_GH_ACCOUNT -or -not $env:FORK_GH_ACCOUNT) {
@@ -100,8 +128,8 @@ jobs:
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ env.FORK_GH_ACCOUNT }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
