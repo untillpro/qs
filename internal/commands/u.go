@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/untillpro/goutils/exec"
+	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	contextPkg "github.com/untillpro/qs/internal/context"
 	notesPkg "github.com/untillpro/qs/internal/notes"
@@ -16,6 +18,16 @@ import (
 func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	if err := gitcmds.Status(wd); err != nil {
 		return fmt.Errorf("git status failed: %w", err)
+	}
+
+	// Fetch notes from origin
+	_, _, err := new(exec.PipedExec).
+		Command("git", "fetch", "origin", "refs/notes/*:refs/notes/*").
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Warning("Failed to fetch notes: %v", err)
+		// Continue anyway, as notes might exist locally
 	}
 
 	files := gitcmds.GetFilesForCommit(wd)

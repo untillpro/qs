@@ -22,6 +22,17 @@ func Pr(wd string, needDraft bool) error {
 
 	// PR is not created yet
 	currentBranchName := GetCurrentBranchName(wd)
+
+	// Fetch notes from origin before checking if they exist
+	_, _, err := new(exec.PipedExec).
+		Command(git, fetch, origin, "refs/notes/*:refs/notes/*").
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Warning("Failed to fetch notes: %v", err)
+		// Continue anyway, as notes might exist locally
+	}
+
 	prExists, err := doesPrExist(wd, currentBranchName)
 	if err != nil {
 		return err
