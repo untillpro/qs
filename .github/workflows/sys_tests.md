@@ -27,15 +27,20 @@ The workflow file must be located in `.github/workflows/sys_tests.yml`.
 
 ### Secrets
 
-Workflow requires the following environment variables to be set in secrets:
-- UPSTREAM_GH_ACCOUNT: The GitHub account used for the upstream repository.
+The Workflow requires the following repository secrets:
 - UPSTREAM_GH_TOKEN: The GitHub token for the upstream account.
-- FORK_GH_ACCOUNT: The GitHub account used for the forked repository.
 - FORK_GH_TOKEN: The GitHub token for the forked account.
 - JIRA_EMAIL: The email address associated with the JIRA account.
 - JIRA_API_TOKEN: The API token for the JIRA account.
 - JIRA_TICKET_URL: The URL of the JIRA ticket used in the system tests.
+
+The Workflow requires the following repository variables as well:
 - GH_TIMEOUT_MS: The timeout for the GitHub actions in milliseconds.
+- UPSTREAM_GH_ACCOUNT: The GitHub account used for the upstream repository.
+- FORK_GH_ACCOUNT: The GitHub account used for the forked repository.
+- QS_RETRY_DELAY_MS: The delay between retries in milliseconds.
+- QS_MAX_RETRY_DELAY_MS: The maximum delay between retries in milliseconds.
+- QS_MAX_RETRIES: The maximum number of retries.
 
 
 
