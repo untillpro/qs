@@ -4,17 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
-	contextPkg "github.com/untillpro/qs/internal/context"
-	notesPkg "github.com/untillpro/qs/internal/notes"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"github.com/untillpro/qs/gitcmds"
+	contextPkg "github.com/untillpro/qs/internal/context"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/vcs"
 )
 
 func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
-	globalConfig()
 	if err := gitcmds.Status(wd); err != nil {
 		return fmt.Errorf("git status failed: %w", err)
 	}

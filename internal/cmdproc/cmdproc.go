@@ -7,12 +7,14 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
+	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/vcs"
 )
 
@@ -202,6 +204,45 @@ func CheckCommands(commands []string) error {
 	return nil
 }
 
+// shouldSkipPrerequisiteChecks returns true for commands that don't need prerequisite checks
+func shouldSkipPrerequisiteChecks(cmdName string) bool {
+	skipCommands := []string{
+		commands.CommandNameVersion,
+		commands.CommandNameUpgrade,
+		"help",
+	}
+
+	for _, skipCmd := range skipCommands {
+		if cmdName == skipCmd {
+			return true
+		}
+	}
+
+	return false
+}
+
+// needsGitHubCLI returns true for commands that require GitHub CLI
+func needsGitHubCLI(cmdName string) bool {
+	ghCommands := []string{
+		commands.CommandNameFork,
+		commands.CommandNameDev,
+		commands.CommandNamePR,
+	}
+
+	for _, ghCmd := range ghCommands {
+		if cmdName == ghCmd {
+			return true
+		}
+	}
+	return false
+}
+
+// checkRequiredBashCommands checks if all required bash commands are available
+func checkRequiredBashCommands() error {
+	requiredCommands := []string{"grep", "sed", "jq", "gawk", "wc", "curl", "chmod"}
+	return CheckCommands(requiredCommands)
+}
+
 // ExecRootCmd executes the root command with the given arguments.
 // Returns:
 // - context.Context: The context of the executed command
@@ -303,12 +344,45 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 		Use:   use,
 		Short: short,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Set log level first - handle all log level options
 			if ok, _ := cmd.Flags().GetBool("trace"); ok {
 				logger.SetLogLevel(logger.LogLevelTrace)
 				logger.Error("Using logger.LogLevelTrace...")
 			} else if ok, _ := cmd.Flags().GetBool("verbose"); ok {
 				logger.SetLogLevel(logger.LogLevelVerbose)
 				logger.Error("Using logger.LogLevelVerbose...")
+			} else if commands.Verbose {
+				// Handle the global Verbose variable (set by -v flag)
+				logger.SetLogLevel(logger.LogLevelVerbose)
+			} else {
+				// Default log level
+				logger.SetLogLevel(logger.LogLevelInfo)
+			}
+
+			// Skip checks for commands that don't need them
+			if shouldSkipPrerequisiteChecks(cmd.Name()) {
+				return
+			}
+
+			// Check required bash commands
+			if err := checkRequiredBashCommands(); err != nil {
+				fmt.Println(" ")
+				fmt.Println(err)
+				fmt.Println("See https://github.com/untillpro/qs?tab=readme-ov-file#git")
+				os.Exit(1)
+			}
+
+			// Check QS version (unless skipped)
+			skipQsVerCheck, _ := strconv.ParseBool(os.Getenv(commands.EnvSkipQsVersionCheck))
+			if !skipQsVerCheck && !helper.CheckQsVer() {
+				fmt.Println("QS version check failed")
+				os.Exit(1)
+			}
+
+			// Check GitHub CLI (for commands that need it)
+			if needsGitHubCLI(cmd.Name()) && !helper.CheckGH() {
+				fmt.Println("GitHub CLI check failed")
+				os.Exit(1)
 			}
 		},
 	}

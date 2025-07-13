@@ -5,7 +5,5 @@ import (
 )
 
 func D(wd string) error {
-	globalConfig()
-
 	return gitcmds.Download(wd)
 }
