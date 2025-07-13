@@ -1480,7 +1480,7 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func MakePR(wd, parentRepoName, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
@@ -1508,11 +1508,6 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 		b = b + caret + url
 	}
 	strBody := fmt.Sprintln(b)
-
-	parentRepoName, err := GetParentRepoName(wd)
-	if err != nil {
-		return "", "", err
-	}
 
 	_, forkAccount, err := GetRepoAndOrgName(wd)
 	if err != nil {

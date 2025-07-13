@@ -29,11 +29,11 @@ func Pr(wd string, needDraft bool) error {
 		return errors.New("Pull request already exists for this branch")
 	}
 
-	parentrepo, err := GetParentRepoName(wd)
+	parentRepoName, err := GetParentRepoName(wd)
 	if err != nil {
 		return err
 	}
-	if len(parentrepo) == 0 {
+	if len(parentRepoName) == 0 {
 		return errors.New("You are in trunk. PR is only allowed from forked branch.")
 	}
 	curBranch := GetCurrentBranchName(wd)
@@ -44,14 +44,14 @@ func Pr(wd string, needDraft bool) error {
 
 	var response string
 	if UpstreamNotExist(wd) {
-		fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
+		fmt.Print("Upstream not found.\nRepository " + parentRepoName + " will be added as upstream. Agree[y/n]?")
 		_, _ = fmt.Scanln(&response)
 		if response != pushYes {
 			fmt.Print(pushFail)
 			return nil
 		}
 		response = ""
-		if err := MakeUpstreamForBranch(wd, parentrepo); err != nil {
+		if err := MakeUpstreamForBranch(wd, parentRepoName); err != nil {
 			return fmt.Errorf("failed to set upstream: %w", err)
 		}
 	}
@@ -76,7 +76,7 @@ func Pr(wd string, needDraft bool) error {
 		return errors.New("Error: No notes found in dev branch")
 	}
 
-	stdout, stderr, err := MakePR(wd, prBranchName, notes, needDraft)
+	stdout, stderr, err := MakePR(wd, parentRepoName, prBranchName, notes, needDraft)
 	if err != nil {
 		logger.Verbose(stdout)
 		logger.Error(stderr)
