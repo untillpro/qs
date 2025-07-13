@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/untillpro/goutils/logger"
 )
 
 // current version of the Notes struct
@@ -38,10 +40,9 @@ type Notes struct {
 func (nt *Notes) String() string {
 	bytes, err := json.Marshal(nt)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to marshal notes: %v", err)
-		os.Exit(1)
+		logger.Error(fmt.Errorf("failed to marshal notes: %v", err))
 
-		return ""
+		os.Exit(1)
 	}
 
 	return string(bytes)

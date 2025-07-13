@@ -78,8 +78,8 @@ func Pr(wd string, needDraft bool) error {
 
 	stdout, stderr, err := MakePR(wd, prBranchName, notes, needDraft)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stdout, stdout)
-		_, _ = fmt.Fprintln(os.Stderr, stderr)
+		logger.Verbose(stdout)
+		logger.Error(stderr)
 
 		return fmt.Errorf("failed to create PR: %w", err)
 	}

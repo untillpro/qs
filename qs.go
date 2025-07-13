@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/cmdproc"
 )
 
@@ -12,7 +13,8 @@ func main() {
 	checkPrerequisites()
 
 	if _, err := cmdproc.ExecRootCmd(context.Background(), os.Args); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		logger.Error(err)
+
 		os.Exit(1)
 	}
 }

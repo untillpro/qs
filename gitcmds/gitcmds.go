@@ -113,7 +113,7 @@ func Status(wd string) error {
 		RunToStrings()
 	if err != nil {
 		if len(stderr) > 0 {
-			_, _ = fmt.Fprintln(os.Stderr, stderr)
+			logger.Error(stderr)
 		}
 		if strings.Contains(err.Error(), err128) {
 			return errors.New("this is not a git repository")
@@ -123,7 +123,7 @@ func Status(wd string) error {
 	if err != nil {
 		return fmt.Errorf("git remote -v failed: %w", err)
 	}
-	_, _ = fmt.Fprintln(os.Stdout, stdout)
+	logger.Verbose(stdout)
 
 	return new(exec.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
@@ -662,8 +662,8 @@ func GetMainBranch(wd string) (string, error) {
 		Command("grep", "-E", "(/main|/master)([^a-zA-Z0-9]|$)").
 		RunToStrings()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, stderr)
-		_, _ = fmt.Fprintln(os.Stderr, stdout)
+		logger.Error(stderr)
+		logger.Verbose(stdout)
 
 		return "", err
 	}
