@@ -1048,7 +1048,7 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 		return fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	_, stderr, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "checkout", mainBranch).
 		WorkingDir(wd).
 		RunToStrings()
@@ -1107,32 +1107,50 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 	if err := AddNotes(wd, comments); err != nil {
 		return err
 	}
-	// Push notes to origin
-	err = new(exec.PipedExec).
-		Command(git, push, origin, "refs/notes/*:refs/notes/*").
+
+	// Fetch notes from origin before pushing
+	stdout, stderr, err = new(exec.PipedExec).
+		Command(git, fetch, "--force", origin, "refs/notes/*:refs/notes/*").
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
+		logger.Error(stderr)
+
+		return fmt.Errorf("failed to fetch notes: %w, stdout: %s", err, stdout)
+	}
+
+	// Push notes to origin with retry
+	err = helper.Retry(func() error {
+		stdout, stderr, err = new(exec.PipedExec).
+			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			RunToStrings()
+
 		return err
+	})
+	if err != nil {
+		logger.Error(stderr)
+
+		return fmt.Errorf("failed to push notes to origin: %w", err)
 	}
 	if helper.IsTest() {
 		helper.Delay()
 	}
 
-	var stdout string
+	// Push branch to origin with retry
 	err = helper.Retry(func() error {
-		var pushErr error
-		stdout, stderr, pushErr = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, push, "-u", origin, branchName).
 			WorkingDir(wd).
 			RunToStrings()
-		return pushErr
+
+		return err
 	})
 	if err != nil {
 		logger.Error(stderr)
-		return err
+
+		return fmt.Errorf("failed to push branch to origin: %w, stdout: %s", err, stdout)
 	}
-	logger.Error(stdout)
 
 	if helper.IsTest() {
 		helper.Delay()

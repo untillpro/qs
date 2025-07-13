@@ -313,18 +313,8 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 		},
 	}
 
-	var versionCmd = &cobra.Command{
-		Use:     "version",
-		Short:   "Print current version",
-		Aliases: []string{"ver"},
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println(version)
-		},
-	}
-
 	rootCmd.SetContext(ctx)
 	rootCmd.SetArgs(args[1:])
-	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(cmds...)
 	// Set context for all subcommands
 	for _, cmd := range cmds {
