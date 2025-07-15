@@ -1,14 +1,16 @@
 name: System Tests
 
 on:
-   push:
-     branches: [main, master]
-   pull_request:
-     branches: [main, master]
-   workflow_dispatch:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   system-tests:
+    secrets: inherit
     name: Run System Tests
     runs-on: ${{ matrix.os }}
     strategy:
@@ -20,6 +22,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v4
