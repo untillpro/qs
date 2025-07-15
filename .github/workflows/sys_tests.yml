@@ -74,9 +74,9 @@ jobs:
         if: runner.os != 'Windows'
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
-          FORK_GH_TOKEN:    ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT:    ${{ vars.FORK_GH_ACCOUNT }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
         shell: bash
         run: |
           echo "UPSTREAM_GH_ACCOUNT=$UPSTREAM_GH_ACCOUNT"
