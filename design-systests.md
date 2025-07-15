@@ -8,7 +8,7 @@ System tests are designed to validate the functionality of the `qs` utility, to 
 
 The motivation behind these system tests is to ensure that the `qs` utility works correctly in a real-world scenario, where it interacts with remote repositories on GitHub. The tests will cover various aspects of the utility, including forking repositories, creating branches, making commits, and creating pull requests.
 
-## Definitions:
+## Definitions
 
 - **Issue**: it is a Github-issue
 - **Upstream Repo**: the original GitHub repository (often the main project you forked from)
@@ -17,7 +17,7 @@ The motivation behind these system tests is to ensure that the `qs` utility work
 - **Upstream Github Account**: it is a Github-account used for access for Upstream Repo. It will be provided with a token that has access to the Upstream Repo
 - **Fork Github Account**: it is a Github-account used for access for Fork Repo. It will be provided with a token that has access to the Fork Repo
 - **Remote**: it is a reference to some repo we can push to or pull from. It is a URL of the repo on GitHub
-   - it is not a branch  
+  - it is not a branch
 - **Upstream Remote**: it is remote leading to `Upstream Repo`. Lives in the clone repo
 - **Origin Remote**: it is remote leading to Fork repo. Lives in the clone repo
 - **Fork Branch**: it is a branch in fork repo. Lives on the GitHub server
@@ -41,52 +41,53 @@ The motivation behind these system tests is to ensure that the `qs` utility work
 - RepoName: TestID-YYMMDDhhmmss
   - TestID is a unique identifier for the test
   - YYMMDDhhmmss is the date and time when the test was run
-- UPSTREAM_GH_ACCOUNT: it is environment variable used to set the GitHub account for the `Upstream Repo`
-- UPSTREAM_GH_TOKEN: it is environment variable used to set the token for GitHub account of the `Upstream Repo`
-- FORK_GH_ACCOUNT: it is environment variable used to set the GitHub account for the `Fork Repo`
-- FORK_GH_TOKEN: it is environment variable used to set the token for GitHub account of the `Fork Repo`
+- Environment variables:
+  - `UPSTREAM_GH_ACCOUNT`: it is environment variable used to set the GitHub account for the `Upstream Repo`
+  - `UPSTREAM_GH_TOKEN`: it is environment variable used to set the token for GitHub account of the `Upstream Repo`
+  - `FORK_GH_ACCOUNT`: it is environment variable used to set the GitHub account for the `Fork Repo`
+  - `FORK_GH_TOKEN`: it is environment variable used to set the token for GitHub account of the `Fork Repo`
 - Upstream repo path: github.com/{{.UPSTREAM_GH_ACCOUNT }}/{{.RepoName}}
 - Fork repo path: github.com/{{.FORK_GH_ACCOUNT}}/{{.RepoName}}
 - Clone repo path: ./.testdata/RepoName
-- Use cases:
-  - qs fork:
-    UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null} If ForkState == Null && UpstreamState == OK {remotes.origin = UPSTREAM_REPO_URL }
-    +-----------------------------+---------------+-----------+---------------------------------------------------------------------------------------------+
-    | Name                        | UpstreamState | ForkState | Expected Output                                                                             |
-    +-----------------------------+---------------+-----------+---------------------------------------------------------------------------------------------+
-    | Fork does not exist         | OK            | Null      | Fork repo created                                                                           |
-    | Fork exists                 | OK            | OK        | Adjusted remotes of the clone repo (origin → fork, upstream → upstream)                     |
-    | No origin remote            | Null          | Null      | Error message: "origin remote not found"                                                    |
-    +-----------------------------+---------------+-----------+---------------------------------------------------------------------------------------------+
-  - qs dev:
-    UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null}, DevBranchExists                                                                                                             | Expected Output                                            |
-    +-----------------------------+---------------+-----------+-----------------+---------------------------------------------------------------------------+
-    | Name                        | UpstreamState | ForkState | DevBranchExists | Expected Output                                                           |
-    +-----------------------------+---------------+-----------+-----------------+---------------------------------------------------------------------------+
-    | New dev branch needed       | OK            | OK        | false           | New dev branch is created in both clone and fork repos                    |
-    | Dev branch exists           | OK            | OK        | true            | New dev branch is not created                                             |
-    | Fork missing, branch missing| OK            | Null      | false           | New dev branch is created in both clone and upstream repos                |
-    | Fork missing, branch exists | OK            | Null      | true            | New dev branch is not created                                             |
-    +-----------------------------+---------------+-----------+-----------------+---------------------------------------------------------------------------+
-  - qs pr:
-    UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null}, SyncState{Synchronized, ForkChanged, CloneChanged, BothChanged, BothChangedConflict, DoesntTrackOrigin} DoesntTrackOrigin means state when dev branch tracks non-origin remote 
-    +-----------------------------+---------------+-----------+-------------------+-------------------------------------------------------------------------+
-    | Name                        | UpstreamState | ForkState | SyncState         | Expected Output                                                         |
-    +-----------------------------+---------------+-----------+-------------------+-------------------------------------------------------------------------+
-    | Basic                       | OK            | OK        | Synchronized      | New pull request is created in upstream repo                            |
-    | Upstream missing            | OK            | Null      | Synchronized      | New pull request is created in upstream repo                            |
-    | Dev branch out of date      | OK            | OK        | ForkChanged       | Error message: "This branch is out-of-date. Merge automatically [y/n]?" |
-    | Wrong branch checked out    | OK            | OK        | DoesntTrackOrigin | Error message: "You are not on dev branch"                              |
-    +-----------------------------+---------------+-----------+-------------------+-------------------------------------------------------------------------+    
-  - qs d
-  - qs u
 
+## Use cases
 
-## Implementation
+qs fork
 
-### File structure
+UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null} If ForkState == Null && UpstreamState == OK {remotes.origin = UPSTREAM_REPO_URL }
 
-1. `./internal/systrun/provide.go`
+| Name                | UpstreamState | ForkState | Expected Output                                                         |
+|---------------------|---------------|-----------|-------------------------------------------------------------------------|
+| Fork does not exist | OK            | Null      | Fork repo created                                                       |
+| Fork exists         | OK            | OK        | Adjusted remotes of the clone repo (origin → fork, upstream → upstream) |
+| No origin remote    | Null          | Null      | Error message: "origin remote not found"                                |
+
+qs dev
+
+UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null}, DevBranchExists                                                                                                             | Expected Output                                            |
+
+| Name                         | UpstreamState | ForkState | DevBranchExists | Expected Output                                            |
+|------------------------------|---------------|-----------|-----------------|------------------------------------------------------------|
+| New dev branch needed        | OK            | OK        | false           | New dev branch is created in both clone and fork repos     |
+| Dev branch exists            | OK            | OK        | true            | New dev branch is not created                              |
+| Fork missing, branch missing | OK            | Null      | false           | New dev branch is created in both clone and upstream repos |
+| Fork missing, branch exists  | OK            | Null      | true            | New dev branch is not created                              |
+
+qs pr
+
+UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null}, SyncState{Synchronized, ForkChanged, CloneChanged, BothChanged, BothChangedConflict, DoesntTrackOrigin} DoesntTrackOrigin means state when dev branch tracks non-origin remote
+
+| Name                     | UpstreamState | ForkState | SyncState         | Expected Output                                                         |
+|--------------------------|---------------|-----------|-------------------|-------------------------------------------------------------------------|
+| Basic                    | OK            | OK        | Synchronized      | New pull request is created in upstream repo                            |
+| Upstream missing         | OK            | Null      | Synchronized      | New pull request is created in upstream repo                            |
+| Dev branch out of date   | OK            | OK        | ForkChanged       | Error message: "This branch is out-of-date. Merge automatically [y/n]?" |
+| Wrong branch checked out | OK            | OK        | DoesntTrackOrigin | Error message: "You are not on dev branch"                              |
+
+## Core files
+
+`./internal/systrun/provide.go`
+
 ```go
 func New(t *testing.T, testConfig *TestConfig) *SystemTest {
     cloneRepoPath := //generate a unique path for the clone repo in .testdata dir of the root of the qs package
@@ -95,7 +96,8 @@ func New(t *testing.T, testConfig *TestConfig) *SystemTest {
 }
 ```
 
-2. `./internal/systrun/impl.go`
+`./internal/systrun/impl.go`
+
 ```go
 func (st *SystemTest) Run() error {
     // Check prerequisites
@@ -128,7 +130,7 @@ func (st *SystemTest) Run() error {
 }
 ```
 
-3. `./internal/systrun/types.go`
+`./internal/systrun/types.go`
 
 ```go
 type SystemTest struct {
@@ -215,7 +217,8 @@ func (e ExpectedUploadResult) Check(cloneRepoPath string) error {
 }
 ```
 
-4. `./internal/systrun/consts.go`
+`./internal/systrun/consts.go`
+
 ```go
 type RemoteState int
 type SyncState int
@@ -236,7 +239,8 @@ const (
 )
 ```
 
-5. `./internal/systrun/impl.go`
+`./internal/systrun/impl.go`
+
 ```go
 // checkExpectations checks expectations after command execution
 func (st *SystemTest) checkExpectations() error {
@@ -254,7 +258,8 @@ func (st *SystemTest) createTestEnvironment() error {
 }
 ```
 
-6. `./internal/systrun/interface.go`
+`./internal/systrun/interface.go`
+
 ```go
 // IExpectation is an interface for expectations in system tests
 type IExpectation interface {
@@ -262,4 +267,3 @@ type IExpectation interface {
 	Check(cloneRepoPath string) error
 }
 ```
-
