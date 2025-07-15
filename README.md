@@ -4,14 +4,8 @@
 
 ### gh    version > 2.27
 
+- How to install: [scoop](https://scoop.sh/#/apps?q=gh) install main/gh
 - https://github.com/cli/cli
-- MSI: https://github.com/cli/cli/releases/tag/v2.3.0
-- chocolatey: choco install ghhttps://github.com/untillpro/qs/blob/main/README.md
-  - https://docs.chocolatey.org/en-us/choco/setup#install-with-cmd.exe
-  - Also
-    - choco install gh
-    - choco install git
-    - choco install golang
 
 ### git
 
@@ -22,9 +16,13 @@
 
 For linux additionally:   sudo apt install xclip
 
+---
+
 ## Installation
 
 go install github.com/untillpro/qs@latest
+
+---
 
 ## Basic usage
 
@@ -39,8 +37,8 @@ go install github.com/untillpro/qs@latest
 
 - `qs fork`  		            : Forks repo to user's account and creates upstream
 - `qs dev repo-name`        : Make new dev branch with name repo-name
-                              Repo-name can be copied as 
-                                - [Name and Permanent link] from Project Kaiser task. 
+                              Repo-name can be copied as
+                                - [Name and Permanent link] from Project Kaiser task.
                                 - URL of github issue with issue number.
                               If a buffer contains link on issue number, qs dev creates brnach and links it to github issue
 
@@ -85,20 +83,15 @@ Error: JIRA API token not found. Please set environment variable JIRA_API_TOKEN.
   
 > **Note**
 
-- `qs u` takes comment from clipboard. If current branch is "main/master", 
-         and message is empty or very short (<3 symbols), qs willask to enter message.
-         If the message is too short, it shows error:
-                ----  Too short comment not allowed! ---
+- `qs u` takes comment from clipboard. If current branch is "main/master",
+  and message is empty or very short (<3 symbols), qs willask to enter message.
+  If the message is too short, it shows error:
+     ----  Too short comment not allowed! ---
 
 ## Prevent large commits
 
-Command 'qs dev' creates a developer branch and after success, it shows the following question:
+The maximum limits for commits are:
 
-```bash
-   Git pre-commit hook, preventing commit large files does not exist.
-   Do you want to set hook(y/n)?
-```
-
-- On 'y', qs creates github local pre-commit hook script for current repository.
-
-If local pre-commit hook found, 'qs dev' does not asks to create the hook.
+- **Total file size**: 100,000 bytes (~100KB) for all files combined
+- **Number of files**: 200 files maximum
+- **File exclusions**: Files with `.wasm` extension are excluded from size calculations
