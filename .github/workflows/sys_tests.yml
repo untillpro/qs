@@ -10,15 +10,14 @@ on:
 
 jobs:
   system-tests:
-    secrets: inherit
     name: Run System Tests
+    secrets: inherit
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
       max-parallel: 1
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
