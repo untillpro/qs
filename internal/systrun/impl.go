@@ -332,9 +332,9 @@ func acceptPendingInvitations(token string) error {
 		defer acceptResp.Body.Close()
 
 		if acceptResp.StatusCode == 204 {
-			logger.Error("Accepted invitation ID %d\n", invite.ID)
+			logger.Error(fmt.Sprintf("Accepted invitation ID %d\n", invite.ID))
 		} else {
-			fmt.Printf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status)
+			fmt.Printf(fmt.Sprintf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status))
 		}
 
 		if helper.IsTest() {
@@ -905,7 +905,7 @@ func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr st
 }
 
 func (st *SystemTest) validateStdout(stdout string) error {
-	_, _ = fmt.Fprintln(os.Stdout, stdout)
+	logger.Verbose(stdout)
 
 	// Check stdout if specified
 	if st.cfg.ExpectedStdout != "" {
@@ -919,7 +919,7 @@ func (st *SystemTest) validateStdout(stdout string) error {
 }
 
 func (st *SystemTest) validateStderr(stderr string) error {
-	_, _ = fmt.Fprintln(os.Stderr, stderr)
+	logger.Error(stderr)
 
 	// Check stderr if specified
 	if st.cfg.ExpectedStderr != "" {

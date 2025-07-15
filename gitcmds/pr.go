@@ -21,7 +21,19 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// PR is not created yet
-	prExists, err := doesPrExist(wd)
+	currentBranchName := GetCurrentBranchName(wd)
+
+	// Fetch notes from origin before checking if they exist
+	_, _, err := new(exec.PipedExec).
+		Command(git, fetch, origin, "refs/notes/*:refs/notes/*").
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Warning("Failed to fetch notes: %v", err)
+		// Continue anyway, as notes might exist locally
+	}
+
+	prExists, err := doesPrExist(wd, currentBranchName)
 	if err != nil {
 		return err
 	}
@@ -29,29 +41,28 @@ func Pr(wd string, needDraft bool) error {
 		return errors.New("Pull request already exists for this branch")
 	}
 
-	parentrepo, err := GetParentRepoName(wd)
+	parentRepoName, err := GetParentRepoName(wd)
 	if err != nil {
 		return err
 	}
-	if len(parentrepo) == 0 {
+	if len(parentRepoName) == 0 {
 		return errors.New("You are in trunk. PR is only allowed from forked branch.")
 	}
-	curBranch := GetCurrentBranchName(wd)
-	isMainBranch := (curBranch == "main") || (curBranch == "master")
+	isMainBranch := (currentBranchName == "main") || (currentBranchName == "master")
 	if isMainBranch {
-		return fmt.Errorf("Unable to create a pull request on branch '%s'. Use 'qs dev <branch_name>.", curBranch)
+		return fmt.Errorf("Unable to create a pull request on branch '%s'. Use 'qs dev <branch_name>.", currentBranchName)
 	}
 
 	var response string
 	if UpstreamNotExist(wd) {
-		fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
+		fmt.Print("Upstream not found.\nRepository " + parentRepoName + " will be added as upstream. Agree[y/n]?")
 		_, _ = fmt.Scanln(&response)
 		if response != pushYes {
 			fmt.Print(pushFail)
 			return nil
 		}
 		response = ""
-		if err := MakeUpstreamForBranch(wd, parentrepo); err != nil {
+		if err := MakeUpstreamForBranch(wd, parentRepoName); err != nil {
 			return fmt.Errorf("failed to set upstream: %w", err)
 		}
 	}
@@ -66,7 +77,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Create a new branch for the PR
-	prBranchName, err := createPRBranch(wd)
+	prBranchName, err := createPRBranch(wd, currentBranchName)
 	if err != nil {
 		return fmt.Errorf("failed to create PR branch: %w", err)
 	}
@@ -76,10 +87,10 @@ func Pr(wd string, needDraft bool) error {
 		return errors.New("Error: No notes found in dev branch")
 	}
 
-	stdout, stderr, err := MakePR(wd, prBranchName, notes, needDraft)
+	stdout, stderr, err := MakePR(wd, parentRepoName, prBranchName, notes, needDraft)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stdout, stdout)
-		_, _ = fmt.Fprintln(os.Stderr, stderr)
+		logger.Verbose(stdout)
+		logger.Error(stderr)
 
 		return fmt.Errorf("failed to create PR: %w", err)
 	}
@@ -88,13 +99,12 @@ func Pr(wd string, needDraft bool) error {
 }
 
 // doesPrExist checks if a pull request exists for the current branch.
-func doesPrExist(wd string) (bool, error) {
-	branchName := GetCurrentBranchName(wd)
+func doesPrExist(wd, currentBranchName string) (bool, error) {
 	var prExists bool
 
 	err := helper.Retry(func() error {
 		stdout, _, err := new(exec.PipedExec).
-			Command("gh", "pr", "list", "--head", branchName).
+			Command("gh", "pr", "list", "--head", currentBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -128,10 +138,9 @@ func doesPrExist(wd string) (bool, error) {
 // Returns:
 // - name of the PR branch
 // - error if any operation fails
-func createPRBranch(wd string) (string, error) {
+func createPRBranch(wd, currentBranchName string) (string, error) {
 	// Save current branch name (dev branch)
-	devBranchName := GetCurrentBranchName(wd)
-	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
+	prBranchName := strings.TrimSuffix(currentBranchName, "-dev") + "-pr"
 
 	upstreamRemote := "upstream"
 	upstreamExists, err := HasRemote(wd, upstreamRemote)
@@ -172,8 +181,9 @@ func createPRBranch(wd string) (string, error) {
 		return fetchErr
 	}) // Retry up to 3 times for fetching notes
 	if err != nil {
-		logger.Error(stdout)
+		logger.Verbose(stdout)
 		logger.Error(stderr)
+
 		return "", fmt.Errorf("failed to fetch notes: %w", err)
 	}
 
@@ -185,7 +195,7 @@ func createPRBranch(wd string) (string, error) {
 		return "", errors.New("Error: No notes found in dev branch")
 	}
 	_, _, err = new(exec.PipedExec).
-		Command("git", "checkout", devBranchName).
+		Command("git", "checkout", currentBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -223,7 +233,7 @@ func createPRBranch(wd string) (string, error) {
 
 	// Step 5: Squash merge dev into PR branch
 	_, _, err = new(exec.PipedExec).
-		Command("git", "merge", "--squash", devBranchName).
+		Command("git", "merge", "--squash", currentBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -295,7 +305,7 @@ func createPRBranch(wd string) (string, error) {
 
 	// Step 10: Delete dev branch locally
 	_, _, err = new(exec.PipedExec).
-		Command("git", "branch", "-D", devBranchName).
+		Command("git", "branch", "-D", currentBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -305,7 +315,7 @@ func createPRBranch(wd string) (string, error) {
 	// Step 11: Delete dev branch from origin
 	err = helper.Retry(func() error {
 		_, _, deleteErr := new(exec.PipedExec).
-			Command("git", "push", "origin", "--delete", devBranchName).
+			Command("git", "push", "origin", "--delete", currentBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		return deleteErr
@@ -318,7 +328,7 @@ func createPRBranch(wd string) (string, error) {
 	err = helper.Retry(func() error {
 		var deleteErr error
 		_, stderr, deleteErr = new(exec.PipedExec).
-			Command("git", "push", "upstream", "--delete", devBranchName).
+			Command("git", "push", "upstream", "--delete", currentBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		return deleteErr

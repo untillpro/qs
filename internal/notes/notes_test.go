@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/untillpro/qs/internal/notes"
-	"github.com/untillpro/qs/internal/types"
 )
 
 func TestSerialize(t *testing.T) {
@@ -14,21 +13,21 @@ func TestSerialize(t *testing.T) {
 		name           string
 		githubIssueURL string
 		jiraTicketURL  string
-		branchType     types.BranchType
+		branchType     notes.BranchType
 		wantErr        bool
 	}{
 		{
 			name:           "Basic serialization",
 			githubIssueURL: "https://github.com/org/repo/issues/1",
 			jiraTicketURL:  "https://jira.org/browse/ISSUE-1",
-			branchType:     types.BranchTypeDev,
+			branchType:     notes.BranchTypeDev,
 			wantErr:        false,
 		},
 		{
 			name:           "Empty URLs",
 			githubIssueURL: "",
 			jiraTicketURL:  "",
-			branchType:     types.BranchTypePr,
+			branchType:     notes.BranchTypePr,
 			wantErr:        false,
 		},
 	}
@@ -53,7 +52,7 @@ func TestSerialize(t *testing.T) {
 			// Verify the contents
 			require.Equal(t, tt.githubIssueURL, n.GithubIssueURL)
 			require.Equal(t, tt.jiraTicketURL, n.JiraTicketURL)
-			require.Equal(t, int(tt.branchType), n.BranchType)
+			require.Equal(t, tt.branchType, n.BranchType)
 			require.NotEmpty(t, n.Version)
 		})
 	}

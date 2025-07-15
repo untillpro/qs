@@ -22,24 +22,14 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	contextPkg "github.com/untillpro/qs/internal/context"
-	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/notes"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
 func Dev(cmd *cobra.Command, wd string, args []string) error {
-	globalConfig()
 	_, err := gitcmds.CheckIfGitRepo(wd)
 	if err != nil {
 		return err
-	}
-
-	skipQsVerCheck, _ := strconv.ParseBool(os.Getenv(EnvSkipQsVersionCheck))
-	if !skipQsVerCheck && !helper.CheckQsVer() {
-		return fmt.Errorf("qs version check failed")
-	}
-	if !helper.CheckGH() {
-		return fmt.Errorf("GitHub CLI check failed")
 	}
 
 	// qs dev -d is running
@@ -56,12 +46,13 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		args = append(args, clipargs)
 	}
 
+	parentRepo, err := gitcmds.GetParentRepoName(wd)
+	if err != nil {
+		return err
+	}
+
 	noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == trueStr)
 	if !noForkAllowed {
-		parentRepo, err := gitcmds.GetParentRepoName(wd)
-		if err != nil {
-			return err
-		}
 		if len(parentRepo) == 0 { // main repository, not forked
 			repo, org, err := gitcmds.GetRepoAndOrgName(wd)
 			if err != nil {
@@ -117,7 +108,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
 		_, _ = fmt.Scanln(&response)
 		if response == pushYes {
-			branch, notes, err = gitcmds.DevIssue(wd, githubIssueURL, issueNum, args...)
+			branch, notes, err = gitcmds.DevIssue(wd, parentRepo, githubIssueURL, issueNum, args...)
 			if err != nil {
 				return err
 			}
@@ -154,20 +145,16 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	case pushYes:
 		// Remote developer branch, linked to issue is created
 		var response string
-		parentrepo, err := gitcmds.GetParentRepoName(wd)
-		if err != nil {
-			return err
-		}
-		if len(parentrepo) > 0 {
+		if len(parentRepo) > 0 {
 			if gitcmds.UpstreamNotExist(wd) {
-				fmt.Print("Upstream not found.\nRepository " + parentrepo + " will be added as upstream. Agree[y/n]?")
+				fmt.Print("Upstream not found.\nRepository " + parentRepo + " will be added as upstream. Agree[y/n]?")
 				_, _ = fmt.Scanln(&response)
 				if response != pushYes {
 					fmt.Print(pushFail)
 					return nil
 				}
 				response = ""
-				if err := gitcmds.MakeUpstreamForBranch(wd, parentrepo); err != nil {
+				if err := gitcmds.MakeUpstreamForBranch(wd, parentRepo); err != nil {
 					return err
 				}
 			}
@@ -549,15 +536,6 @@ func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
 
 	// No matching argument was found
 	return "", false
-}
-
-func globalConfig() {
-	logLevel := logger.LogLevelInfo
-	if Verbose {
-		logLevel = logger.LogLevelVerbose
-	}
-
-	logger.SetLogLevel(logLevel)
 }
 
 func deleteBranches(wd string) error {

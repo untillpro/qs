@@ -113,7 +113,7 @@ func Status(wd string) error {
 		RunToStrings()
 	if err != nil {
 		if len(stderr) > 0 {
-			_, _ = fmt.Fprintln(os.Stderr, stderr)
+			logger.Error(stderr)
 		}
 		if strings.Contains(err.Error(), err128) {
 			return errors.New("this is not a git repository")
@@ -123,7 +123,7 @@ func Status(wd string) error {
 	if err != nil {
 		return fmt.Errorf("git remote -v failed: %w", err)
 	}
-	_, _ = fmt.Fprintln(os.Stdout, stdout)
+	logger.Verbose(stdout)
 
 	return new(exec.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall").
@@ -662,8 +662,8 @@ func GetMainBranch(wd string) (string, error) {
 		Command("grep", "-E", "(/main|/master)([^a-zA-Z0-9]|$)").
 		RunToStrings()
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, stderr)
-		_, _ = fmt.Fprintln(os.Stderr, stdout)
+		logger.Error(stderr)
+		logger.Verbose(stdout)
 
 		return "", err
 	}
@@ -774,7 +774,7 @@ func GetIssueRepoFromURL(url string) (repoName string) {
 }
 
 // DevIssue create link between upstream Guthub issue and dev branch
-func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
+func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
 	repo, org, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
@@ -786,7 +786,6 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 
 	strIssueNum := strconv.Itoa(issueNumber)
 	myrepo := org + slash + repo
-	parentrepo, err := GetParentRepoName(wd)
 	if err != nil {
 		return "", nil, err
 	}
@@ -795,7 +794,7 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 		issueURL := args[0]
 		issueRepo := GetIssueRepoFromURL(issueURL)
 		if len(issueRepo) > 0 {
-			parentrepo = issueRepo
+			parentRepo = issueRepo
 		}
 	}
 
@@ -832,7 +831,7 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 	}
 
 	stdout, stderr, err = new(exec.PipedExec).
-		Command("gh", "issue", "develop", strIssueNum, "--branch-repo", myrepo, "--repo="+parentrepo, "--name", branchName, "--base", mainBranch).
+		Command("gh", "issue", "develop", strIssueNum, "--branch-repo", myrepo, "--repo="+parentRepo, "--name", branchName, "--base", mainBranch).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -852,7 +851,7 @@ func DevIssue(wd string, githubIssueURL string, issueNumber int, args ...string)
 		return "", nil, errors.New("Can not create branch for issue")
 	}
 	// old-style notes
-	issueName := GetIssueNameByNumber(strIssueNum, parentrepo)
+	issueName := GetIssueNameByNumber(strIssueNum, parentRepo)
 	comment := IssuePRTtilePrefix + " '" + issueName + "' "
 	body := ""
 	if len(issueName) > 0 {
@@ -1048,7 +1047,7 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 		return fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	_, stderr, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "checkout", mainBranch).
 		WorkingDir(wd).
 		RunToStrings()
@@ -1107,32 +1106,50 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 	if err := AddNotes(wd, comments); err != nil {
 		return err
 	}
-	// Push notes to origin
-	err = new(exec.PipedExec).
-		Command(git, push, origin, "refs/notes/*:refs/notes/*").
+
+	// Fetch notes from origin before pushing
+	stdout, stderr, err = new(exec.PipedExec).
+		Command(git, fetch, "--force", origin, "refs/notes/*:refs/notes/*").
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
+		logger.Error(stderr)
+
+		return fmt.Errorf("failed to fetch notes: %w, stdout: %s", err, stdout)
+	}
+
+	// Push notes to origin with retry
+	err = helper.Retry(func() error {
+		stdout, stderr, err = new(exec.PipedExec).
+			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			RunToStrings()
+
 		return err
+	})
+	if err != nil {
+		logger.Error(stderr)
+
+		return fmt.Errorf("failed to push notes to origin: %w", err)
 	}
 	if helper.IsTest() {
 		helper.Delay()
 	}
 
-	var stdout string
+	// Push branch to origin with retry
 	err = helper.Retry(func() error {
-		var pushErr error
-		stdout, stderr, pushErr = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, push, "-u", origin, branchName).
 			WorkingDir(wd).
 			RunToStrings()
-		return pushErr
+
+		return err
 	})
 	if err != nil {
 		logger.Error(stderr)
-		return err
+
+		return fmt.Errorf("failed to push branch to origin: %w, stdout: %s", err, stdout)
 	}
-	logger.Error(stdout)
 
 	if helper.IsTest() {
 		helper.Delay()
@@ -1462,7 +1479,7 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func MakePR(wd, parentRepoName, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
@@ -1490,11 +1507,6 @@ func MakePR(wd, prBranchName string, notes []string, asDraft bool) (stdout strin
 		b = b + caret + url
 	}
 	strBody := fmt.Sprintln(b)
-
-	parentRepoName, err := GetParentRepoName(wd)
-	if err != nil {
-		return "", "", err
-	}
 
 	_, forkAccount, err := GetRepoAndOrgName(wd)
 	if err != nil {

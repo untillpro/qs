@@ -7,7 +7,6 @@ import (
 )
 
 func Version() error {
-	globalConfig()
 	ver, err := helper.GetInstalledQSVersion()
 	if err != nil {
 		return err
