@@ -49,6 +49,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xclip
 
+      # ───────────────────────────────────────── macOS only ────────────────────────────────────────────
+      - name: Install required tools on macOS
+        if: runner.os == 'macOS'
+        run: |
+          # Install gawk (GNU awk) which is required by qs
+          brew install gawk
+          # Install jq if not already available
+          brew install jq
+
       - name: Configure git identity
         run: |
           git config --global user.name "GitHub Actions Bot"
@@ -65,9 +74,9 @@ jobs:
         if: runner.os != 'Windows'
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
-          FORK_GH_TOKEN:    ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT:    ${{ vars.FORK_GH_ACCOUNT }}
+          FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+          UPSTREAM_GH_ACCOUNT: ${{ secrets.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ secrets.FORK_GH_ACCOUNT }}
         shell: bash
         run: |
           echo "UPSTREAM_GH_ACCOUNT=$UPSTREAM_GH_ACCOUNT"

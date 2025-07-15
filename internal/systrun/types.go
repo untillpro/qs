@@ -131,7 +131,7 @@ func ExpectationForkExists(ctx context.Context) error {
 
 	// Check if the remote named "origin" exists
 	if _, err := repo.Remote("origin"); err != nil {
-		return fmt.Errorf("origixn remote not found after fork command: %w", err)
+		return fmt.Errorf("origin remote not found after fork command: %w", err)
 	}
 
 	// Check if the remote URL accessible
