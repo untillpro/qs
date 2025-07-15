@@ -332,9 +332,9 @@ func acceptPendingInvitations(token string) error {
 		defer acceptResp.Body.Close()
 
 		if acceptResp.StatusCode == 204 {
-			logger.Error("Accepted invitation ID %d\n", invite.ID)
+			logger.Error(fmt.Sprintf("Accepted invitation ID %d\n", invite.ID))
 		} else {
-			fmt.Printf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status)
+			fmt.Printf(fmt.Sprintf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status))
 		}
 
 		if helper.IsTest() {
