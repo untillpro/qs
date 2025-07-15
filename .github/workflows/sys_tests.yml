@@ -64,8 +64,8 @@ jobs:
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN:    ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT:    ${{ env.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT:    ${{ vars.FORK_GH_ACCOUNT }}
         shell: bash
         run: |
           echo "UPSTREAM_GH_ACCOUNT=$UPSTREAM_GH_ACCOUNT"
@@ -78,8 +78,8 @@ jobs:
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN:    ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT:    ${{ env.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT:    ${{ vars.FORK_GH_ACCOUNT }}
         shell: pwsh
         run: |
           Write-Host "UPSTREAM_GH_ACCOUNT=$env:UPSTREAM_GH_ACCOUNT"
@@ -92,8 +92,8 @@ jobs:
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ env.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ vars.FORK_GH_ACCOUNT }}
         shell: bash
         run: |
           if [ -z "$UPSTREAM_GH_TOKEN" ] || [ -z "$FORK_GH_TOKEN" ] || [ -z "$UPSTREAM_GH_ACCOUNT" ] || [ -z "$FORK_GH_ACCOUNT" ]; then
@@ -106,8 +106,8 @@ jobs:
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ env.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ vars.FORK_GH_ACCOUNT }}
         shell: pwsh
         run: |
           if (-not $env:UPSTREAM_GH_TOKEN -or -not $env:FORK_GH_TOKEN -or -not $env:UPSTREAM_GH_ACCOUNT -or -not $env:FORK_GH_ACCOUNT) {
@@ -120,15 +120,15 @@ jobs:
         env:
           UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
           FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
-          UPSTREAM_GH_ACCOUNT: ${{ env.UPSTREAM_GH_ACCOUNT }}
-          FORK_GH_ACCOUNT: ${{ env.FORK_GH_ACCOUNT }}
+          UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
+          FORK_GH_ACCOUNT: ${{ vars.FORK_GH_ACCOUNT }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
-          GH_TIMEOUT_MS: ${{ env.GH_TIMEOUT_MS }}
-          QS_RETRY_DELAY_MS: ${{ env.QS_RETRY_DELAY_MS }}
-          QS_MAX_RETRY_DELAY_MS: ${{ env.QS_MAX_RETRY_DELAY_MS }}
-          QS_MAX_RETRIES: ${{ env.QS_MAX_RETRIES }}
+          GH_TIMEOUT_MS: ${{ vars.GH_TIMEOUT_MS }}
+          QS_RETRY_DELAY_MS: ${{ vars.QS_RETRY_DELAY_MS }}
+          QS_MAX_RETRY_DELAY_MS: ${{ vars.QS_MAX_RETRY_DELAY_MS }}
+          QS_MAX_RETRIES: ${{ vars.QS_MAX_RETRIES }}
           QS_SKIP_QS_VERSION_CHECK: "true"
         run: |
           go test -v sys_test.go
