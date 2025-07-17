@@ -19,6 +19,8 @@ func Pr(wd string, needDraft bool) error {
 	if err != nil {
 		return err
 	}
+
+	logger.Verbose(fmt.Sprintf("branch type is %s", branchType.String()))
 	if branchType == notesPkg.BranchTypeUnknown {
 		return errors.New("You must be on dev or pr branch")
 	}
@@ -40,7 +42,7 @@ func Pr(wd string, needDraft bool) error {
 	if branchType == notesPkg.BranchTypeDev {
 		// Fetch notes from origin before checking if they exist
 		_, _, err := new(exec.PipedExec).
-			Command(git, fetch, origin, "refs/notes/*:refs/notes/*").
+			Command(git, fetch, origin, "--force", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -103,7 +105,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Extract notes before any operations
-	notes, err := GetNotes(wd)
+	notes, err := GetNotes(wd, currentBranchName)
 	if err != nil {
 		return err
 	}
@@ -325,7 +327,7 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 	// Step 2: Checkout dev branch
 
 	// extract notes from dev branch before any operations
-	notes, err := GetNotes(wd)
+	notes, err := GetNotes(wd, currentBranchName)
 	if err != nil {
 		return "", err
 	}

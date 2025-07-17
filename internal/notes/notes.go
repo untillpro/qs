@@ -24,6 +24,19 @@ const (
 	BranchTypePr
 )
 
+func (bt BranchType) String() string {
+	switch bt {
+	case BranchTypeUnknown:
+		return "unknown"
+	case BranchTypeDev:
+		return "dev"
+	case BranchTypePr:
+		return "pr"
+	default:
+		return "unknown"
+	}
+}
+
 // Notes represents the structure for storing metadata related to branch.
 type Notes struct {
 	// Version indicates the version of the Notes structure.

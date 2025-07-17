@@ -996,7 +996,12 @@ func buildDevBranchName(issueURL string) (string, error) {
 
 // GetBranchType returns branch type based on notes or branch name
 func GetBranchType(wd string) (notesPkg.BranchType, error) {
-	notes, err := GetNotes(wd)
+	currentBranchName, err := GetCurrentBranchName(wd)
+	if err != nil {
+		return notesPkg.BranchTypeUnknown, err
+	}
+
+	notes, err := GetNotes(wd, currentBranchName)
 	if err != nil {
 		return notesPkg.BranchTypeUnknown, err
 	}
@@ -1010,11 +1015,6 @@ func GetBranchType(wd string) (notesPkg.BranchType, error) {
 
 	if notesObj != nil {
 		return notesObj.BranchType, nil
-	}
-
-	currentBranchName, err := GetCurrentBranchName(wd)
-	if err != nil {
-		return notesPkg.BranchTypeUnknown, err
 	}
 
 	return getBranchTypeByName(currentBranchName), nil
@@ -1176,7 +1176,7 @@ func AddNotes(wd string, notes []string) error {
 		str := strings.TrimSpace(s)
 		if len(str) > 0 {
 			err := new(exec.PipedExec).
-				Command(git, "notes", "append", "-m", s).
+				Command(git, "notes", "append", "-m", str).
 				WorkingDir(wd).
 				Run(os.Stdout, os.Stdout)
 			if err != nil {
@@ -1188,29 +1188,51 @@ func AddNotes(wd string, notes []string) error {
 	return nil
 }
 
-func GetNotes(wd string) (notes []string, err error) {
+func GetNotes(wd, branchName string) (notes []string, err error) {
 	mainBranchName, err := GetMainBranch(wd)
 	if err != nil {
-		return notes, err
+		return nil, fmt.Errorf("failed to get main branch: %w", err)
 	}
-
+	
+	// get all revision of the branch which does not belong to main branch
 	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "log", "--pretty=format:%N", "HEAD", "^"+mainBranchName).
+		Command(git, "rev-list", mainBranchName+".."+branchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		logger.Error(stderr)
 
-		return notes, fmt.Errorf("failed to get notes: %v", err)
+		return notes, fmt.Errorf("failed to get commit list: %v", err)
 	}
+	if len(stdout) == 0 {
+		return notes, errors.New("error: No commits found in current branch")
+	}
+	
+	// get all notes from revisions got from a previous step
+	for _, rev := range strings.Split(strings.TrimSpace(stdout), caret) {
+		// get notes from each revision
+		stdout, stderr, err := new(exec.PipedExec).
+			Command(git, "notes", "show", rev).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			if strings.Contains(stderr, "no note found") {
+				continue
+			}
+			logger.Error(stderr)
 
-	rawNotes := strings.Split(stdout, caret)
-	for _, rawNote := range rawNotes {
-		note := strings.TrimSpace(rawNote)
-		if len(note) > 0 {
-			notes = append(notes, note)
+			return notes, fmt.Errorf("failed to get notes: %v", err)
+		}
+		// split notes into lines
+		rawNotes := strings.Split(stdout, caret)
+		for _, rawNote := range rawNotes {
+			note := strings.TrimSpace(rawNote)
+			if len(note) > 0 {
+				notes = append(notes, note)
+			}
 		}
 	}
+	
 	if len(notes) == 0 {
 		return notes, errors.New("error: No notes found in current branch")
 	}
