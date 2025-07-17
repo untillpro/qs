@@ -407,7 +407,7 @@ func Download(wd string) error {
 		// Fetch notes from origin
 		err := helper.Retry(func() error {
 			return new(exec.PipedExec).
-				Command(git, fetch, "origin", "refs/notes/*:refs/notes/*").
+				Command(git, fetch, "origin", "--force", "refs/notes/*:refs/notes/*").
 				WorkingDir(wd).
 				Run(os.Stdout, os.Stdout)
 		})

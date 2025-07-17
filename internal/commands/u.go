@@ -22,7 +22,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 
 	// Fetch notes from origin
 	_, _, err := new(exec.PipedExec).
-		Command("git", "fetch", "origin", "refs/notes/*:refs/notes/*").
+		Command("git", "fetch", "origin", "--force", "refs/notes/*:refs/notes/*").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -39,10 +39,6 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	branchType, err := gitcmds.GetBranchType(wd)
 	if err != nil {
 		return err
-	}
-	// if branch type is unknown, we cannot proceed
-	if branchType == notesPkg.BranchTypeUnknown {
-		return errors.New("You must be on either a pr or dev branch")
 	}
 
 	// calculate total length of commit message parts
@@ -67,6 +63,8 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 			return errors.New("Commit message is missing or too short (minimum 8 characters)")
 		}
 
+		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
+	default:
 		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 	}
 	// put commit message to context

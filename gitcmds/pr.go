@@ -312,7 +312,7 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 	err = helper.Retry(func() error {
 		var fetchErr error
 		stdout, stderr, fetchErr = new(exec.PipedExec).
-			Command("git", "fetch", "origin", "refs/notes/*:refs/notes/*").
+			Command("git", "fetch", "origin", "--force", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
 			RunToStrings()
 		return fetchErr
