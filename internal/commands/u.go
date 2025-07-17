@@ -22,7 +22,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 
 	// Fetch notes from origin
 	_, _, err := new(exec.PipedExec).
-		Command("git", "fetch", "origin", "refs/notes/*:refs/notes/*").
+		Command("git", "fetch", "origin", "--force", "refs/notes/*:refs/notes/*").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
