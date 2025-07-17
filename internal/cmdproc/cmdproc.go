@@ -332,7 +332,6 @@ func goAndCatchInterrupt(cmd *cobra.Command, f func(ctx context.Context) (*cobra
 		cancel()
 	case <-ctxWithCancel.Done():
 	}
-	logger.Error("waiting for function to finish...")
 	wg.Wait()
 
 	return cmdExecuted.Context(), err

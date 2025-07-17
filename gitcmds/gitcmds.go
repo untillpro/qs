@@ -149,7 +149,7 @@ func Status(wd string) error {
 func Release(wd string) error {
 
 	// *************************************************
-	logger.Info("Pulling")
+	fmt.Fprintln(os.Stdout, "Pulling")
 	err := new(exec.PipedExec).
 		Command("git", pull).
 		WorkingDir(wd).
@@ -159,7 +159,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Reading current version")
+	fmt.Fprintln(os.Stdout, "Reading current version")
 	currentVersion, err := utils.ReadVersion()
 	if err != nil {
 		return fmt.Errorf("Error reading file 'version': %w", err)
@@ -181,13 +181,13 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Updating 'version' file")
+	fmt.Fprintln(os.Stdout, "Updating 'version' file")
 	if err := targetVersion.Save(); err != nil {
 		return fmt.Errorf("Error saving file 'version': %w", err)
 	}
 
 	// *************************************************
-	logger.Info("Committing target version")
+	fmt.Fprintln(os.Stdout, "Committing target version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + targetVersion.String()}
 		err = new(exec.PipedExec).
@@ -200,7 +200,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Tagging")
+	fmt.Fprintln(os.Stdout, "Tagging")
 	{
 		tagName := "v" + targetVersion.String()
 		n := time.Now()
@@ -215,7 +215,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Bumping version")
+	fmt.Fprintln(os.Stdout, "Bumping version")
 	newVersion := currentVersion
 	{
 		newVersion.Minor++
@@ -226,7 +226,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Committing new version")
+	fmt.Fprintln(os.Stdout, "Committing new version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + newVersion.String()}
 		err = new(exec.PipedExec).
@@ -239,7 +239,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Pushing to origin")
+	fmt.Fprintln(os.Stdout, "Pushing to origin")
 	{
 		params := []string{push, "--follow-tags", origin}
 		err = helper.Retry(func() error {
@@ -302,7 +302,10 @@ func Upload(wd string, commitMessageParts []string) error {
 		return fmt.Errorf("error pulling before push: %w", err)
 	}
 
-	brName := GetCurrentBranchName(wd)
+	brName, err := GetCurrentBranchName(wd)
+	if err != nil {
+		return err
+	}
 	if err := setUpstreamBranch(wd, "origin", brName); err != nil {
 		return fmt.Errorf("failed to set upstream branch: %w", err)
 	}
@@ -609,7 +612,7 @@ func Fork(wd string) (string, error) {
 		return repo, fmt.Errorf("fork verification failed: %w", err)
 	}
 
-	logger.Info("Fork created and verified successfully")
+	fmt.Fprintln(os.Stdout, "Fork created and verified successfully")
 	return repo, nil
 }
 
@@ -831,7 +834,7 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 	}
 
 	stdout, stderr, err = new(exec.PipedExec).
-		Command("gh", "issue", "develop", strIssueNum, "--branch-repo", myrepo, "--repo="+parentRepo, "--name", branchName, "--base", mainBranch).
+		Command("gh", "issue", "develop", strIssueNum, "--branch-repo="+myrepo, "--repo="+parentRepo, "--name="+branchName, "--base="+mainBranch).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -992,22 +995,29 @@ func buildDevBranchName(issueURL string) (string, error) {
 }
 
 // GetBranchType returns branch type based on notes or branch name
-func GetBranchType(wd string) notesPkg.BranchType {
-	notes, ok := GetNotes(wd)
-	if ok {
-		notesObj, ok := notesPkg.Deserialize(notes)
-		if !ok {
-			if isOldStyledBranch(notes) {
-				return notesPkg.BranchTypeDev
-			}
-		}
+func GetBranchType(wd string) (notesPkg.BranchType, error) {
+	notes, err := GetNotes(wd)
+	if err != nil {
+		return notesPkg.BranchTypeUnknown, err
+	}
 
-		if notesObj != nil {
-			return notesObj.BranchType
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		if isOldStyledBranch(notes) {
+			return notesPkg.BranchTypeDev, nil
 		}
 	}
 
-	return getBranchTypeByName(GetCurrentBranchName(wd))
+	if notesObj != nil {
+		return notesObj.BranchType, nil
+	}
+
+	currentBranchName, err := GetCurrentBranchName(wd)
+	if err != nil {
+		return notesPkg.BranchTypeUnknown, err
+	}
+
+	return getBranchTypeByName(currentBranchName), nil
 }
 
 // isOldStyledBranch checks if branch is old styled
@@ -1039,9 +1049,9 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 // Dev creates dev branch and pushes it to origin
 // Parameters:
 // branch - branch name
-// comments - comments for branch
+// notes - notes for branch
 // checkRemoteBranchExistence - if true, checks if branch already exists in remote
-func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bool) error {
+func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf("failed to get main branch: %w", err)
@@ -1093,20 +1103,6 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 		return err
 	}
 
-	// Add empty commit to create commit object and link notes to it
-	err = new(exec.PipedExec).
-		Command(git, "commit", "--allow-empty", "-m", MsgCommitForNotes).
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
-	if err != nil {
-		return err
-	}
-
-	// Add empty commit to create commit object and link notes to it
-	if err := AddNotes(wd, comments); err != nil {
-		return err
-	}
-
 	// Fetch notes from origin before pushing
 	stdout, stderr, err = new(exec.PipedExec).
 		Command(git, fetch, "--force", origin, "refs/notes/*:refs/notes/*").
@@ -1116,6 +1112,19 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 		logger.Error(stderr)
 
 		return fmt.Errorf("failed to fetch notes: %w, stdout: %s", err, stdout)
+	}
+
+	// Add empty commit to for keeping notes
+	err = new(exec.PipedExec).
+		Command(git, "commit", "--allow-empty", "-m", MsgCommitForNotes).
+		WorkingDir(wd).
+		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return err
+	}
+	// Link notes to it
+	if err := AddNotes(wd, notes); err != nil {
+		return err
 	}
 
 	// Push notes to origin with retry
@@ -1158,12 +1167,12 @@ func Dev(wd, branchName string, comments []string, checkRemoteBranchExistence bo
 	return nil
 }
 
-func AddNotes(wd string, comments []string) error {
-	if len(comments) == 0 {
+func AddNotes(wd string, notes []string) error {
+	if len(notes) == 0 {
 		return nil
 	}
 	// Add new Notes
-	for _, s := range comments {
+	for _, s := range notes {
 		str := strings.TrimSpace(s)
 		if len(str) > 0 {
 			err := new(exec.PipedExec).
@@ -1179,27 +1188,34 @@ func AddNotes(wd string, comments []string) error {
 	return nil
 }
 
-func GetNotes(wd string) (notes []string, result bool) {
-	stdout, _, err := new(exec.PipedExec).
-		Command(git, "log", "--pretty=format:%N", "HEAD", "^main").
+func GetNotes(wd string) (notes []string, err error) {
+	mainBranchName, err := GetMainBranch(wd)
+	if err != nil {
+		return notes, err
+	}
+
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "log", "--pretty=format:%N", "HEAD", "^"+mainBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return notes, false
+		logger.Error(stderr)
+
+		return notes, fmt.Errorf("failed to get notes: %v", err)
 	}
 
 	rawNotes := strings.Split(stdout, caret)
-	for _, rawnote := range rawNotes {
-		note := strings.TrimSpace(rawnote)
+	for _, rawNote := range rawNotes {
+		note := strings.TrimSpace(rawNote)
 		if len(note) > 0 {
 			notes = append(notes, note)
 		}
 	}
 	if len(notes) == 0 {
-		return notes, false
+		return notes, errors.New("error: No notes found in current branch")
 	}
 
-	return notes, true
+	return notes, nil
 }
 
 // GetParentRepoName - parent repo of forked
@@ -1257,7 +1273,11 @@ func GetMergedBranchList(wd string) (brlist []string, err error) {
 		return nil, fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	curbr := GetCurrentBranchName(wd)
+	curbr, err := GetCurrentBranchName(wd)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, mbranchstr := range mbrlistraw {
 		arrstr := strings.TrimSpace(mbranchstr)
 		if (strings.TrimSpace(arrstr) != "") && !strings.Contains(arrstr, curbr) && !strings.Contains(arrstr, mainBranch) {
@@ -1396,7 +1416,11 @@ func GetGoneBranchesLocal(wd string) (*[]string, error) {
 		return nil, fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	curbr := GetCurrentBranchName(wd)
+	curbr, err := GetCurrentBranchName(wd)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, mylocalbranch := range mbrlocallist {
 		mybranch := strings.TrimSpace(mylocalbranch)
 		bfound := false
@@ -1479,7 +1503,7 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func MakePR(wd, parentRepoName, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
@@ -1540,27 +1564,13 @@ func MakePR(wd, parentRepoName, prBranchName string, notes []string, asDraft boo
 		return stdout, stderr, err
 	}
 
-	var prList []map[string]interface{}
-	err = helper.Retry(func() error {
-		stdout, stderr, err := new(exec.PipedExec).
-			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", prBranchName, "--json", "number").
-			RunToStrings()
-
-		if err != nil {
-			return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
-		}
-
-		// Parse JSON response
-		if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
-			return fmt.Errorf("failed to parse PR list: %w", err)
-		}
-
-		if len(prList) == 0 {
-			return fmt.Errorf("no pull request found for branch %s", prBranchName)
-		}
-
-		return nil
-	})
+	prExists, stdout, stderr, err := doesPrExist(wd, parentRepoName, prBranchName)
+	if err != nil {
+		return stdout, stderr, err
+	}
+	if !prExists {
+		return stdout, stderr, errors.New("PR not created")
+	}
 
 	return stdout, stderr, err
 }
@@ -2092,16 +2102,16 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) error {
 	return nil
 }
 
-func GetCurrentBranchName(wd string) string {
+func GetCurrentBranchName(wd string) (string, error) {
 	branchName, _, err := new(exec.PipedExec).
 		Command(git, branch, "--show-current").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to get current branch name: %v", err)
 	}
 
-	return strings.TrimSpace(branchName)
+	return strings.TrimSpace(branchName), nil
 }
 
 // createRemote creates a remote in the cloned repository
@@ -2140,7 +2150,10 @@ func BuildRemoteURL(account, token, repoName string, isUpstream bool) string {
 // - true if current branch is main branch
 // - error if any
 func IamInMainBranch(wd string) (string, bool, error) {
-	currentBranchName := GetCurrentBranchName(wd)
+	currentBranchName, err := GetCurrentBranchName(wd)
+	if err != nil {
+		return "", false, err
+	}
 	logger.Verbose("Current branch: " + currentBranchName)
 
 	mainBranch, err := GetMainBranch(wd)

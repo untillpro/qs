@@ -36,7 +36,10 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	}
 
 	// find out type of the branch
-	branchType := gitcmds.GetBranchType(wd)
+	branchType, err := gitcmds.GetBranchType(wd)
+	if err != nil {
+		return err
+	}
 	// if branch type is unknown, we cannot proceed
 	if branchType == notesPkg.BranchTypeUnknown {
 		return errors.New("You must be on either a pr or dev branch")

@@ -74,7 +74,11 @@ type ExpectationFunc func(_ context.Context) error
 
 // ExpectationCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
 func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
-	currentBranch := gitcmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	currentBranch, err := gitcmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	if err != nil {
+		return err
+	}
+
 	customBranchName := ctx.Value(contextCfg.CtxKeyCustomBranchName).(string)
 	if currentBranch != customBranchName {
 		return fmt.Errorf("current branch '%s' does not match expected branch '%s'", currentBranch, customBranchName)
@@ -529,9 +533,9 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 	}
 
 	// Step 6: Check if notes are downloaded
-	notes, ok := gitcmds.GetNotes(tempClonePath)
-	if !ok {
-		return errors.New("Error: No notes found in dev branch")
+	notes, err := gitcmds.GetNotes(tempClonePath)
+	if err != nil {
+		return err
 	}
 
 	if len(notes) == 0 {
