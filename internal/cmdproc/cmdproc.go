@@ -346,13 +346,10 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 			// Set log level first - handle all log level options
 			if ok, _ := cmd.Flags().GetBool("trace"); ok {
 				logger.SetLogLevel(logger.LogLevelTrace)
-				logger.Error("Using logger.LogLevelTrace...")
+				logger.Verbose("Using logger.LogLevelTrace...")
 			} else if ok, _ := cmd.Flags().GetBool("verbose"); ok {
 				logger.SetLogLevel(logger.LogLevelVerbose)
-				logger.Error("Using logger.LogLevelVerbose...")
-			} else if commands.Verbose {
-				// Handle the global Verbose variable (set by -v flag)
-				logger.SetLogLevel(logger.LogLevelVerbose)
+				logger.Verbose("Using logger.LogLevelVerbose...")
 			} else {
 				// Default log level
 				logger.SetLogLevel(logger.LogLevelInfo)
