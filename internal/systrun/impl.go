@@ -1003,9 +1003,12 @@ func (st *SystemTest) setSyncState(
 	}
 
 	if needSync {
-		devBranchName := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
+		devBranchName, err := gitcmds.GetCurrentBranchName(st.cloneRepoPath)
+		if err != nil {
+			return err
+		}
 		// Push the dev branch to the remote with retry logic
-		err := helper.Retry(func() error {
+		err = helper.Retry(func() error {
 			pushCmd := exec.Command("git", "-C", st.cloneRepoPath, "push", "-u", "origin", devBranchName)
 			pushCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.ForkToken))
 			pushOutput, pushErr := pushCmd.CombinedOutput()

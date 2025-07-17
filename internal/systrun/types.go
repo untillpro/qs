@@ -74,7 +74,11 @@ type ExpectationFunc func(_ context.Context) error
 
 // ExpectationCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
 func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
-	currentBranch := gitcmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	currentBranch, err := gitcmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	if err != nil {
+		return err
+	}
+
 	customBranchName := ctx.Value(contextCfg.CtxKeyCustomBranchName).(string)
 	if currentBranch != customBranchName {
 		return fmt.Errorf("current branch '%s' does not match expected branch '%s'", currentBranch, customBranchName)

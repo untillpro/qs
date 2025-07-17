@@ -14,31 +14,18 @@ import (
 )
 
 func Pr(wd string, needDraft bool) error {
-	// find out type of the branch
-	branchType := GetBranchType(wd)
-	if branchType != notesPkg.BranchTypeDev {
-		return errors.New("You must be on dev branch")
-	}
-
-	// PR is not created yet
-	currentBranchName := GetCurrentBranchName(wd)
-
-	// Fetch notes from origin before checking if they exist
-	_, _, err := new(exec.PipedExec).
-		Command(git, fetch, origin, "refs/notes/*:refs/notes/*").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Warning("Failed to fetch notes: %v", err)
-		// Continue anyway, as notes might exist locally
-	}
-
-	prExists, err := doesPrExist(wd, currentBranchName)
+	// find out the type of the branch
+	branchType, err := GetBranchType(wd)
 	if err != nil {
 		return err
 	}
-	if prExists {
-		return errors.New("Pull request already exists for this branch")
+	if branchType == notesPkg.BranchTypeUnknown {
+		return errors.New("You must be on dev or pr branch")
+	}
+
+	currentBranchName, err := GetCurrentBranchName(wd)
+	if err != nil {
+		return err
 	}
 
 	parentRepoName, err := GetParentRepoName(wd)
@@ -48,51 +35,130 @@ func Pr(wd string, needDraft bool) error {
 	if len(parentRepoName) == 0 {
 		return errors.New("You are in trunk. PR is only allowed from forked branch.")
 	}
-	isMainBranch := (currentBranchName == "main") || (currentBranchName == "master")
-	if isMainBranch {
-		return fmt.Errorf("Unable to create a pull request on branch '%s'. Use 'qs dev <branch_name>.", currentBranchName)
-	}
 
-	var response string
-	if UpstreamNotExist(wd) {
-		fmt.Print("Upstream not found.\nRepository " + parentRepoName + " will be added as upstream. Agree[y/n]?")
-		_, _ = fmt.Scanln(&response)
-		if response != pushYes {
-			fmt.Print(pushFail)
-			return nil
-		}
-		response = ""
-		if err := MakeUpstreamForBranch(wd, parentRepoName); err != nil {
-			return fmt.Errorf("failed to set upstream: %w", err)
-		}
-	}
-
-	// Check if there are any modified files in the current branch
-	if _, ok, err := ChangedFilesExist(wd); ok || err != nil {
+	// If we are on dev branch than we need to create pr branch
+	if branchType == notesPkg.BranchTypeDev {
+		// Fetch notes from origin before checking if they exist
+		_, _, err := new(exec.PipedExec).
+			Command(git, fetch, origin, "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			RunToStrings()
 		if err != nil {
-			return err
+			logger.Warning("Failed to fetch notes: %v", err)
+			// Continue anyway, as notes might exist locally
 		}
 
-		return errors.New(errMsgModFiles)
+		var response string
+		if UpstreamNotExist(wd) {
+			fmt.Print("Upstream not found.\nRepository " + parentRepoName + " will be added as upstream. Agree[y/n]?")
+			_, _ = fmt.Scanln(&response)
+			if response != pushYes {
+				fmt.Print(pushFail)
+				return nil
+			}
+			response = ""
+			if err := MakeUpstreamForBranch(wd, parentRepoName); err != nil {
+				return fmt.Errorf("failed to set upstream: %w", err)
+			}
+		}
+
+		// Check if there are any modified files in the current branch
+		if _, ok, err := ChangedFilesExist(wd); ok || err != nil {
+			if err != nil {
+				return err
+			}
+
+			return errors.New(errMsgModFiles)
+		}
+
+		// Create a new branch for the PR
+		prBranchName, err := createPRBranch(wd, currentBranchName)
+		if err != nil {
+			return fmt.Errorf("failed to create PR branch: %w", err)
+		}
+
+		// Remove dev branch after creating PR-branch
+		if err := removeBranch(wd, currentBranchName); err != nil {
+			logger.Error(fmt.Errorf("failed to remove branch: %v", err))
+		}
+
+		// Current branch now is pr branch
+		currentBranchName = prBranchName
 	}
 
-	// Create a new branch for the PR
-	prBranchName, err := createPRBranch(wd, currentBranchName)
-	if err != nil {
-		return fmt.Errorf("failed to create PR branch: %w", err)
+	if err := pushPRBranch(wd, currentBranchName); err != nil {
+		return err
 	}
+
+	// Check whether PR already exists
+	prExists, err := doesPrExist(wd, currentBranchName)
+	if err != nil {
+		return err
+	}
+	if prExists {
+		return errors.New("Pull request already exists for this branch")
+	}
+
 	// Extract notes before any operations
 	notes, ok := GetNotes(wd)
 	if !ok {
 		return errors.New("Error: No notes found in dev branch")
 	}
 
-	stdout, stderr, err := MakePR(wd, parentRepoName, prBranchName, notes, needDraft)
+	// Create PR
+	stdout, stderr, err := MakePR(wd, parentRepoName, currentBranchName, notes, needDraft)
 	if err != nil {
 		logger.Verbose(stdout)
 		logger.Error(stderr)
 
 		return fmt.Errorf("failed to create PR: %w", err)
+	}
+
+	return nil
+}
+
+// pushPRBranch pushes the PR branch to origin.
+func pushPRBranch(wd, prBranchName string) error {
+	// Push notes to origin
+	err := helper.Retry(func() error {
+		return new(exec.PipedExec).
+			Command("git", "push", "origin", "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			Run(os.Stdout, os.Stdout)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to push notes to origin: %v", err)
+	}
+
+	if helper.IsTest() {
+		helper.Delay()
+	}
+
+	// Push PR branch to origin
+	err = helper.Retry(func() error {
+		_, _, pushErr := new(exec.PipedExec).
+			Command("git", "push", "-u", "origin", prBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	}) // Retry up to 3 times for pushing PR branch
+	if err != nil {
+		return err
+	}
+
+	if helper.IsTest() {
+		helper.Delay()
+	}
+	// Push PR branch to origin
+	err = helper.Retry(func() error {
+		_, _, pushErr := new(exec.PipedExec).
+			Command("git", "push", "-u", "origin", prBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return pushErr
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -132,6 +198,59 @@ func doesPrExist(wd, currentBranchName string) (bool, error) {
 	}
 
 	return prExists, nil
+}
+
+func removeBranch(wd, branchName string) error {
+	// Delete branch locally
+	_, _, err := new(exec.PipedExec).
+		Command("git", "branch", "-D", branchName).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		return err
+	}
+
+	// Delete branch from origin
+	err = helper.Retry(func() error {
+		_, _, err := new(exec.PipedExec).
+			Command("git", "push", "origin", "--delete", branchName).
+			WorkingDir(wd).
+			RunToStrings()
+
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	// Check whether we have upstream
+	hasUpstream, err := HasRemote(wd, "upstream")
+	if err != nil {
+		return err
+	}
+	if !hasUpstream {
+		return nil
+	}
+
+	// Delete branch from upstream
+	var stderr string
+	err = helper.Retry(func() error {
+		var deleteErr error
+		_, stderr, deleteErr = new(exec.PipedExec).
+			Command("git", "push", "upstream", "--delete", branchName).
+			WorkingDir(wd).
+			RunToStrings()
+		return deleteErr
+	})
+	if err != nil {
+		if strings.Contains(stderr, "ref does not exist") {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 // createPRBranch creates a new branch for the pull request and checks out on it.
@@ -269,75 +388,6 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 
 	// Add empty commit to create commit object and link notes to it
 	if err := AddNotes(wd, updateNotesObjInNoteLines(notes, *notesObj)); err != nil {
-		return "", err
-	}
-
-	// Step 8: Push notes to origin
-	err = helper.Retry(func() error {
-		return new(exec.PipedExec).
-			Command("git", "push", "origin", "refs/notes/*:refs/notes/*").
-			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-	}) // Retry up to 3 times for pushing notes
-	if err != nil {
-		return "", err
-	}
-
-	if helper.IsTest() {
-		helper.Delay()
-	}
-
-	// Step 9: Push PR branch to origin
-	err = helper.Retry(func() error {
-		_, _, pushErr := new(exec.PipedExec).
-			Command("git", "push", "-u", "origin", prBranchName).
-			WorkingDir(wd).
-			RunToStrings()
-		return pushErr
-	}) // Retry up to 3 times for pushing PR branch
-	if err != nil {
-		return "", err
-	}
-
-	if helper.IsTest() {
-		helper.Delay()
-	}
-
-	// Step 10: Delete dev branch locally
-	_, _, err = new(exec.PipedExec).
-		Command("git", "branch", "-D", currentBranchName).
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		return "", err
-	}
-
-	// Step 11: Delete dev branch from origin
-	err = helper.Retry(func() error {
-		_, _, deleteErr := new(exec.PipedExec).
-			Command("git", "push", "origin", "--delete", currentBranchName).
-			WorkingDir(wd).
-			RunToStrings()
-		return deleteErr
-	}) // Retry up to 3 times for deleting dev branch from origin
-	if err != nil {
-		return "", err
-	}
-
-	// Step 11: Delete dev branch from upstream
-	err = helper.Retry(func() error {
-		var deleteErr error
-		_, stderr, deleteErr = new(exec.PipedExec).
-			Command("git", "push", "upstream", "--delete", currentBranchName).
-			WorkingDir(wd).
-			RunToStrings()
-		return deleteErr
-	}) // Retry up to 3 times for deleting dev branch from upstream
-	if err != nil {
-		if strings.Contains(stderr, "ref does not exist") {
-			return prBranchName, nil
-		}
-
 		return "", err
 	}
 
