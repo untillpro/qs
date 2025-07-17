@@ -149,7 +149,7 @@ func Status(wd string) error {
 func Release(wd string) error {
 
 	// *************************************************
-	logger.Info("Pulling")
+	fmt.Fprintln(os.Stdout, "Pulling")
 	err := new(exec.PipedExec).
 		Command("git", pull).
 		WorkingDir(wd).
@@ -159,7 +159,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Reading current version")
+	fmt.Fprintln(os.Stdout, "Reading current version")
 	currentVersion, err := utils.ReadVersion()
 	if err != nil {
 		return fmt.Errorf("Error reading file 'version': %w", err)
@@ -181,13 +181,13 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Updating 'version' file")
+	fmt.Fprintln(os.Stdout, "Updating 'version' file")
 	if err := targetVersion.Save(); err != nil {
 		return fmt.Errorf("Error saving file 'version': %w", err)
 	}
 
 	// *************************************************
-	logger.Info("Committing target version")
+	fmt.Fprintln(os.Stdout, "Committing target version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + targetVersion.String()}
 		err = new(exec.PipedExec).
@@ -200,7 +200,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Tagging")
+	fmt.Fprintln(os.Stdout, "Tagging")
 	{
 		tagName := "v" + targetVersion.String()
 		n := time.Now()
@@ -215,7 +215,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Bumping version")
+	fmt.Fprintln(os.Stdout, "Bumping version")
 	newVersion := currentVersion
 	{
 		newVersion.Minor++
@@ -226,7 +226,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Committing new version")
+	fmt.Fprintln(os.Stdout, "Committing new version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + newVersion.String()}
 		err = new(exec.PipedExec).
@@ -239,7 +239,7 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	logger.Info("Pushing to origin")
+	fmt.Fprintln(os.Stdout, "Pushing to origin")
 	{
 		params := []string{push, "--follow-tags", origin}
 		err = helper.Retry(func() error {
@@ -612,7 +612,7 @@ func Fork(wd string) (string, error) {
 		return repo, fmt.Errorf("fork verification failed: %w", err)
 	}
 
-	logger.Info("Fork created and verified successfully")
+	fmt.Fprintln(os.Stdout, "Fork created and verified successfully")
 	return repo, nil
 }
 

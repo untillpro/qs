@@ -97,7 +97,7 @@ func Pr(wd string, needDraft bool) error {
 		return err
 	}
 	if prExists {
-		logger.Info("pull request already exists for this branch")
+		fmt.Fprintln(os.Stdout, "pull request already exists for this branch")
 
 		return nil
 	}
