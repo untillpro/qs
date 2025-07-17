@@ -97,7 +97,9 @@ func Pr(wd string, needDraft bool) error {
 		return err
 	}
 	if prExists {
-		return errors.New("Pull request already exists for this branch")
+		logger.Info("pull request already exists for this branch")
+
+		return nil
 	}
 
 	// Extract notes before any operations
