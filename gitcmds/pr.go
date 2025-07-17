@@ -86,6 +86,7 @@ func Pr(wd string, needDraft bool) error {
 		currentBranchName = prBranchName
 	}
 
+	// push notes and commits to origin
 	if err := pushPRBranch(wd, currentBranchName); err != nil {
 		return err
 	}
