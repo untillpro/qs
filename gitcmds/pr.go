@@ -101,9 +101,9 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Extract notes before any operations
-	notes, ok := GetNotes(wd)
-	if !ok {
-		return errors.New("Error: No notes found in dev branch")
+	notes, err := GetNotes(wd)
+	if err != nil {
+		return err
 	}
 
 	// Create PR
@@ -310,10 +310,11 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 	// Step 2: Checkout dev branch
 
 	// extract notes from dev branch before any operations
-	notes, ok := GetNotes(wd)
-	if !ok {
-		return "", errors.New("Error: No notes found in dev branch")
+	notes, err := GetNotes(wd)
+	if err != nil {
+		return "", err
 	}
+
 	_, _, err = new(exec.PipedExec).
 		Command("git", "checkout", currentBranchName).
 		WorkingDir(wd).

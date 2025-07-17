@@ -996,18 +996,20 @@ func buildDevBranchName(issueURL string) (string, error) {
 
 // GetBranchType returns branch type based on notes or branch name
 func GetBranchType(wd string) (notesPkg.BranchType, error) {
-	notes, ok := GetNotes(wd)
-	if ok {
-		notesObj, ok := notesPkg.Deserialize(notes)
-		if !ok {
-			if isOldStyledBranch(notes) {
-				return notesPkg.BranchTypeDev, nil
-			}
-		}
+	notes, err := GetNotes(wd)
+	if err != nil {
+		return notesPkg.BranchTypeUnknown, err
+	}
 
-		if notesObj != nil {
-			return notesObj.BranchType, nil
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		if isOldStyledBranch(notes) {
+			return notesPkg.BranchTypeDev, nil
 		}
+	}
+
+	if notesObj != nil {
+		return notesObj.BranchType, nil
 	}
 
 	currentBranchName, err := GetCurrentBranchName(wd)
@@ -1186,27 +1188,34 @@ func AddNotes(wd string, notes []string) error {
 	return nil
 }
 
-func GetNotes(wd string) (notes []string, result bool) {
-	stdout, _, err := new(exec.PipedExec).
-		Command(git, "log", "--pretty=format:%N", "HEAD", "^main").
+func GetNotes(wd string) (notes []string, err error) {
+	mainBranchName, err := GetMainBranch(wd)
+	if err != nil {
+		return notes, err
+	}
+
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "log", "--pretty=format:%N", "HEAD", "^"+mainBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return notes, false
+		logger.Error(stderr)
+
+		return notes, fmt.Errorf("failed to get notes: %v", err)
 	}
 
 	rawNotes := strings.Split(stdout, caret)
-	for _, rawnote := range rawNotes {
-		note := strings.TrimSpace(rawnote)
+	for _, rawNote := range rawNotes {
+		note := strings.TrimSpace(rawNote)
 		if len(note) > 0 {
 			notes = append(notes, note)
 		}
 	}
 	if len(notes) == 0 {
-		return notes, false
+		return notes, errors.New("error: No notes found in current branch")
 	}
 
-	return notes, true
+	return notes, nil
 }
 
 // GetParentRepoName - parent repo of forked

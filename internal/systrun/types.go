@@ -533,9 +533,9 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 	}
 
 	// Step 6: Check if notes are downloaded
-	notes, ok := gitcmds.GetNotes(tempClonePath)
-	if !ok {
-		return errors.New("Error: No notes found in dev branch")
+	notes, err := gitcmds.GetNotes(tempClonePath)
+	if err != nil {
+		return err
 	}
 
 	if len(notes) == 0 {
