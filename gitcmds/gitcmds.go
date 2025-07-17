@@ -1503,7 +1503,7 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func MakePR(wd, parentRepoName, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
@@ -1564,27 +1564,13 @@ func MakePR(wd, parentRepoName, prBranchName string, notes []string, asDraft boo
 		return stdout, stderr, err
 	}
 
-	var prList []map[string]interface{}
-	err = helper.Retry(func() error {
-		stdout, stderr, err := new(exec.PipedExec).
-			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", prBranchName, "--json", "number").
-			RunToStrings()
-
-		if err != nil {
-			return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
-		}
-
-		// Parse JSON response
-		if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
-			return fmt.Errorf("failed to parse PR list: %w", err)
-		}
-
-		if len(prList) == 0 {
-			return fmt.Errorf("no pull request found for branch %s", prBranchName)
-		}
-
-		return nil
-	})
+	prExists, stdout, stderr, err := doesPrExist(wd, parentRepoName, prBranchName)
+	if err != nil {
+		return stdout, stderr, err
+	}
+	if !prExists {
+		return stdout, stderr, errors.New("PR not created")
+	}
 
 	return stdout, stderr, err
 }

@@ -92,7 +92,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Check whether PR already exists
-	prExists, err := doesPrExist(wd, currentBranchName)
+	prExists, _, _, err := doesPrExist(wd, parentRepoName, currentBranchName)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Create PR
-	stdout, stderr, err := MakePR(wd, parentRepoName, currentBranchName, notes, needDraft)
+	stdout, stderr, err := createPR(wd, parentRepoName, currentBranchName, notes, needDraft)
 	if err != nil {
 		logger.Verbose(stdout)
 		logger.Error(stderr)
@@ -166,20 +166,33 @@ func pushPRBranch(wd, prBranchName string) error {
 }
 
 // doesPrExist checks if a pull request exists for the current branch.
-func doesPrExist(wd, currentBranchName string) (bool, error) {
-	var prExists bool
+// Returns:
+// - true if PR exists
+// - stdout from the command execution
+// - stderr from the command execution
+// - error if any
+func doesPrExist(wd, parentRepoName, currentBranchName string) (bool, string, string, error) {
+	var (
+		prExists bool
+		stdout   string
+		stderr   string
+		err      error
+	)
 
-	err := helper.Retry(func() error {
-		stdout, _, err := new(exec.PipedExec).
-			Command("gh", "pr", "list", "--head", currentBranchName).
+	err = helper.Retry(func() error {
+		stdout, stderr, err = new(exec.PipedExec).
+			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", currentBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
+			logger.Verbose(stderr)
+
 			return err
 		}
 
 		if strings.Contains(stdout, "no pull requests match your search") {
 			prExists = false
+
 			return nil
 		}
 
@@ -187,18 +200,18 @@ func doesPrExist(wd, currentBranchName string) (bool, error) {
 		if stdout == "" {
 			// safety check: gh may sometimes return nothing at all
 			prExists = false
+
 			return nil
 		}
-
 		prExists = true
-		return nil
-	}) // Retry up to 3 times for PR existence check
 
+		return nil
+	})
 	if err != nil {
-		return false, err
+		return false, stdout, stderr, err
 	}
 
-	return prExists, nil
+	return prExists, stdout, stderr, nil
 }
 
 func removeBranch(wd, branchName string) error {
