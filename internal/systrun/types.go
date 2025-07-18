@@ -533,7 +533,7 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 	}
 
 	// Step 6: Check if notes are downloaded
-	notes, err := gitcmds.GetNotes(tempClonePath, remoteBranchName)
+	notes, _, err := gitcmds.GetNotes(tempClonePath, remoteBranchName)
 	if err != nil {
 		return err
 	}

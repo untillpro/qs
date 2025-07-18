@@ -10,7 +10,7 @@ import (
 
 func main() {
 	if _, err := cmdproc.ExecRootCmd(context.Background(), os.Args); err != nil {
-		logger.Error(err)
+		logger.Verbose(err)
 
 		os.Exit(1)
 	}

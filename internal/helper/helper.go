@@ -57,7 +57,7 @@ func Delay() {
 	if ghTimeoutMsString != "" {
 		timeoutMs, err = strconv.Atoi(ghTimeoutMsString)
 		if err != nil {
-			logger.Error("Error converting %s to int: %s", ghTimeoutMsString, err)
+			logger.Verbose("Error converting %s to int: %s", ghTimeoutMsString, err)
 			timeoutMs = defaultGhTimeoutMs
 		}
 	}
@@ -84,7 +84,7 @@ func CheckGH() bool {
 func CheckQsVer() bool {
 	installedVer, err := GetInstalledQSVersion()
 	if err != nil {
-		logger.Error("Error getting installed qs version: %s\n", err)
+		logger.Verbose("Error getting installed qs version: %s\n", err)
 
 		return false
 	}
@@ -156,7 +156,7 @@ func getLastQSVersion() string {
 		Command("go", "list", "-m", "-versions", "github.com/untillpro/qs").
 		RunToStrings()
 	if err != nil {
-		logger.Error("getLastQSVersion error:", stderr)
+		logger.Verbose("getLastQSVersion error:", stderr)
 	}
 
 	arr := strings.Split(strings.TrimSpace(stdouts), oneSpace)

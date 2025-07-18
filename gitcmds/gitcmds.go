@@ -113,7 +113,7 @@ func Status(wd string) error {
 		RunToStrings()
 	if err != nil {
 		if len(stderr) > 0 {
-			logger.Error(stderr)
+			logger.Verbose(stderr)
 		}
 		if strings.Contains(err.Error(), err128) {
 			return errors.New("this is not a git repository")
@@ -336,10 +336,10 @@ func Upload(wd string, commitMessageParts []string) error {
 		return pushErr
 	})
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 		return err
 	}
-	logger.Error(stdout)
+	logger.Verbose(stdout)
 
 	return nil
 }
@@ -584,14 +584,14 @@ func Fork(wd string) (string, error) {
 			Run(os.Stdout, os.Stdout)
 	})
 	if err != nil {
-		logger.Error("Fork error:", err)
+		logger.Verbose("Fork error:", err)
 		return repo, err
 	}
 
 	// Get current user name to verify fork
 	userName, err := getUserName(wd)
 	if err != nil {
-		logger.Error("Failed to get user name for verification:", err)
+		logger.Verbose("Failed to get user name for verification:", err)
 		return repo, err
 	}
 
@@ -608,7 +608,7 @@ func Fork(wd string) (string, error) {
 		return helper.VerifyGitHubRepoExists(userName, repo, "")
 	})
 	if err != nil {
-		logger.Error("Fork verification failed:", err)
+		logger.Verbose("Fork verification failed:", err)
 		return repo, fmt.Errorf("fork verification failed: %w", err)
 	}
 
@@ -665,7 +665,7 @@ func GetMainBranch(wd string) (string, error) {
 		Command("grep", "-E", "(/main|/master)([^a-zA-Z0-9]|$)").
 		RunToStrings()
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 		logger.Verbose(stdout)
 
 		return "", err
@@ -820,7 +820,7 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
 		return "", nil, err
 	}
@@ -890,7 +890,7 @@ func SyncMainBranch(wd string) error {
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
-			logger.Error(stderr)
+			logger.Verbose(stderr)
 
 			return fmt.Errorf("failed to pull from upstream/main: %w, stdout: %s", err, stdout)
 		}
@@ -903,7 +903,7 @@ func SyncMainBranch(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
 		return fmt.Errorf("failed to pull from origin/main: %w, stdout: %s", err, stdout)
 	}
@@ -919,7 +919,7 @@ func SyncMainBranch(wd string) error {
 		return pushErr
 	})
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 		return fmt.Errorf("failed to push to origin/main: %w, stdout: %s", err, stdout)
 	}
 	logger.Verbose(stdout)
@@ -1001,20 +1001,22 @@ func GetBranchType(wd string) (notesPkg.BranchType, error) {
 		return notesPkg.BranchTypeUnknown, err
 	}
 
-	notes, err := GetNotes(wd, currentBranchName)
+	notes, _, err := GetNotes(wd, currentBranchName)
 	if err != nil {
-		return notesPkg.BranchTypeUnknown, err
+		logger.Verbose(err)
 	}
 
-	notesObj, ok := notesPkg.Deserialize(notes)
-	if !ok {
-		if isOldStyledBranch(notes) {
-			return notesPkg.BranchTypeDev, nil
+	if len(notes) > 0 {
+		notesObj, ok := notesPkg.Deserialize(notes)
+		if !ok {
+			if isOldStyledBranch(notes) {
+				return notesPkg.BranchTypeDev, nil
+			}
 		}
-	}
 
-	if notesObj != nil {
-		return notesObj.BranchType, nil
+		if notesObj != nil {
+			return notesObj.BranchType, nil
+		}
 	}
 
 	return getBranchTypeByName(currentBranchName), nil
@@ -1084,7 +1086,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
-			logger.Error(stderr)
+			logger.Verbose(stderr)
 
 			return err
 		}
@@ -1109,7 +1111,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
 		return fmt.Errorf("failed to fetch notes: %w, stdout: %s", err, stdout)
 	}
@@ -1137,7 +1139,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 		return err
 	})
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
 		return fmt.Errorf("failed to push notes to origin: %w", err)
 	}
@@ -1155,7 +1157,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 		return err
 	})
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
 		return fmt.Errorf("failed to push branch to origin: %w, stdout: %s", err, stdout)
 	}
@@ -1188,28 +1190,34 @@ func AddNotes(wd string, notes []string) error {
 	return nil
 }
 
-func GetNotes(wd, branchName string) (notes []string, err error) {
+// GetNotes returns notes for a branch
+// Returns:
+// - notes
+// - revision count
+// - error if any
+func GetNotes(wd, branchName string) (notes []string, revCount int, err error) {
 	mainBranchName, err := GetMainBranch(wd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get main branch: %w", err)
+		return nil, 0, fmt.Errorf("failed to get main branch: %w", err)
 	}
-	
+
 	// get all revision of the branch which does not belong to main branch
 	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "rev-list", mainBranchName+".."+branchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
-		return notes, fmt.Errorf("failed to get commit list: %v", err)
+		return notes, 0, fmt.Errorf("failed to get commit list: %v", err)
 	}
 	if len(stdout) == 0 {
-		return notes, errors.New("error: No commits found in current branch")
+		return notes, 0, errors.New("error: No commits found in current branch")
 	}
-	
+
 	// get all notes from revisions got from a previous step
-	for _, rev := range strings.Split(strings.TrimSpace(stdout), caret) {
+	revList := strings.Split(strings.TrimSpace(stdout), caret)
+	for _, rev := range revList {
 		// get notes from each revision
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, "notes", "show", rev).
@@ -1219,9 +1227,9 @@ func GetNotes(wd, branchName string) (notes []string, err error) {
 			if strings.Contains(stderr, "no note found") {
 				continue
 			}
-			logger.Error(stderr)
+			logger.Verbose(stderr)
 
-			return notes, fmt.Errorf("failed to get notes: %v", err)
+			return notes, len(revList), fmt.Errorf("failed to get notes: %v", err)
 		}
 		// split notes into lines
 		rawNotes := strings.Split(stdout, caret)
@@ -1232,12 +1240,12 @@ func GetNotes(wd, branchName string) (notes []string, err error) {
 			}
 		}
 	}
-	
+
 	if len(notes) == 0 {
-		return notes, errors.New("error: No notes found in current branch")
+		return notes, len(revList), errors.New("error: No notes found in current branch")
 	}
 
-	return notes, nil
+	return notes, len(revList), nil
 }
 
 // GetParentRepoName - parent repo of forked
@@ -2060,7 +2068,7 @@ func GetIssueNumFromBranchName(parentrepo string, curbranch string) (issuenum st
 		Command("gawk", "{print $1}").
 		RunToStrings()
 	if err != nil {
-		logger.Error("GetIssueNumFromBranchName:", stderr)
+		logger.Verbose("GetIssueNumFromBranchName:", stderr)
 		return "", false
 	}
 	issuenums := strings.Split(stdouts, caret)
