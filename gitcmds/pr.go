@@ -46,7 +46,7 @@ func Pr(wd string, needDraft bool) error {
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
-			logger.Warning("Failed to fetch notes: %v", err)
+			logger.Verbose("Failed to fetch notes: %v", err)
 			// Continue anyway, as notes might exist locally
 		}
 
