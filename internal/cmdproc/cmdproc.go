@@ -265,6 +265,14 @@ func ExecRootCmd(ctx context.Context, args []string) (context.Context, error) {
 		upgradeCmd(ctx),
 		versionCmd(ctx),
 	)
+	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		wd, err := getWorkingDir(params)
+		if err != nil {
+			return err
+		}
+
+		return gitcmds.Status(wd)
+	}
 	initChangeDirFlags(rootCmd.Commands(), params)
 
 	return ExecCommandAndCatchInterrupt(rootCmd)
