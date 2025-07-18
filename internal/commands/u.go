@@ -26,7 +26,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Warning("Failed to fetch notes: %v", err)
+		logger.Verbose("Failed to fetch notes: %v", err)
 		// Continue anyway, as notes might exist locally
 	}
 

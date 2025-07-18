@@ -285,7 +285,7 @@ func inviteCollaborator(owner, repo, username, token string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
-		logger.Error("Invitation sent successfully.")
+		logger.Verbose("Invitation sent successfully.")
 	} else {
 		return fmt.Errorf("failed to invite: status %s", resp.Status)
 	}
@@ -332,7 +332,7 @@ func acceptPendingInvitations(token string) error {
 		defer acceptResp.Body.Close()
 
 		if acceptResp.StatusCode == 204 {
-			logger.Error(fmt.Sprintf("Accepted invitation ID %d\n", invite.ID))
+			logger.Verbose(fmt.Sprintf("Accepted invitation ID %d\n", invite.ID))
 		} else {
 			fmt.Printf(fmt.Sprintf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status))
 		}
@@ -919,7 +919,7 @@ func (st *SystemTest) validateStdout(stdout string) error {
 }
 
 func (st *SystemTest) validateStderr(stderr string) error {
-	logger.Error(stderr)
+	logger.Verbose(stderr)
 
 	// Check stderr if specified
 	if st.cfg.ExpectedStderr != "" {
@@ -993,7 +993,7 @@ func (st *SystemTest) setSyncState(
 		return fmt.Errorf("failed to run qs dev command: %w, stderr: %s", err, stderr)
 	}
 
-	logger.Error(stdout)
+	logger.Verbose(stdout)
 
 	if needChangeClone {
 		// Create 3 commits with different files

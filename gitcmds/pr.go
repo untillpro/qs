@@ -46,7 +46,7 @@ func Pr(wd string, needDraft bool) error {
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
-			logger.Warning("Failed to fetch notes: %v", err)
+			logger.Verbose("Failed to fetch notes: %v", err)
 			// Continue anyway, as notes might exist locally
 		}
 
@@ -81,7 +81,7 @@ func Pr(wd string, needDraft bool) error {
 
 		// Remove dev branch after creating PR-branch
 		if err := removeBranch(wd, currentBranchName); err != nil {
-			logger.Error(fmt.Errorf("failed to remove branch: %v", err))
+			logger.Verbose(fmt.Errorf("failed to remove branch: %v", err))
 		}
 
 		// Current branch now is pr branch
@@ -105,16 +105,20 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Extract notes before any operations
-	notes, err := GetNotes(wd, currentBranchName)
+	notes, revCount, err := GetNotes(wd, currentBranchName)
 	if err != nil {
 		return err
+	}
+
+	if revCount == 0 {
+		return errors.New("error: No commits found in pr branch")
 	}
 
 	// Create PR
 	stdout, stderr, err := createPR(wd, parentRepoName, currentBranchName, notes, needDraft)
 	if err != nil {
 		logger.Verbose(stdout)
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
 		return fmt.Errorf("failed to create PR: %w", err)
 	}
@@ -275,9 +279,9 @@ func removeBranch(wd, branchName string) error {
 // Returns:
 // - name of the PR branch
 // - error if any operation fails
-func createPRBranch(wd, currentBranchName string) (string, error) {
+func createPRBranch(wd, devBranchName string) (string, error) {
 	// Save current branch name (dev branch)
-	prBranchName := strings.TrimSuffix(currentBranchName, "-dev") + "-pr"
+	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
 
 	upstreamRemote := "upstream"
 	upstreamExists, err := HasRemote(wd, upstreamRemote)
@@ -319,7 +323,7 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 	}) // Retry up to 3 times for fetching notes
 	if err != nil {
 		logger.Verbose(stdout)
-		logger.Error(stderr)
+		logger.Verbose(stderr)
 
 		return "", fmt.Errorf("failed to fetch notes: %w", err)
 	}
@@ -327,13 +331,18 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 	// Step 2: Checkout dev branch
 
 	// extract notes from dev branch before any operations
-	notes, err := GetNotes(wd, currentBranchName)
+	notes, revCount, err := GetNotes(wd, devBranchName)
 	if err != nil {
 		return "", err
 	}
 
+	// if we have only 1 revision in dev branch then it is just a commit for keeping notes
+	if revCount < 2 {
+		return "", errors.New("error: No commits found in dev branch")
+	}
+
 	_, _, err = new(exec.PipedExec).
-		Command("git", "checkout", currentBranchName).
+		Command("git", "checkout", devBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -371,7 +380,7 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 
 	// Step 5: Squash merge dev into PR branch
 	_, _, err = new(exec.PipedExec).
-		Command("git", "merge", "--squash", currentBranchName).
+		Command("git", "merge", "--squash", devBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -399,8 +408,8 @@ func createPRBranch(wd, currentBranchName string) (string, error) {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Error(stdout)
-		logger.Error(stderr)
+		logger.Verbose(stdout)
+		logger.Verbose(stderr)
 
 		return "", err
 	}

@@ -53,7 +53,7 @@ type Notes struct {
 func (nt *Notes) String() string {
 	bytes, err := json.Marshal(nt)
 	if err != nil {
-		logger.Error(fmt.Errorf("failed to marshal notes: %v", err))
+		logger.Verbose(fmt.Errorf("failed to marshal notes: %v", err))
 
 		os.Exit(1)
 	}

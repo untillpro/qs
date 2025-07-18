@@ -171,7 +171,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 
 	// Create pre-commit hook to control committing file size
 	if err := setPreCommitHook(wd); err != nil {
-		logger.Error("Error setting pre-commit hook:", err)
+		logger.Verbose("Error setting pre-commit hook:", err)
 	}
 	// Unstash changes
 	if stashedUncommittedChanges {
