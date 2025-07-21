@@ -16,8 +16,10 @@ import (
 
 	goGitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
+	contextPkg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
@@ -257,7 +259,9 @@ func Release(wd string) error {
 }
 
 // Upload uploads sources to git repo
-func Upload(wd string, commitMessageParts []string) error {
+func Upload(cmd *cobra.Command, wd string) error {
+	commitMessageParts := cmd.Context().Value(contextPkg.CtxKeyCommitMessage).([]string)
+
 	err := new(exec.PipedExec).
 		Command(git, "add", ".").
 		WorkingDir(wd).
