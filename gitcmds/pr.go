@@ -94,7 +94,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Check whether PR already exists
-	prExists, _, _, err := doesPrExist(wd, parentRepoName, currentBranchName)
+	prExists, _, _, _, err := doesPrExist(wd, parentRepoName, currentBranchName)
 	if err != nil {
 		return err
 	}
@@ -176,20 +176,26 @@ func pushPRBranch(wd, prBranchName string) error {
 // doesPrExist checks if a pull request exists for the current branch.
 // Returns:
 // - true if PR exists
+// - PR Url if PR exists, none otherwise
 // - stdout from the command execution
 // - stderr from the command execution
 // - error if any
-func doesPrExist(wd, parentRepoName, currentBranchName string) (bool, string, string, error) {
+func doesPrExist(wd, parentRepoName, currentBranchName string) (bool, string, string, string, error) {
 	var (
 		prExists bool
+		prURL    string
 		stdout   string
 		stderr   string
 		err      error
 	)
 
+	type prInfo struct {
+		URL string `json:"url"`
+	}
+
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", currentBranchName).
+			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", currentBranchName, "--limit", "1", "--json", "url").
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -211,15 +217,22 @@ func doesPrExist(wd, parentRepoName, currentBranchName string) (bool, string, st
 
 			return nil
 		}
-		prExists = true
+		var infos []prInfo
+		if err := json.Unmarshal([]byte(stdout), &infos); err != nil {
+			return fmt.Errorf("failed to parse gh pr list output: %w", err)
+		}
+		if len(infos) > 0 {
+			prExists = true
+			prURL = strings.TrimSpace(infos[0].URL)
+		}
 
 		return nil
 	})
 	if err != nil {
-		return false, stdout, stderr, err
+		return false, "", stdout, stderr, err
 	}
 
-	return prExists, stdout, stderr, nil
+	return prExists, prURL, stdout, stderr, nil
 }
 
 func removeBranch(wd, branchName string) error {

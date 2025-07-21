@@ -1594,12 +1594,17 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return stdout, stderr, err
 	}
 
-	prExists, stdout, stderr, err := doesPrExist(wd, parentRepoName, prBranchName)
+	prExists, prURL, stdout, stderr, err := doesPrExist(wd, parentRepoName, prBranchName)
 	if err != nil {
 		return stdout, stderr, err
 	}
 	if !prExists {
 		return stdout, stderr, errors.New("PR not created")
+	}
+	// print PR URL
+	if len(prURL) > 0 {
+		fmt.Println()
+		fmt.Println(prURL)
 	}
 
 	return stdout, stderr, err
