@@ -32,7 +32,7 @@ func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 			return commands.U(cmd, cfgUpload, wd)
 		},
 	}
-	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, []string{gitcmds.PushDefaultMsg}, pushMsgComment)
+	uploadCmd.Flags().StringSliceVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, []string{}, pushMsgComment)
 
 	return uploadCmd
 }
