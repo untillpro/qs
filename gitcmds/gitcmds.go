@@ -310,9 +310,6 @@ func Upload(cmd *cobra.Command, wd string) error {
 	if err != nil {
 		return err
 	}
-	if err := setUpstreamBranch(wd, "origin", brName); err != nil {
-		return fmt.Errorf("failed to set upstream branch: %w", err)
-	}
 
 	// Push notes to origin
 	err = helper.Retry(func() error {
@@ -331,10 +328,23 @@ func Upload(cmd *cobra.Command, wd string) error {
 
 	// Push branch to origin
 	var stdout string
+
+	// Check if branch already has upstream tracking
+	hasUpstream, err := hasUpstreamBranch(wd, brName)
+	if err != nil {
+		return fmt.Errorf("failed to check upstream branch: %w", err)
+	}
+
+	// Only use -u flag if upstream is not already configured
+	pushArgs := []string{push, origin, brName}
+	if !hasUpstream {
+		pushArgs = []string{push, "-u", origin, brName}
+	}
+
 	err = helper.Retry(func() error {
 		var pushErr error
 		stdout, stderr, pushErr = new(exec.PipedExec).
-			Command(git, push, "-u", origin, brName).
+			Command(git, pushArgs...).
 			WorkingDir(wd).
 			RunToStrings()
 		return pushErr
@@ -1718,6 +1728,22 @@ func GetFilesForCommit(wd string) []string {
 		}
 	}
 	return strs
+}
+
+// hasUpstreamBranch checks if the current branch has an upstream tracking branch configured
+func hasUpstreamBranch(wd string, branchName string) (bool, error) {
+	stdout, _, err := new(exec.PipedExec).
+		Command(git, "config", "--get", fmt.Sprintf("branch.%s.remote", branchName)).
+		WorkingDir(wd).
+		RunToStrings()
+
+	if err != nil {
+		// If the config doesn't exist, git config returns exit code 1
+		// This is expected when no upstream is configured
+		return false, nil
+	}
+
+	return strings.TrimSpace(stdout) != "", nil
 }
 
 func setUpstreamBranch(wd string, repo string, branch string) error {
