@@ -22,7 +22,6 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		return fmt.Errorf("git status failed: %w", err)
 	}
 
-	defaultCommitMessage := os.Getenv(EnvMainCommitMessage)
 	_, isMain, err := gitcmds.IamInMainBranch(wd)
 	if err != nil {
 		return err
@@ -46,7 +45,16 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		return errors.New("there is nothing to commit")
 	}
 
-	// find out type of the branch
+	if err := setCommitMessage(cmd, cfgUpload, wd); err != nil {
+		return err
+	}
+
+	return gitcmds.Upload(cmd, wd)
+}
+
+func setCommitMessage(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
+	defaultCommitMessage := os.Getenv(EnvMainCommitMessage)
+	// find out a type of the branch
 	branchType, err := gitcmds.GetBranchType(wd)
 	if err != nil {
 		return err
@@ -89,12 +97,12 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		}
 	}
 	// put commit a message to context
-	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, strings.Join(finalCommitMessages, " ")))
+	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, finalCommitMessages))
 
-	return gitcmds.Upload(wd, finalCommitMessages)
+	return nil
 }
 
-// readCommitMessage from stdin 
+// readCommitMessage from stdin
 func readCommitMessage() ([]string, error) {
 	fmt.Print("Enter commit message (press Enter to confirm): ")
 	reader := bufio.NewReader(os.Stdin)
@@ -102,11 +110,11 @@ func readCommitMessage() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	commitMessageParts := strings.Fields(commitMessage)
 	if len(commitMessageParts) == 0 {
 		return nil, errors.New("commit message is empty")
 	}
-	
+
 	return commitMessageParts, nil
 }
