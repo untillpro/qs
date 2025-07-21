@@ -26,6 +26,7 @@ const (
 	trueStr               = "true"
 	oneSpace              = " "
 	EnvSkipQsVersionCheck = "QS_SKIP_QS_VERSION_CHECK"
+	EnvMainCommitMessage = "QS_MAIN_COMMIT_MESSAGE"
 )
 
 const (

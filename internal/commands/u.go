@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,8 +22,17 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		return fmt.Errorf("git status failed: %w", err)
 	}
 
+	defaultCommitMessage := os.Getenv(EnvMainCommitMessage)
+	_, isMain, err := gitcmds.IamInMainBranch(wd)
+	if err != nil {
+		return err
+	}
+	if isMain {
+		fmt.Println("You are in main branch.")
+	}
+
 	// Fetch notes from origin
-	_, _, err := new(exec.PipedExec).
+	_, _, err = new(exec.PipedExec).
 		Command("git", "fetch", "origin", "--force", "refs/notes/*:refs/notes/*").
 		WorkingDir(wd).
 		RunToStrings()
@@ -32,7 +43,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 
 	files := gitcmds.GetFilesForCommit(wd)
 	if len(files) == 0 {
-		return errors.New("There is nothing to commit")
+		return errors.New("there is nothing to commit")
 	}
 
 	// find out type of the branch
@@ -58,17 +69,44 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 		}
 	case notesPkg.BranchTypePr:
-		// if commit message is not specified or is shorter than 8 characters
+		// if a commit message is not specified or is shorter than 8 characters
 		if totalLength < 8 {
-			return errors.New("Commit message is missing or too short (minimum 8 characters)")
+			return errors.New("commit message is missing or too short (minimum 8 characters)")
 		}
 
 		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 	default:
-		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
+		if totalLength == 0 {
+			if len(strings.TrimSpace(defaultCommitMessage)) > 0 {
+				finalCommitMessages = append(finalCommitMessages, defaultCommitMessage)
+			} else {
+				commitMessageParts, err := readCommitMessage()
+				if err != nil {
+					return err
+				}
+				finalCommitMessages = append(finalCommitMessages, commitMessageParts...)
+			}
+		}
 	}
-	// put commit message to context
+	// put commit a message to context
 	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, strings.Join(finalCommitMessages, " ")))
 
 	return gitcmds.Upload(wd, finalCommitMessages)
+}
+
+// readCommitMessage from stdin 
+func readCommitMessage() ([]string, error) {
+	fmt.Print("Enter commit message (press Enter to confirm): ")
+	reader := bufio.NewReader(os.Stdin)
+	commitMessage, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	
+	commitMessageParts := strings.Fields(commitMessage)
+	if len(commitMessageParts) == 0 {
+		return nil, errors.New("commit message is empty")
+	}
+	
+	return commitMessageParts, nil
 }
