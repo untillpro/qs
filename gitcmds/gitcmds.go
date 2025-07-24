@@ -427,6 +427,7 @@ func Download(wd string) error {
 	})
 	if err != nil {
 		logger.Verbose(stderr)
+		
 
 		return fmt.Errorf("failed to fetch origin --prune: %w", err)
 	}
