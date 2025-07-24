@@ -3,7 +3,6 @@ package commands
 var Verbose bool
 
 const (
-	maxDevBranchName = 50
 	msymbol          = "-"
 	devider          = "\n------------------------------------------"
 

@@ -14,6 +14,7 @@
 package helper
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -320,3 +321,43 @@ func VerifyGitRemoteAccessible(remoteURL string) error {
 
 	return nil
 }
+
+func CleanArgFromSpecSymbols(arg string) string {
+	var symbol string
+
+	arg = strings.ReplaceAll(arg, "https://", "")
+	replaceToMinus := []string{oneSpace, ",", ";", ".", ":", "?", "/", "!"}
+	for _, symbol = range replaceToMinus {
+		arg = strings.ReplaceAll(arg, symbol, "-")
+	}
+	replaceToNone := []string{"&", "$", "@", "%", "\\", "(", ")", "{", "}", "[", "]", "<", ">", "'", "\""}
+	for _, symbol = range replaceToNone {
+		arg = strings.ReplaceAll(arg, symbol, "")
+	}
+	for string(arg[0]) == msymbol {
+		arg = arg[1:]
+	}
+
+	arg = deleteDupMinus(arg)
+	if len(arg) > maxDevBranchName {
+		arg = arg[:maxDevBranchName]
+	}
+	for string(arg[len(arg)-1]) == msymbol {
+		arg = arg[:len(arg)-1]
+	}
+	return arg
+}
+
+func deleteDupMinus(str string) string {
+	var buf bytes.Buffer
+	var pc rune
+	for _, c := range str {
+		if pc == c && string(c) == msymbol {
+			continue
+		}
+		pc = c
+		buf.WriteRune(c)
+	}
+	return buf.String()
+}
+
