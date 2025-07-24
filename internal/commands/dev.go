@@ -150,7 +150,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 				fmt.Print("Upstream not found.\nRepository " + parentRepo + " will be added as upstream. Agree[y/n]?")
 				_, _ = fmt.Scanln(&response)
 				if response != pushYes {
-					fmt.Print(pushFail)
+					fmt.Print(msgOkSeeYou)
 					return nil
 				}
 				response = ""
@@ -164,7 +164,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			return err
 		}
 	default:
-		fmt.Print(pushFail)
+		fmt.Print(msgOkSeeYou)
 
 		return nil
 	}
@@ -527,7 +527,7 @@ func deleteBranches(wd string) error {
 				return err
 			}
 		default:
-			fmt.Print(pushFail)
+			fmt.Print(msgOkSeeYou)
 		}
 	}
 	if err := gitcmds.PullUpstream(wd); err != nil {
@@ -567,7 +567,7 @@ func deleteBranches(wd string) error {
 			return err
 		}
 	default:
-		fmt.Print(pushFail)
+		fmt.Print(msgOkSeeYou)
 	}
 
 	return nil

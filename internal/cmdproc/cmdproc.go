@@ -379,7 +379,7 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 			// Check QS version (unless skipped)
 			skipQsVerCheck, _ := strconv.ParseBool(os.Getenv(commands.EnvSkipQsVersionCheck))
 			if !skipQsVerCheck && !helper.CheckQsVer() {
-				fmt.Println("QS version check failed")
+				fmt.Println(msgOkSeeYou)
 				os.Exit(1)
 			}
 

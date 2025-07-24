@@ -55,7 +55,7 @@ func Pr(wd string, needDraft bool) error {
 			fmt.Print("Upstream not found.\nRepository " + parentRepoName + " will be added as upstream. Agree[y/n]?")
 			_, _ = fmt.Scanln(&response)
 			if response != pushYes {
-				fmt.Print(pushFail)
+				fmt.Print(msgOkSeeYou)
 				return nil
 			}
 			response = ""
