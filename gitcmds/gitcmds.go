@@ -1092,6 +1092,7 @@ func buildDevBranchName(issueURL string) (string, error) {
 	if len(branchName) > 100 {
 		branchName = branchName[:100]
 	}
+	branchName = helper.CleanArgFromSpecSymbols(branchName)
 	// Add suffix "-dev" for a dev branch
 	branchName += "-dev"
 
@@ -1671,18 +1672,13 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return "", "", err
 	}
 
-	normalizedTitle := strings.ReplaceAll(prTitle, " ", "-")
 	args := []string{
 		"pr",
 		"create",
-		"--head",
-		forkAccount + ":" + prBranchName,
-		"--repo",
-		parentRepoName,
-		"--body",
-		strBody,
-		"--title",
-		normalizedTitle,
+		fmt.Sprintf(`--head=%s`, forkAccount + ":" + prBranchName),
+		fmt.Sprintf(`--repo=%s`, parentRepoName),
+		fmt.Sprintf(`--body="%s"`, strBody),
+		fmt.Sprintf(`--title="%s"`, prTitle),
 	}
 	if asDraft {
 		args = append(args, "--draft")

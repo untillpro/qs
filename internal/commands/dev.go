@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -22,6 +21,7 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	contextPkg "github.com/untillpro/qs/internal/context"
+	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/notes"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 )
@@ -274,7 +274,7 @@ func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 		}
 		branch = branch + "-" + arg
 	}
-	branch = cleanArgfromSpecSymbols(branch)
+	branch = helper.CleanArgFromSpecSymbols(branch)
 	// Prepare new notes
 	notesObj, err := notes.Serialize("", "", notesPkg.BranchTypeDev)
 	if err != nil {
@@ -387,45 +387,6 @@ func splitQuotedArgs(args ...string) []string {
 		}
 	}
 	return newargs
-}
-
-func cleanArgfromSpecSymbols(arg string) string {
-	var symbol string
-
-	arg = strings.ReplaceAll(arg, "https://", "")
-	replaceToMinus := []string{oneSpace, ",", ";", ".", ":", "?", "/", "!"}
-	for _, symbol = range replaceToMinus {
-		arg = strings.ReplaceAll(arg, symbol, "-")
-	}
-	replaceToNone := []string{"&", "$", "@", "%", "\\", "(", ")", "{", "}", "[", "]", "<", ">", "'", "\""}
-	for _, symbol = range replaceToNone {
-		arg = strings.ReplaceAll(arg, symbol, "")
-	}
-	for string(arg[0]) == msymbol {
-		arg = arg[1:]
-	}
-
-	arg = deleteDupMinus(arg)
-	if len(arg) > maxDevBranchName {
-		arg = arg[:maxDevBranchName]
-	}
-	for string(arg[len(arg)-1]) == msymbol {
-		arg = arg[:len(arg)-1]
-	}
-	return arg
-}
-
-func deleteDupMinus(str string) string {
-	var buf bytes.Buffer
-	var pc rune
-	for _, c := range str {
-		if pc == c && string(c) == msymbol {
-			continue
-		}
-		pc = c
-		buf.WriteRune(c)
-	}
-	return buf.String()
 }
 
 func getJiraIssueNameByNumber(issueNum string) (name string, err error) {
