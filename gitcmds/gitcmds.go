@@ -1675,10 +1675,10 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 	args := []string{
 		"pr",
 		"create",
-		fmt.Sprintf(`--head=%s`, forkAccount + ":" + prBranchName),
+		fmt.Sprintf(`--head=%s`, forkAccount+":"+prBranchName),
 		fmt.Sprintf(`--repo=%s`, parentRepoName),
-		fmt.Sprintf(`--body="%s"`, strBody),
-		fmt.Sprintf(`--title="%s"`, prTitle),
+		fmt.Sprintf(`--body=%s`, strings.TrimSpace(strBody)),
+		fmt.Sprintf(`--title=%s`, strings.TrimSpace(prTitle)),
 	}
 	if asDraft {
 		args = append(args, "--draft")
