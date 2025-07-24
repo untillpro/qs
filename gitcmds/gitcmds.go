@@ -50,8 +50,8 @@ const (
 	ErrAlreadyForkedMsg     = "you are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
 	ErrTimer40Sec           = "time out 40 seconds"
-	ErrSomethigWrong        = "something went wrong"
-	PushDefaultMsg          = "dev"
+	ErrSomethigWrong     	= "something went wrong"
+	DefaultCommitMessage 	= "wip"
 
 	IssuePRTtilePrefix = "Resolves issue"
 	IssueSign          = "Resolves #"
