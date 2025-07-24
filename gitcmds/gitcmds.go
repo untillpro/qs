@@ -403,50 +403,140 @@ func HaveUncommittedChanges(wd string) (bool, error) {
 
 // Download sources from git repo
 func Download(wd string) error {
+	// Step 1: Exit if there are uncommitted changes
 	uncommittedChanges, err := HaveUncommittedChanges(wd)
 	if err != nil {
 		return err
 	}
 
 	if uncommittedChanges {
-		return errors.New("There are uncommitted changes in the repository.")
+		return errors.New("there are uncommitted changes in the repository")
 	}
 
-	branchName, isMain, err := IamInMainBranch(wd)
+	var (
+		stderr string
+	)
+	// Step 2: fetch origin --prune
+	err = helper.Retry(func() error {
+		_, stderr, err = new(exec.PipedExec).
+			Command(git, "fetch", "origin", "--prune").
+			WorkingDir(wd).
+			RunToStrings()
+
+		return err
+	})
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return fmt.Errorf("failed to fetch origin --prune: %w", err)
+	}
+
+	// Step 3: git pull origin refs/notes/*:refs/notes/*
+	err = helper.Retry(func() error {
+		_, stderr, err = new(exec.PipedExec).
+			Command(git, "pull", "origin", "refs/notes/*:refs/notes/*").
+			WorkingDir(wd).
+			RunToStrings()
+
+		return err
+	})
+	if err != nil {
+		logger.Verbose(stderr)
+		fmt.Println(`warning: command [git pull origin "refs/notes/*:refs/notes/*"] failed`)
+		fmt.Println(`hint: you can run command [git fetch origin --force "refs/notes/*:refs/notes/*"] to replace local notes by remote ones`)
+	}
+
+	// Get current branch info
+	currentBranchName, isMain, err := IamInMainBranch(wd)
 	if err != nil {
 		return err
 	}
-	// pull from origin for dev branch
-	if !isMain {
-		// Fetch notes from origin
-		err := helper.Retry(func() error {
-			return new(exec.PipedExec).
-				Command(git, fetch, "origin", "--force", "refs/notes/*:refs/notes/*").
-				WorkingDir(wd).
-				Run(os.Stdout, os.Stdout)
-		})
-		if err != nil {
-			return err
-		}
 
-		return helper.Retry(func() error {
-			return new(exec.PipedExec).
-				Command(git, pull, "origin").
-				WorkingDir(wd).
-				Run(os.Stdout, os.Stdout)
-		})
+	// Get the name of the main branch
+	mainBranchName, err := GetMainBranch(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch: %w", err)
 	}
 
-	// pull from upstream if exists and current branch is main
-	if !UpstreamNotExist(wd) {
-		err := helper.Retry(func() error {
-			return new(exec.PipedExec).
-				Command(git, pull, "upstream", branchName).
-				WorkingDir(wd).
-				Run(os.Stdout, os.Stdout)
-		})
+	// check out on the main branch
+	if !isMain {
+		_, stderr, err = new(exec.PipedExec).
+			Command(git, "checkout", mainBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
 
-		return err
+			return fmt.Errorf("failed to checkout on %s: %w", mainBranchName, err)
+		}
+	}
+
+	// Step 4: merge origin Main => Main
+	_, stderr, err = new(exec.PipedExec).
+		Command(git, "merge", fmt.Sprintf("origin/%s", mainBranchName)).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return fmt.Errorf("failed to merge origin/%s: %w", mainBranchName, err)
+	}
+
+	// check out back on previous branch
+	if !isMain {
+		_, stderr, err = new(exec.PipedExec).
+			Command(git, "checkout", currentBranchName).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			return fmt.Errorf("failed to checkout on %s: %w", currentBranchName, err)
+		}
+	}
+
+	// Step 5: If not on Main and the remote tracking branch exists merge local branch with the remote branch
+	if !isMain {
+		var hasRemoteBranch bool
+
+		hasRemoteBranch, err = hasRemoteTrackingBranch(wd, currentBranchName)
+		if err != nil {
+			return fmt.Errorf("failed to check remote tracking branch: %w", err)
+		}
+
+		if hasRemoteBranch {
+			_, stderr, err = new(exec.PipedExec).
+				Command(git, "merge", fmt.Sprintf("origin/%s", currentBranchName)).
+				WorkingDir(wd).
+				RunToStrings()
+			if err != nil {
+				logger.Verbose(stderr)
+
+				return fmt.Errorf("failed to merge origin/%s: %w", currentBranchName, err)
+			}
+		}
+	}
+
+	// Step 6: If upstream exists - pull upstream/Main --no-rebase => Main
+	upstreamExists, err := HasRemote(wd, "upstream")
+	if err != nil {
+		return fmt.Errorf("failed to check if upstream exists: %w", err)
+	}
+
+	if upstreamExists {
+		err = helper.Retry(func() error {
+			_, stderr, err = new(exec.PipedExec).
+				Command(git, "pull", "--no-rebase", "upstream", mainBranchName).
+				WorkingDir(wd).
+				RunToStrings()
+
+			return err
+		})
+		if err != nil {
+			logger.Verbose(stderr)
+
+			return fmt.Errorf("failed to pull upstream/%s --no-rebase: %w", mainBranchName, err)
+		}
 	}
 
 	return nil
@@ -1744,6 +1834,35 @@ func hasUpstreamBranch(wd string, branchName string) (bool, error) {
 	}
 
 	return strings.TrimSpace(stdout) != "", nil
+}
+
+// hasRemoteTrackingBranch checks if a remote tracking branch exists for the given branch
+func hasRemoteTrackingBranch(wd string, branchName string) (bool, error) {
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "branch", "-r").
+		WorkingDir(wd).
+		Command("grep", branchName).
+		RunToStrings()
+
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return false, err
+	}
+
+	strBranches := strings.TrimSpace(stdout)
+	if strBranches == "" {
+		return false, nil
+	}
+
+	rBranches := strings.Split(strBranches, "\n")
+	for _, rBranch := range rBranches {
+		if strings.TrimSpace(rBranch) == "origin/"+branchName {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func setUpstreamBranch(wd string, repo string, branch string) error {
