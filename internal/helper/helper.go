@@ -57,7 +57,7 @@ func Delay() {
 	if ghTimeoutMsString != "" {
 		timeoutMs, err = strconv.Atoi(ghTimeoutMsString)
 		if err != nil {
-			logger.Verbose("Error converting %s to int: %s", ghTimeoutMsString, err)
+			logger.Verbose(fmt.Sprintf("Error converting %s to int: %v", ghTimeoutMsString, err))
 			timeoutMs = defaultGhTimeoutMs
 		}
 	}
@@ -84,7 +84,7 @@ func CheckGH() bool {
 func CheckQsVer() bool {
 	installedVer, err := GetInstalledQSVersion()
 	if err != nil {
-		logger.Verbose("Error getting installed qs version: %s\n", err)
+		logger.Verbose(fmt.Sprintf("Error getting installed qs version: %v", err))
 
 		return false
 	}
@@ -181,7 +181,7 @@ func getMaxRetries() int {
 		if val, err := strconv.Atoi(envVal); err == nil && val >= 0 {
 			return val
 		}
-		logger.Verbose("Invalid %s value: %s, using default: %d", maxRetriesEnv, envVal, defaultMaxRetries)
+		logger.Verbose(fmt.Sprintf("Invalid %s value: %s, using default: %d", maxRetriesEnv, envVal, defaultMaxRetries))
 	}
 
 	return defaultMaxRetries
@@ -193,7 +193,7 @@ func getRetryDelay() time.Duration {
 		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
 			return time.Duration(val) * time.Millisecond
 		}
-		logger.Verbose("Invalid %s value: %s, using default: %v", retryDelayMsEnv, envVal, defaultRetryDelay)
+		logger.Verbose(fmt.Sprintf("Invalid %s value: %s, using default: %v", retryDelayMsEnv, envVal, defaultRetryDelay))
 	}
 
 	return defaultRetryDelay
@@ -205,7 +205,7 @@ func getMaxRetryDelay() time.Duration {
 		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
 			return time.Duration(val) * time.Millisecond
 		}
-		logger.Verbose("Invalid %s value: %s, using default: %v", maxRetryDelayMsEnv, envVal, defaultMaxRetryDelay)
+		logger.Verbose(fmt.Sprintf("Invalid %s value: %s, using default: %v", maxRetryDelayMsEnv, envVal, defaultMaxRetryDelay))
 	}
 
 	return defaultMaxRetryDelay
@@ -228,6 +228,7 @@ func ExponentialBackoff(attempt int, delay time.Duration) time.Duration {
 	if newDelay > maxDelay {
 		return maxDelay
 	}
+	
 	return newDelay
 }
 
@@ -238,6 +239,7 @@ func LinearBackoff(attempt int, delay time.Duration) time.Duration {
 	if newDelay > maxDelay {
 		return maxDelay
 	}
+	
 	return newDelay
 }
 
@@ -248,20 +250,21 @@ func RetryWithConfig(fn func() error, config *RetryConfig) error {
 	for attempt := 0; attempt <= config.MaxRetries; attempt++ {
 		if attempt > 0 {
 			delay := config.Backoff(attempt-1, config.InitialDelay)
-			logger.Verbose("Retry attempt %d/%d, waiting %v before retry", attempt, config.MaxRetries, delay)
+			logger.Verbose(fmt.Sprintf("Retry attempt %d/%d, waiting %v before retry", attempt, config.MaxRetries, delay))
 			time.Sleep(delay)
 		}
 
 		lastErr = fn()
 		if lastErr == nil {
 			if attempt > 0 {
-				logger.Verbose("Operation succeeded on attempt %d", attempt+1)
+				logger.Verbose(fmt.Sprintf("Operation succeeded on attempt %d", attempt+1))
 			}
+			
 			return nil
 		}
 
 		if attempt < config.MaxRetries {
-			logger.Verbose("Attempt %d failed: %v", attempt+1, lastErr)
+			logger.Verbose(fmt.Sprintf("Attempt %d failed: %v", attempt+1, lastErr))
 		}
 	}
 
@@ -286,6 +289,7 @@ func RetryConfigWithMaxAttempts(maxAttempts int) *RetryConfig {
 // RetryWithMaxAttempts executes a function with specified maximum attempts
 func RetryWithMaxAttempts(fn func() error, maxAttempts int) error {
 	config := RetryConfigWithMaxAttempts(maxAttempts)
+	
 	return RetryWithConfig(fn, config)
 }
 
@@ -300,7 +304,7 @@ func VerifyGitHubRepoExists(owner, repo, token string) error {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("repository %s/%s not accessible: %w, output: %s", owner, repo, err, output)
+		return fmt.Errorf("repository %s/%s not accessible: %v, output: %s", owner, repo, err, output)
 	}
 
 	return nil
@@ -311,7 +315,7 @@ func VerifyGitRemoteAccessible(remoteURL string) error {
 	cmd := osExec.Command("git", "ls-remote", remoteURL)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("remote URL %s not accessible: %w, output: %s", remoteURL, err, output)
+		return fmt.Errorf("remote URL %s not accessible: %v, output: %s", remoteURL, err, output)
 	}
 
 	return nil
