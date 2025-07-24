@@ -1,11 +1,9 @@
 package commands
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -53,7 +51,6 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 }
 
 func setCommitMessage(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
-	defaultCommitMessage := os.Getenv(EnvMainCommitMessage)
 	// find out a type of the branch
 	branchType, err := gitcmds.GetBranchType(wd)
 	if err != nil {
@@ -71,50 +68,30 @@ func setCommitMessage(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) er
 	switch branchType {
 	case notesPkg.BranchTypeDev:
 		if totalLength == 0 {
-			// for dev branch default commit message is "dev"
-			finalCommitMessages = append(finalCommitMessages, gitcmds.PushDefaultMsg)
+			// for dev branch default commit message is "wip" (work in process)
+			finalCommitMessages = append(finalCommitMessages, gitcmds.DefaultCommitMessage)
 		} else {
 			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 		}
 	case notesPkg.BranchTypePr:
 		// if a commit message is not specified or is shorter than 8 characters
-		if totalLength < 8 {
-			return errors.New("commit message is missing or too short (minimum 8 characters)")
+		switch {
+		case totalLength == 0:
+			return ErrEmptyCommitMessage
+		case totalLength < 8:
+			return ErrShortCommitMessage
+		default:
+			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
+		}
+	default:
+		if totalLength == 0 {
+			return ErrEmptyCommitMessage
 		}
 
 		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
-	default:
-		if totalLength == 0 {
-			if len(strings.TrimSpace(defaultCommitMessage)) > 0 {
-				finalCommitMessages = append(finalCommitMessages, defaultCommitMessage)
-			} else {
-				commitMessageParts, err := readCommitMessage()
-				if err != nil {
-					return err
-				}
-				finalCommitMessages = append(finalCommitMessages, commitMessageParts...)
-			}
-		}
 	}
 	// put commit a message to context
 	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, finalCommitMessages))
 
 	return nil
-}
-
-// readCommitMessage from stdin
-func readCommitMessage() ([]string, error) {
-	fmt.Print("Enter commit message (press Enter to confirm): ")
-	reader := bufio.NewReader(os.Stdin)
-	commitMessage, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-
-	commitMessageParts := strings.Fields(commitMessage)
-	if len(commitMessageParts) == 0 {
-		return nil, errors.New("commit message is empty")
-	}
-
-	return commitMessageParts, nil
 }
