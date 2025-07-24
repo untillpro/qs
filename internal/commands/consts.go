@@ -6,8 +6,8 @@ const (
 	msymbol          = "-"
 	devider          = "\n------------------------------------------"
 
-	pushFail = "Ok, see you"
-	pushYes  = "y"
+	msgOkSeeYou = "Ok, see you"
+	pushYes     = "y"
 
 	delBranchConfirm      = "\n*** Branches shown above will be deleted from your forked repository, 'y': agree>"
 	delBranchNothing      = "\n*** There are no remote branches to delete."

@@ -1,6 +1,7 @@
 package cmdproc
 
 const (
+	msgOkSeeYou       = "Ok, see you"
 	pushParamDesc    = "Upload sources to repo"
 	pushMessageWord  = "message"
 	pushMessageParam = "m"
