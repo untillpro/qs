@@ -80,7 +80,7 @@ func Pr(wd string, needDraft bool) error {
 		}
 
 		// Remove dev branch after creating PR-branch
-		if err := removeBranch(wd, currentBranchName); err != nil {
+		if err := RemoveBranch(wd, currentBranchName); err != nil {
 			logger.Verbose(fmt.Errorf("failed to remove branch: %v", err))
 		}
 
@@ -94,7 +94,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Check whether PR already exists
-	prExists, _, _, _, err := doesPrExist(wd, parentRepoName, currentBranchName)
+	prExists, _, _, _, err := DoesPrExist(wd, parentRepoName, currentBranchName, PRStateOpen)
 	if err != nil {
 		return err
 	}
@@ -173,14 +173,14 @@ func pushPRBranch(wd, prBranchName string) error {
 	return nil
 }
 
-// doesPrExist checks if a pull request exists for the current branch.
+// DoesPrExist checks if a pull request exists for the current branch.
 // Returns:
 // - true if PR exists
 // - PR Url if PR exists, none otherwise
 // - stdout from the command execution
 // - stderr from the command execution
 // - error if any
-func doesPrExist(wd, parentRepoName, currentBranchName string) (bool, string, string, string, error) {
+func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (bool, string, string, string, error) {
 	var (
 		prExists bool
 		prURL    string
@@ -195,7 +195,21 @@ func doesPrExist(wd, parentRepoName, currentBranchName string) (bool, string, st
 
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command("gh", "pr", "list", "--repo", parentRepoName, "--head", currentBranchName, "--limit", "1", "--json", "url").
+			Command(
+				"gh",
+				"pr",
+				"list",
+				"--repo",
+				parentRepo,
+				"--head",
+				currentBranchName,
+				"--limit",
+				"1",
+				"--state",
+				string(prState),
+				"--json",
+				"url",
+			).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -235,19 +249,21 @@ func doesPrExist(wd, parentRepoName, currentBranchName string) (bool, string, st
 	return prExists, prURL, stdout, stderr, nil
 }
 
-func removeBranch(wd, branchName string) error {
+func RemoveBranch(wd, branchName string) error {
 	// Delete branch locally
-	_, _, err := new(exec.PipedExec).
+	_, stderr, err := new(exec.PipedExec).
 		Command("git", "branch", "-D", branchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
 		return err
 	}
 
 	// Delete branch from origin
 	err = helper.Retry(func() error {
-		_, _, err := new(exec.PipedExec).
+		_, stderr, err = new(exec.PipedExec).
 			Command("git", "push", "origin", "--delete", branchName).
 			WorkingDir(wd).
 			RunToStrings()
@@ -255,32 +271,7 @@ func removeBranch(wd, branchName string) error {
 		return err
 	})
 	if err != nil {
-		return err
-	}
-
-	// Check whether we have upstream
-	hasUpstream, err := HasRemote(wd, "upstream")
-	if err != nil {
-		return err
-	}
-	if !hasUpstream {
-		return nil
-	}
-
-	// Delete branch from upstream
-	var stderr string
-	err = helper.Retry(func() error {
-		var deleteErr error
-		_, stderr, deleteErr = new(exec.PipedExec).
-			Command("git", "push", "upstream", "--delete", branchName).
-			WorkingDir(wd).
-			RunToStrings()
-		return deleteErr
-	})
-	if err != nil {
-		if strings.Contains(stderr, "ref does not exist") {
-			return nil
-		}
+		logger.Verbose(stderr)
 
 		return err
 	}
