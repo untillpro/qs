@@ -27,14 +27,18 @@ import (
 )
 
 func Dev(cmd *cobra.Command, wd string, args []string) error {
-	_, err := gitcmds.CheckIfGitRepo(wd)
+	if _, err := gitcmds.CheckIfGitRepo(wd); err != nil {
+		return err
+	}
+
+	parentRepo, err := gitcmds.GetParentRepoName(wd)
 	if err != nil {
 		return err
 	}
 
 	// qs dev -d is running
 	if cmd.Flag(devDelParamFull).Value.String() == trueStr {
-		return deleteBranches(wd)
+		return deleteBranches(wd, parentRepo)
 	}
 	// qs dev is running
 	var branch string
@@ -44,11 +48,6 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	if len(args) == 0 {
 		clipargs := strings.TrimSpace(getArgStringFromClipboard(cmd.Context()))
 		args = append(args, clipargs)
-	}
-
-	parentRepo, err := gitcmds.GetParentRepoName(wd)
-	if err != nil {
-		return err
 	}
 
 	noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == trueStr)
@@ -499,75 +498,43 @@ func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
 	return "", false
 }
 
-func deleteBranches(wd string) error {
-	if err := gitcmds.PullUpstream(wd); err != nil {
+func deleteBranches(wd, parentRepo string) error {
+	// Step 1: qs d
+	if err := gitcmds.Download(wd); err != nil {
 		return err
 	}
 
-	lst, err := gitcmds.GetMergedBranchList(wd)
+	mainBranch, err := gitcmds.GetMainBranch(wd)
 	if err != nil {
 		return err
 	}
 
-	var response string
-	if len(lst) == 0 {
-		fmt.Println(delBranchNothing)
-	} else {
-		fmt.Print(devider)
-		for _, l := range lst {
-			fmt.Print("\n" + l)
-		}
-		fmt.Print(devider)
-
-		fmt.Print(delBranchConfirm)
-		_, _ = fmt.Scanln(&response)
-		switch response {
-		case pushYes:
-			if err := gitcmds.DeleteBranchesRemote(wd, lst); err != nil {
-				return err
-			}
-		default:
-			fmt.Print(msgOkSeeYou)
-		}
-	}
-	if err := gitcmds.PullUpstream(wd); err != nil {
+	// Step 2: Checkout Main
+	if err := gitcmds.CheckoutOnBranch(wd, mainBranch); err != nil {
 		return err
 	}
 
-	fmt.Print("\nChecking if unused local branches exist...")
-	strs, err := gitcmds.GetGoneBranchesLocal(wd)
+	// Step 3: foreach branch that have origin remote tracking branch `git branch -vv | awk '$3 ~ /\[origin.*\]/ {print $1}'`
+	branchesToAnalyze, err := gitcmds.GetBranchesWithRemoteTracking(wd, "origin")
 	if err != nil {
 		return err
 	}
 
-	var strFin []string
-
-	for _, str := range *strs {
-		if (strings.TrimSpace(str) != "") && (strings.TrimSpace(str) != "*") {
-			strFin = append(strFin, str)
-		}
-	}
-
-	if len(strFin) == 0 {
-		return errors.New(delLocalBranchNothing)
-	}
-
-	fmt.Print(devider)
-
-	for _, str := range strFin {
-		fmt.Print("\n" + str)
-	}
-
-	fmt.Print(devider)
-	fmt.Print(delLocalBranchConfirm)
-	_, _ = fmt.Scanln(&response)
-	switch response {
-	case pushYes:
-		if err := gitcmds.DeleteBranchesLocal(wd, strs); err != nil {
+	// Iterate through branches
+	for _, branch := range branchesToAnalyze {
+		// Step 3.n: if pr is merged, then all related branches must be deleted
+		mergedPrExists, _, _, _, err := gitcmds.DoesPrExist(wd, parentRepo, branch, gitcmds.PRStateMerged)
+		if err != nil {
 			return err
 		}
-	default:
-		fmt.Print(msgOkSeeYou)
+		// if pr is not merged yet then branch must live
+		if !mergedPrExists {
+			continue
+		}
+
+		if err := gitcmds.RemoveBranch(wd, branch); err != nil {
+			return err
+		}
 	}
 
 	return nil

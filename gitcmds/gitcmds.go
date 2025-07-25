@@ -50,8 +50,8 @@ const (
 	ErrAlreadyForkedMsg     = "you are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
 	ErrTimer40Sec           = "time out 40 seconds"
-	ErrSomethigWrong     	= "something went wrong"
-	DefaultCommitMessage 	= "wip"
+	ErrSomethingWrong       = "something went wrong"
+	DefaultCommitMessage    = "wip"
 
 	IssuePRTtilePrefix = "Resolves issue"
 	IssueSign          = "Resolves #"
@@ -460,14 +460,8 @@ func Download(wd string) error {
 
 	// check out on the main branch
 	if !isMain {
-		_, stderr, err = new(exec.PipedExec).
-			Command(git, "checkout", mainBranchName).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			return fmt.Errorf("failed to checkout on %s: %w", mainBranchName, err)
+		if err := CheckoutOnBranch(wd, mainBranchName); err != nil {
+			return err
 		}
 	}
 
@@ -484,14 +478,8 @@ func Download(wd string) error {
 
 	// check out back on previous branch
 	if !isMain {
-		_, stderr, err = new(exec.PipedExec).
-			Command(git, "checkout", currentBranchName).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			return fmt.Errorf("failed to checkout on %s: %w", currentBranchName, err)
+		if err := CheckoutOnBranch(wd, currentBranchName); err != nil {
+			return err
 		}
 	}
 
@@ -540,6 +528,50 @@ func Download(wd string) error {
 	}
 
 	return nil
+}
+
+func CheckoutOnBranch(wd, branchName string) error {
+	_, stderr, err := new(exec.PipedExec).
+		Command(git, "checkout", branchName).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return fmt.Errorf("failed to checkout on %s: %v", branchName, err)
+	}
+
+	return nil
+}
+
+func GetBranchesWithRemoteTracking(wd, remoteName string) ([]string, error) {
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "branch", "-vv").
+		WorkingDir(wd).
+		Command("awk", fmt.Sprintf("$3 ~ /\\[%s.*\\]/ {print $1}", remoteName)).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return nil, fmt.Errorf("failed to get list of branches with remote tracking: %w", err)
+	}
+
+	mainBranchName, err := GetMainBranch(wd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get main branch: %w", err)
+	}
+
+	branches := strings.Split(strings.TrimSpace(stdout), caret)
+	branchesWithRemoteTracking := make([]string, 0, len(branches))
+	for _, branchName := range branches {
+		// exclude the main branch from the list
+		if branchName == mainBranchName {
+			continue
+		}
+		branchesWithRemoteTracking = append(branchesWithRemoteTracking, branchName)
+	}
+
+	return branchesWithRemoteTracking, nil
 }
 
 // Gui shows gui
@@ -1694,7 +1726,7 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return stdout, stderr, err
 	}
 
-	prExists, prURL, stdout, stderr, err := doesPrExist(wd, parentRepoName, prBranchName)
+	prExists, prURL, stdout, stderr, err := DoesPrExist(wd, parentRepoName, prBranchName, PRStateOpen)
 	if err != nil {
 		return stdout, stderr, err
 	}
@@ -1759,7 +1791,7 @@ func waitPRChecks(parentrepo string, prurl string) *gchResponse {
 			if ok {
 				return val
 			}
-			return &gchResponse{_err: errors.New(ErrSomethigWrong)}
+			return &gchResponse{_err: errors.New(ErrSomethingWrong)}
 		case <-waitTimer.C:
 			fmt.Println("")
 			return &gchResponse{_err: errors.New(ErrTimer40Sec)}

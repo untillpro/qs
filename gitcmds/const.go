@@ -27,3 +27,10 @@ if (( $totalcnt > 200 )); then
 	 exit 1
 fi
 `
+
+type PRState string
+
+const (
+	PRStateOpen   PRState = "open"
+	PRStateMerged PRState = "merged"
+)
