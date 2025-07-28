@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetTaskIDFromUrl(t *testing.T) {
@@ -31,7 +32,7 @@ func TestGetNotes(t *testing.T) {
 	notes = []string{s1, s2}
 	title, url = GetNoteAndURL(notes)
 	assert.Equal(t, "Resolves issue #324 My Best problem ever", title)
-	assert.Equal(t, "", url)
+	assert.Empty(t, "", url)
 }
 
 func TestGetBody(t *testing.T) {
@@ -40,12 +41,12 @@ func TestGetBody(t *testing.T) {
 	s2 := " https://dev.untill.com/projects/#!361164  "
 	notes := []string{s1, s2}
 	body := GetBodyFromNotes(notes)
-	assert.Equal(t, "", body)
+	require.Empty(t, body)
 
 	// Test for GH Issue types
 	s1 = "Resolves issue #324 My Best problem ever"
 	s2 = " Resolves #324  "
 	notes = []string{s1, s2}
 	body = GetBodyFromNotes(notes)
-	assert.Equal(t, "Resolves #324", body)
+	require.Equal(t, "Resolves #324", body)
 }

@@ -78,7 +78,7 @@ func setCommitMessage(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) er
 		switch {
 		case totalLength == 0:
 			return ErrEmptyCommitMessage
-		case totalLength < 8:
+		case totalLength < minimumCommitMessageLen:
 			return ErrShortCommitMessage
 		default:
 			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)

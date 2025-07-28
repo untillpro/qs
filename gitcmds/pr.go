@@ -28,7 +28,7 @@ func Pr(wd string, needDraft bool) error {
 
 	logger.Verbose(fmt.Sprintf("branch type is %s", branchType.String()))
 	if branchType == notesPkg.BranchTypeUnknown {
-		return errors.New("You must be on dev or pr branch")
+		return errors.New("you must be on dev or pr branch")
 	}
 
 	currentBranchName, err := GetCurrentBranchName(wd)
@@ -41,7 +41,7 @@ func Pr(wd string, needDraft bool) error {
 		return err
 	}
 	if len(parentRepoName) == 0 {
-		return errors.New("You are in trunk. PR is only allowed from forked branch.")
+		return errors.New("you are in trunk. PR is only allowed from forked branch")
 	}
 
 	// If we are on dev branch than we need to create pr branch
@@ -87,7 +87,7 @@ func Pr(wd string, needDraft bool) error {
 
 		// Remove dev branch after creating PR-branch
 		if err := RemoveBranch(wd, currentBranchName); err != nil {
-			logger.Verbose(fmt.Errorf("failed to remove branch: %v", err))
+			logger.Verbose(fmt.Errorf("failed to remove branch: %w", err))
 		}
 
 		// Current branch now is pr branch
@@ -142,7 +142,7 @@ func pushPRBranch(wd, prBranchName string) error {
 			Run(os.Stdout, os.Stdout)
 	})
 	if err != nil {
-		return fmt.Errorf("failed to push notes to origin: %v", err)
+		return fmt.Errorf("failed to push notes to origin: %w", err)
 	}
 
 	if helper.IsTest() {
@@ -454,11 +454,11 @@ func GetIssueDescription(issueURL string) (string, error) {
 	}
 
 	urlParts := strings.Split(repoURL, "/")
-	if len(urlParts) < 5 {
+	if len(urlParts) < 5 {//nolint:revive
 		return "", fmt.Errorf("invalid GitHub URL format: %s", repoURL)
 	}
-	owner := urlParts[3]
-	repo := urlParts[4]
+	owner := urlParts[3]//nolint:revive
+	repo := urlParts[4]//nolint:revive
 
 	// Use gh CLI to get issue details in JSON format with retry logic
 	var issueData struct {
