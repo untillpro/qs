@@ -2,14 +2,8 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -22,8 +16,7 @@ import (
 	"github.com/untillpro/qs/gitcmds"
 	contextPkg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
-	"github.com/untillpro/qs/internal/notes"
-	notesPkg "github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/internal/jira"
 )
 
 func Dev(cmd *cobra.Command, wd string, args []string) error {
@@ -114,10 +107,10 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			checkRemoteBranchExistence = false // no need to check remote branch existence for issue branch
 		}
 	} else { // PK topic or Jira issue
-		if _, ok := GetJiraTicketIDFromArgs(args...); ok { // Jira issue
-			branch, notes, err = getJiraBranchName(wd, args...)
+		if _, ok := jira.GetJiraTicketIDFromArgs(args...); ok { // Jira issue
+			branch, notes, err = jira.GetJiraBranchName(args...)
 		} else {
-			branch, notes, err = getBranchName(false, args...)
+			branch, notes, err = helper.GetBranchName(false, args...)
 			branch += "-dev" // Add suffix "-dev" for a dev branch
 		}
 		if err != nil {
@@ -240,50 +233,6 @@ func setPreCommitHook(wd string) error {
 	return gitcmds.SetLocalPreCommitHook(wd)
 }
 
-func getBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments []string, err error) {
-
-	args = clearEmptyArgs(args)
-	if len(args) == 0 {
-		if ignoreEmptyArg {
-			return "", []string{}, nil
-		}
-
-		return "", []string{}, errors.New("Need branch name for dev")
-	}
-
-	newArgs := splitQuotedArgs(args...)
-	comments = make([]string, 0, len(newArgs)+1) // 1 for json notes
-	comments = append(comments, newArgs...)
-	for i, arg := range newArgs {
-		arg = strings.TrimSpace(arg)
-		if i == 0 {
-			branch = arg
-			continue
-		}
-		if i == len(newArgs)-1 {
-			// Retrieve taskID from url and add it first to branch name
-			url := arg
-			topicID := getTaskIDFromURL(url)
-			if topicID == arg {
-				branch = branch + msymbol + topicID
-			} else {
-				branch = topicID + msymbol + branch
-			}
-			break
-		}
-		branch = branch + "-" + arg
-	}
-	branch = helper.CleanArgFromSpecSymbols(branch)
-	// Prepare new notes
-	notesObj, err := notes.Serialize("", "", notesPkg.BranchTypeDev)
-	if err != nil {
-		return "", []string{}, err
-	}
-	comments = append(comments, notesObj)
-
-	return branch, comments, nil
-}
-
 func argContainsGithubIssueLink(wd string, args ...string) (issueNum int, issueURL string, ok bool, err error) {
 	ok = false
 	if len(args) != 1 {
@@ -316,186 +265,6 @@ func checkIssueLink(wd, issueURL string) error {
 	}
 
 	return nil
-}
-
-// getJiraBranchName generates a branch name based on a JIRA issue URL in the arguments.
-// If a JIRA URL is found, it generates a branch name in the format "<ISSUE-KEY>-<cleaned-description>".
-// Additionally, it generates comments in the format "[<ISSUE-KEY>] <original-line>".
-func getJiraBranchName(wd string, args ...string) (branch string, comments []string, err error) {
-	comments = make([]string, 0, len(args)+1) // 1 for json notes
-	re := regexp.MustCompile(`https://([a-zA-Z0-9-]+)\.atlassian\.net/browse/([A-Z]+-[A-Z0-9-]+)`)
-	for _, arg := range args {
-		if matches := re.FindStringSubmatch(arg); matches != nil {
-			issueKey := matches[2] // Extract the JIRA issue key (e.g., "AIR-270")
-
-			var brName string
-			issueName, err := getJiraIssueNameByNumber(issueKey)
-			if err != nil {
-				return "", nil, err
-			}
-			if issueName == "" {
-				branch, _, err = getBranchName(false, args...)
-				if err != nil {
-					return "", nil, err
-				}
-			} else {
-				jiraTicketURL := matches[0] // Full JIRA ticket URL
-				// Prepare new notes
-				notesObj, err := notes.Serialize("", jiraTicketURL, notesPkg.BranchTypeDev)
-				if err != nil {
-					return "", nil, err
-				}
-				comments = append(comments, notesObj)
-				brName, _, err = getBranchName(false, issueName)
-				if err != nil {
-					return "", nil, err
-				}
-				branch = issueKey + "-" + brName
-			}
-			comments = append(comments, "["+issueKey+"] "+issueName)
-		}
-	}
-	// Add suffix "-dev" for a dev branch
-	branch += "-dev"
-	comments = append(comments, args...)
-
-	return branch, comments, nil
-}
-
-func clearEmptyArgs(args []string) (newargs []string) {
-	for _, arg := range args {
-		arg = strings.TrimSpace(arg)
-		if len(arg) > 0 {
-			newargs = append(newargs, arg)
-		}
-	}
-	return
-}
-
-func splitQuotedArgs(args ...string) []string {
-	var newargs []string
-	for _, arg := range args {
-		subargs := strings.Split(arg, oneSpace)
-		if len(subargs) == 0 {
-			continue
-		}
-		for _, a := range subargs {
-			if len(a) > 0 {
-				newargs = append(newargs, a)
-			}
-		}
-	}
-	return newargs
-}
-
-func getJiraIssueNameByNumber(issueNum string) (name string, err error) {
-	// Validate the issue key
-	if issueNum == "" {
-		return "", errors.New("Error: Issue key is required.")
-	}
-
-	// Retrieve API token and email from environment variables
-	apiToken := os.Getenv("JIRA_API_TOKEN")
-	if apiToken == "" {
-		fmt.Println("--------------------------------------------------------------------------------")
-		fmt.Println("Error: JIRA API token not found. Please set environment variable JIRA_API_TOKEN.")
-		fmt.Println("            Jira API token can generate on this page:")
-		fmt.Println("          https://id.atlassian.com/manage-profile/security/api-tokens           ")
-		fmt.Println("--------------------------------------------------------------------------------")
-
-		return "", errors.New("Error: JIRA API token not found.")
-	}
-	var email string
-	email = os.Getenv("JIRA_EMAIL")
-	if email == "" {
-		email, err = gitcmds.GetUserEmail() // Replace with your email
-	}
-	if err != nil {
-		return "", err
-	}
-	if email == "" {
-		return "", errors.New("Error: Please export JIRA_EMAIL.")
-	}
-	fmt.Println("User email: ", email)
-	jiraDomain := "https://untill.atlassian.net"
-
-	// Build the request URL
-	url := fmt.Sprintf("%s/rest/api/3/issue/%s", jiraDomain, issueNum)
-
-	// Create HTTP client and request
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.SetBasicAuth(email, apiToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	// Read and parse the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", err
-	}
-
-	var result struct {
-		Fields struct {
-			Summary string `json:"summary"`
-		} `json:"fields"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("Error parsing JSON response: %w", err)
-	}
-
-	// Check if the summary field exists
-	if result.Fields.Summary == "" {
-		return "", nil
-	}
-
-	return result.Fields.Summary, nil
-}
-
-func getTaskIDFromURL(url string) string {
-	var entry string
-	str := strings.Split(url, "/")
-	if len(str) > 0 {
-		entry = str[len(str)-1]
-	}
-	entry = strings.ReplaceAll(entry, "#", "")
-	entry = strings.ReplaceAll(entry, "!", "")
-	return strings.TrimSpace(entry)
-}
-
-// GetJiraTicketIDFromArgs retrieves a JIRA ticket ID from the provided arguments.
-// Parameters:
-// - args: A variable number of string arguments that may contain JIRA issue URLs.
-// Returns:
-// - jiraTicketID: The JIRA ticket ID if found.
-// - ok: A boolean indicating whether a JIRA ticket ID was found.
-func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
-	// Define a regular expression to match JIRA issue URLs
-	// The regex matches URLs like "https://<subdomain>.atlassian.net/browse/<ISSUE-KEY>"
-	re := regexp.MustCompile(`https://[a-zA-Z0-9-]+\.atlassian\.net/browse/([A-Z]+-[A-Z0-9-]+)`)
-
-	for _, arg := range args {
-		// Check if the argument matches the pattern
-		if matches := re.FindStringSubmatch(arg); matches != nil {
-			// Return the issue key (group 1) and true
-			return matches[1], true
-		}
-	}
-
-	// No matching argument was found
-	return "", false
 }
 
 func deleteBranches(wd, parentRepo string) error {

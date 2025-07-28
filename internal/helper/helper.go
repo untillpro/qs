@@ -229,7 +229,7 @@ func ExponentialBackoff(attempt int, delay time.Duration) time.Duration {
 	if newDelay > maxDelay {
 		return maxDelay
 	}
-	
+
 	return newDelay
 }
 
@@ -240,7 +240,7 @@ func LinearBackoff(attempt int, delay time.Duration) time.Duration {
 	if newDelay > maxDelay {
 		return maxDelay
 	}
-	
+
 	return newDelay
 }
 
@@ -260,7 +260,7 @@ func RetryWithConfig(fn func() error, config *RetryConfig) error {
 			if attempt > 0 {
 				logger.Verbose(fmt.Sprintf("Operation succeeded on attempt %d", attempt+1))
 			}
-			
+
 			return nil
 		}
 
@@ -290,7 +290,7 @@ func RetryConfigWithMaxAttempts(maxAttempts int) *RetryConfig {
 // RetryWithMaxAttempts executes a function with specified maximum attempts
 func RetryWithMaxAttempts(fn func() error, maxAttempts int) error {
 	config := RetryConfigWithMaxAttempts(maxAttempts)
-	
+
 	return RetryWithConfig(fn, config)
 }
 
@@ -360,4 +360,3 @@ func deleteDupMinus(str string) string {
 	}
 	return buf.String()
 }
-

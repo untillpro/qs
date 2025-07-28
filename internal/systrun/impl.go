@@ -26,6 +26,7 @@ import (
 	"github.com/untillpro/qs/internal/commands"
 	contextPkg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
+	"github.com/untillpro/qs/internal/jira"
 )
 
 // checkPrerequisites ensures all required tools are available
@@ -376,7 +377,9 @@ func (st *SystemTest) processClipboardContent() error {
 			return errors.New("JIRA_TICKET_URL environment variable not set, skipping test")
 		}
 
-		jiraTicketID, ok := commands.GetJiraTicketIDFromArgs(clipboardContent)
+		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyJiraTicket, clipboardContent)
+
+		jiraTicketID, ok := jira.GetJiraTicketIDFromArgs(clipboardContent)
 		if !ok {
 			return fmt.Errorf("invalid JIRA ticket URL: %s", clipboardContent)
 		}
@@ -438,9 +441,13 @@ func checkoutOnBranch(wd, branchName string) error {
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 	// GitHub Authentication and repo creation with retry
 	err := helper.Retry(func() error {
-		cmd := exec.Command("gh", "repo", "create",
+		cmd := exec.Command(
+			"gh",
+			"repo",
+			"create",
 			fmt.Sprintf("%s/%s", st.cfg.GHConfig.UpstreamAccount, repoName),
-			"--public")
+			"--public",
+		)
 
 		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", st.cfg.GHConfig.UpstreamToken))
 
@@ -975,9 +982,11 @@ func (st *SystemTest) setSyncState(
 	}
 
 	// Set the expected dev branch name that will be used later for PR
-	createdGithubIssueURL := st.ctx.Value(contextPkg.CtxKeyCreatedGithubIssueURL).(string)
-	if createdGithubIssueURL == "" {
-		return errors.New("failed to determine github issue URL. Use ClipboardContentGithubIssue")
+	createdGithubIssueURL, _ := st.ctx.Value(contextPkg.CtxKeyCreatedGithubIssueURL).(string)
+
+	jiraTicket, _ := st.ctx.Value(contextPkg.CtxKeyJiraTicket).(string)
+	if createdGithubIssueURL == "" && jiraTicket == "" {
+		return errors.New("a Jira ticket or GitHub issue must be use to create dev branch")
 	}
 
 	// authenticate with GitHub using the fork token

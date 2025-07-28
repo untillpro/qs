@@ -8,6 +8,7 @@ const (
 	CtxKeyDevBranchName
 	CtxKeyCustomBranchName
 	CtxKeyCreatedGithubIssueURL
+	CtxKeyJiraTicket
 	CtxKeyBranchPrefix
 	CtxKeyClipboard
 	CtxKeyCommitMessage

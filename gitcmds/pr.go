@@ -10,8 +10,14 @@ import (
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/helper"
+	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 )
+
+type PRInfo struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
 
 func Pr(wd string, needDraft bool) error {
 	// find out the type of the branch
@@ -176,22 +182,18 @@ func pushPRBranch(wd, prBranchName string) error {
 // DoesPrExist checks if a pull request exists for the current branch.
 // Returns:
 // - true if PR exists
-// - PR Url if PR exists, none otherwise
+// - PRInfo object if PR exists, nil otherwise
 // - stdout from the command execution
 // - stderr from the command execution
 // - error if any
-func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (bool, string, string, string, error) {
+func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (bool, *PRInfo, string, string, error) {
 	var (
 		prExists bool
-		prURL    string
+		prInfo   PRInfo
 		stdout   string
 		stderr   string
 		err      error
 	)
-
-	type prInfo struct {
-		URL string `json:"url"`
-	}
 
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
@@ -208,7 +210,7 @@ func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (boo
 				"--state",
 				string(prState),
 				"--json",
-				"url",
+				"url,title",
 			).
 			WorkingDir(wd).
 			RunToStrings()
@@ -231,22 +233,23 @@ func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (boo
 
 			return nil
 		}
-		var infos []prInfo
+		var infos []PRInfo
 		if err := json.Unmarshal([]byte(stdout), &infos); err != nil {
 			return fmt.Errorf("failed to parse gh pr list output: %w", err)
 		}
 		if len(infos) > 0 {
+			prInfo.URL = strings.TrimSpace(infos[0].URL)
+			prInfo.Title = strings.TrimSpace(infos[0].Title)
 			prExists = true
-			prURL = strings.TrimSpace(infos[0].URL)
 		}
 
 		return nil
 	})
 	if err != nil {
-		return false, "", stdout, stderr, err
+		return false, nil, stdout, stderr, err
 	}
 
-	return prExists, prURL, stdout, stderr, nil
+	return prExists, &prInfo, stdout, stderr, nil
 }
 
 func RemoveBranch(wd, branchName string) error {
@@ -401,14 +404,23 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	// update branch type in notes object
 	notesObj.BranchType = notesPkg.BranchTypePr
 
-	issueDescription, err := getIssueDescription(notesObj.GithubIssueURL)
+	var description string
+	switch {
+	case len(notesObj.GithubIssueURL) > 0:
+		description, err = GetIssueDescription(notesObj.GithubIssueURL)
+	case len(notesObj.JiraTicketURL) > 0:
+		description, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
+	default:
+		description = DefaultCommitMessage
+	}
+
 	if err != nil {
-		return "", fmt.Errorf("Error retrieving issue description: %w", err)
+		return "", fmt.Errorf("error retrieving issue description: %w", err)
 	}
 
 	// Step 7: Commit the squashed changes
 	stdout, stderr, err = new(exec.PipedExec).
-		Command("git", "commit", "-m", issueDescription).
+		Command("git", "commit", "-m", description).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -426,8 +438,8 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	return prBranchName, nil
 }
 
-// getIssueDescription retrieves the title and body of a GitHub issue from its URL.
-func getIssueDescription(issueURL string) (string, error) {
+// GetIssueDescription retrieves the title and body of a GitHub issue from its URL.
+func GetIssueDescription(issueURL string) (string, error) {
 	// Extract issue number from URL
 	parts := strings.Split(issueURL, "/")
 	if len(parts) < 1 {
