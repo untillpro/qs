@@ -21,6 +21,7 @@ import (
 	"github.com/untillpro/goutils/logger"
 	contextPkg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
+	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
 )
@@ -58,6 +59,7 @@ const (
 
 	prTimeWait                     = 40
 	minIssueNoteLength             = 10
+	minPRTitleLength               = 8
 	minRepoNameLength              = 4
 	bashFilePerm       os.FileMode = 0644
 
@@ -734,7 +736,7 @@ func Fork(wd string) (string, error) {
 	// Verify fork was created and is accessible with retry
 	err = helper.Retry(func() error {
 		// Try to get user email to get a valid token context, then verify repo
-		userEmail, emailErr := GetUserEmail()
+		userEmail, emailErr := helper.GetUserEmail()
 		if emailErr != nil {
 			return fmt.Errorf("failed to verify GitHub authentication: %w", emailErr)
 		}
@@ -750,20 +752,6 @@ func Fork(wd string) (string, error) {
 
 	fmt.Fprintln(os.Stdout, "Fork created and verified successfully")
 	return repo, nil
-}
-
-// GetUserEmail - github user email
-func GetUserEmail() (string, error) {
-	var stdout string
-	err := helper.Retry(func() error {
-		var apiErr error
-		stdout, _, apiErr = new(exec.PipedExec).
-			Command("gh", "api", "user", "--jq", ".email").
-			RunToStrings()
-		return apiErr
-	})
-
-	return strings.TrimSpace(stdout), err
 }
 
 func GetRemoteUpstreamURL(wd string) string {
@@ -1682,9 +1670,24 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return "", "", errors.New("error deserializing notes")
 	}
 
-	prTitle, err := getIssueDescription(notesObj.GithubIssueURL)
+	var prTitle string
+	switch {
+	case len(notesObj.GithubIssueURL) > 0:
+		prTitle, err = GetIssueDescription(notesObj.GithubIssueURL)
+	case len(notesObj.JiraTicketURL) > 0:
+		prTitle, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
+	default:
+		fmt.Print("Enter pull request title: ")
+		if _, err := fmt.Scanln(&prTitle); err != nil {
+			return "", "", err
+		}
+		prTitle = strings.TrimSpace(prTitle)
+		if len(prTitle) < minPRTitleLength {
+			return "", "", errors.New("too short pull request title")
+		}
+	}
 	if err != nil {
-		return "", "", fmt.Errorf("Error retrieving issue description: %w", err)
+		return "", "", fmt.Errorf("error retrieving pull request title: %w", err)
 	}
 
 	var strNotes string
@@ -1726,7 +1729,7 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return stdout, stderr, err
 	}
 
-	prExists, prURL, stdout, stderr, err := DoesPrExist(wd, parentRepoName, prBranchName, PRStateOpen)
+	prExists, prInfo, stdout, stderr, err := DoesPrExist(wd, parentRepoName, prBranchName, PRStateOpen)
 	if err != nil {
 		return stdout, stderr, err
 	}
@@ -1734,9 +1737,9 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return stdout, stderr, errors.New("PR not created")
 	}
 	// print PR URL
-	if len(prURL) > 0 {
+	if len(prInfo.URL) > 0 {
 		fmt.Println()
-		fmt.Println(prURL)
+		fmt.Println(prInfo.URL)
 	}
 
 	return stdout, stderr, err

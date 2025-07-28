@@ -2,7 +2,6 @@ package systrun
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"github.com/untillpro/qs/gitcmds"
 	contextCfg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
+	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
@@ -293,17 +293,17 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 
 	// Get notes from the branch
-	stdout, stderr, err := new(goUtilsExec.PipedExec).
-		Command("git", "-C", cloneRepoPath, "notes", "show").
-		RunToStrings()
-
+	notes, _, err := gitcmds.GetNotes(cloneRepoPath, expectedPRBranch)
 	if err != nil {
-		return fmt.Errorf("failed to get git notes: %w, stderr: %s", err, stderr)
+		return err
+	}
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if notesObj == nil || !ok {
+		return fmt.Errorf("error: No notes found in branch %s: ", expectedPRBranch)
 	}
 
-	// Check if notes contain branch_type: 2
-	if !strings.Contains(stdout, `"branch_type": 2`) && !strings.Contains(stdout, `"branch_type":2`) {
-		return fmt.Errorf("PR branch notes do not contain branch_type: 2. Notes: %s", stdout)
+	if notesObj.BranchType != notesPkg.BranchTypePr {
+		return fmt.Errorf("error: branch type is not pr")
 	}
 
 	// 3. Check if the PR branch has exactly one squashed commit
@@ -356,7 +356,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 
 	// Check remotely in origin
-	stdout, stderr, err = new(goUtilsExec.PipedExec).
+	stdout, stderr, err := new(goUtilsExec.PipedExec).
 		Command("git", "-C", cloneRepoPath, "ls-remote", "--heads", "origin", devBranchName).
 		RunToStrings()
 
@@ -396,30 +396,38 @@ func ExpectationPRCreated(ctx context.Context) error {
 		return fmt.Errorf("failed to parse upstream URL: %w", err)
 	}
 	// Use gh CLI to check if PR exists with retry logic
-	var prList []map[string]interface{}
-	err = helper.Retry(func() error {
-		stdout, stderr, err := new(goUtilsExec.PipedExec).
-			Command("gh", "pr", "list", "--repo", fmt.Sprintf("%s/%s", owner, repoName), "--head", expectedPRBranch, "--json", "number").
-			RunToStrings()
 
-		if err != nil {
-			return fmt.Errorf("failed to list PRs: %w, stderr: %s", err, stderr)
-		}
-
-		// Parse JSON response
-		if err := json.Unmarshal([]byte(stdout), &prList); err != nil {
-			return fmt.Errorf("failed to parse PR list: %w", err)
-		}
-
-		if len(prList) == 0 {
-			return fmt.Errorf("no pull request found for branch %s", expectedPRBranch)
-		}
-
-		return nil
-	})
-
+	prExists, prInfo, _, _, err := gitcmds.DoesPrExist(
+		cloneRepoPath,
+		fmt.Sprintf("%s/%s", owner, repoName),
+		expectedPRBranch,
+		gitcmds.PRStateOpen,
+	)
 	if err != nil {
 		return err
+	}
+	if !prExists {
+		return fmt.Errorf("PR branch %s does not exist on upstream remote", expectedPRBranch)
+	}
+
+	// extract expected PR title from GitHub issue or JIRA ticket
+	var expectedPRTitle string
+	if notesObj.GithubIssueURL != "" {
+		expectedPRTitle, err = gitcmds.GetIssueDescription(notesObj.GithubIssueURL)
+		if err != nil {
+			return err
+		}
+	}
+	if notesObj.JiraTicketURL != "" {
+		expectedPRTitle, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
+		if err != nil {
+			return err
+		}
+	}
+
+	// check actual PR title with expected one
+	if expectedPRTitle != "" && prInfo.Title != expectedPRTitle {
+		return fmt.Errorf("PR title does not match issue title. PR title: %s, issue title: %s", prInfo.Title, expectedPRTitle)
 	}
 
 	return nil

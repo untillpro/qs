@@ -248,7 +248,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestPR tests creating a basic PR
+// TestPR_Synchronized tests creating a basic PR
 func TestPR_Synchronized(t *testing.T) {
 	require := require.New(t)
 
@@ -262,6 +262,29 @@ func TestPR_Synchronized(t *testing.T) {
 		ForkState:         systrun.RemoteStateOK,
 		SyncState:         systrun.SyncStateSynchronized,
 		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestPR_FromJiraTicket tests creating a PR on Jira based branch
+func TestPR_FromJiraTicket(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: systrun.CommandConfig{
+			Command: "pr",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateSynchronized,
+		ClipboardContent:  systrun.ClipboardContentJiraTicket,
 		NeedCollaboration: true,
 		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
