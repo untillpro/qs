@@ -27,6 +27,7 @@ import (
 
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -89,9 +90,9 @@ func CheckQsVer() bool {
 
 		return false
 	}
-	lastQSVersion := getLastQSVersion()
 
-	if installedVer != lastQSVersion {
+	lastQSVersion := getLastQSVersion()
+	if semver.Compare(installedVer, lastQSVersion) < 0 {
 		fmt.Printf("Installed qs version %s is too old (last version is %s)\n", installedVer, lastQSVersion)
 		fmt.Println("You can install last version with:")
 		fmt.Println("-----------------------------------------")
