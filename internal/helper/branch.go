@@ -15,7 +15,7 @@ func GetBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 			return "", []string{}, nil
 		}
 
-		return "", []string{}, errors.New("Need branch name for dev")
+		return "", []string{}, errors.New("need branch name for dev")
 	}
 
 	newArgs := splitQuotedArgs(args...)

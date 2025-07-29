@@ -224,7 +224,7 @@ func DefaultRetryConfig() *RetryConfig {
 
 // ExponentialBackoff implements exponential backoff with jitter
 func ExponentialBackoff(attempt int, delay time.Duration) time.Duration {
-	newDelay := delay * time.Duration(1<<uint(attempt))
+	newDelay := delay * time.Duration(1<<attempt)
 	maxDelay := getMaxRetryDelay()
 	if newDelay > maxDelay {
 		return maxDelay
@@ -296,6 +296,7 @@ func RetryWithMaxAttempts(fn func() error, maxAttempts int) error {
 
 // VerifyGitHubRepoExists checks if a GitHub repository exists and is accessible
 func VerifyGitHubRepoExists(owner, repo, token string) error {
+	//nolint:gosec
 	cmd := osExec.Command("gh", "repo", "view", fmt.Sprintf("%s/%s", owner, repo))
 
 	// Only set GITHUB_TOKEN if a token is provided, otherwise use current gh auth
@@ -305,7 +306,7 @@ func VerifyGitHubRepoExists(owner, repo, token string) error {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("repository %s/%s not accessible: %v, output: %s", owner, repo, err, output)
+		return fmt.Errorf("repository %s/%s not accessible: %w, output: %s", owner, repo, err, output)
 	}
 
 	return nil
@@ -316,7 +317,7 @@ func VerifyGitRemoteAccessible(remoteURL string) error {
 	cmd := osExec.Command("git", "ls-remote", remoteURL)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("remote URL %s not accessible: %v, output: %s", remoteURL, err, output)
+		return fmt.Errorf("remote URL %s not accessible: %w, output: %s", remoteURL, err, output)
 	}
 
 	return nil

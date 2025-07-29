@@ -6,12 +6,13 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/untillpro/qs/gitcmds"
 )
 
 func TestClipBoard(t *testing.T) {
 	err := clipboard.WriteAll("1,2,3,5")
-	assert.Empty(t, err)
+	require.NoError(t, err)
 	arg, _ := clipboard.ReadAll()
 
 	args := strings.Split(arg, "\n")
@@ -20,7 +21,7 @@ func TestClipBoard(t *testing.T) {
 		newarg += str
 		newarg += " "
 	}
-	assert.NotEmpty(t, newarg)
+	require.NotEmpty(t, newarg)
 }
 
 func TestIssueRepoFromURL(t *testing.T) {

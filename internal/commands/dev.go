@@ -51,7 +51,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 				return err
 			}
 
-			return fmt.Errorf("You are in %s/%s repo\nExecute 'qs fork' first\n", org, repo)
+			return fmt.Errorf("you are in %s/%s repo\nExecute 'qs fork' first", org, repo)
 		}
 	}
 
@@ -69,7 +69,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 
 		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
 
-		return fmt.Errorf("Switch to main branch before running 'qs dev'. You are in %s branch ", curBranch)
+		return fmt.Errorf("switch to main branch before running 'qs dev'. You are in %s branch ", curBranch)
 	}
 
 	// Stash current changes if needed
@@ -241,7 +241,7 @@ func argContainsGithubIssueLink(wd string, args ...string) (issueNum int, issueU
 	url := args[0]
 	if strings.Contains(url, "/issues") {
 		if err := checkIssueLink(wd, url); err != nil {
-			return 0, "", false, fmt.Errorf("Invalid GitHub issue link: %w", err)
+			return 0, "", false, fmt.Errorf("invalid GitHub issue link: %w", err)
 		}
 		segments := strings.Split(url, "/")
 		strIssueNum := segments[len(segments)-1]
@@ -261,7 +261,7 @@ func checkIssueLink(wd, issueURL string) error {
 	cmd := exec.Command("gh", "issue", "view", issueURL)
 	cmd.Dir = wd
 	if _, err := cmd.Output(); err != nil {
-		return fmt.Errorf("failed to check issue link: %v", err)
+		return fmt.Errorf("failed to check issue link: %w", err)
 	}
 
 	return nil

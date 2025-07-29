@@ -68,12 +68,6 @@ const (
 	issuelinePosRepo = 3
 )
 
-type gchResponse struct {
-	_stdout string
-	_stderr string
-	_err    error
-}
-
 func CheckIfGitRepo(wd string) (string, error) {
 	stdout, _, err := new(exec.PipedExec).
 		Command("git", "status", "-s").
@@ -166,9 +160,9 @@ func Release(wd string) error {
 	fmt.Fprintln(os.Stdout, "Reading current version")
 	currentVersion, err := utils.ReadVersion()
 	if err != nil {
-		return fmt.Errorf("Error reading file 'version': %w", err)
+		return fmt.Errorf("error reading file 'version': %w", err)
 	}
-	if len(currentVersion.PreRelease) <= 0 {
+	if len(currentVersion.PreRelease) == 0 {
 		return errors.New("pre-release part of version does not exist: " + currentVersion.String())
 	}
 
@@ -187,7 +181,7 @@ func Release(wd string) error {
 	// *************************************************
 	fmt.Fprintln(os.Stdout, "Updating 'version' file")
 	if err := targetVersion.Save(); err != nil {
-		return fmt.Errorf("Error saving file 'version': %w", err)
+		return fmt.Errorf("error saving file 'version': %w", err)
 	}
 
 	// *************************************************
@@ -225,7 +219,7 @@ func Release(wd string) error {
 		newVersion.Minor++
 		newVersion.PreRelease = "SNAPSHOT"
 		if err := targetVersion.Save(); err != nil {
-			return fmt.Errorf("Error saving file 'version': %w", err)
+			return fmt.Errorf("error saving file 'version': %w", err)
 		}
 	}
 
@@ -367,7 +361,7 @@ func Stash(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return fmt.Errorf("git stash failed: %v - %s", err, stderr)
+		return fmt.Errorf("git stash failed: %w - %s", err, stderr)
 	}
 
 	return nil
@@ -385,7 +379,7 @@ func Unstash(wd string) error {
 			return nil // No stash to pop, return nil
 		}
 
-		return fmt.Errorf("git stash pop failed: %v", err)
+		return fmt.Errorf("git stash pop failed: %w", err)
 	}
 
 	return nil
@@ -457,7 +451,7 @@ func Download(wd string) error {
 	// Get the name of the main branch
 	mainBranchName, err := GetMainBranch(wd)
 	if err != nil {
-		return fmt.Errorf("failed to get main branch: %w", err)
+		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	// check out on the main branch
@@ -540,7 +534,7 @@ func CheckoutOnBranch(wd, branchName string) error {
 	if err != nil {
 		logger.Verbose(stderr)
 
-		return fmt.Errorf("failed to checkout on %s: %v", branchName, err)
+		return fmt.Errorf("failed to checkout on %s: %w", branchName, err)
 	}
 
 	return nil
@@ -560,7 +554,7 @@ func GetBranchesWithRemoteTracking(wd, remoteName string) ([]string, error) {
 
 	mainBranchName, err := GetMainBranch(wd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get main branch: %w", err)
+		return nil, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	branches := strings.Split(strings.TrimSpace(stdout), caret)
@@ -638,8 +632,8 @@ func ParseGitRemoteURL(remoteURL string) (account, repo string, token string, er
 		}
 
 		// Remove leading '/' if any
-		path := strings.TrimPrefix(u.Path, "/")
-		pathParts := strings.Split(path, "/")
+		path := strings.TrimPrefix(u.Path, slash)
+		pathParts := strings.Split(path, slash)
 
 		if len(pathParts) < 2 {
 			return "", "", "", fmt.Errorf("invalid repository path in URL: %s", remoteURL)
@@ -740,7 +734,7 @@ func Fork(wd string) (string, error) {
 		if emailErr != nil {
 			return fmt.Errorf("failed to verify GitHub authentication: %w", emailErr)
 		}
-		logger.Verbose("Verified GitHub authentication for user: %s", userEmail)
+		logger.Verbose(fmt.Sprintf("Verified GitHub authentication for user: %s", userEmail))
 
 		// Verify the forked repository exists and is accessible
 		return helper.VerifyGitHubRepoExists(userName, repo, "")
@@ -843,7 +837,7 @@ func MakeUpstream(wd string, repo string) error {
 
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
-		return fmt.Errorf("failed to get main branch: %w", err)
+		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	err = new(exec.PipedExec).
@@ -954,7 +948,7 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to get main branch: %w", err)
+		return "", nil, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	stdout, stderr, err = new(exec.PipedExec).
@@ -975,7 +969,7 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 	branch = segments[len(segments)-1]
 
 	if len(branch) == 0 {
-		return "", nil, errors.New("Can not create branch for issue")
+		return "", nil, errors.New("can not create branch for issue")
 	}
 	// old-style notes
 	issueName := GetIssueNameByNumber(strIssueNum, parentRepo)
@@ -1002,7 +996,7 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 func SyncMainBranch(wd string) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
-		return fmt.Errorf("failed to get main branch: %w", err)
+		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	// Pull from UpstreamMain to MainBranch with rebase
@@ -1065,7 +1059,7 @@ func getBranchTypeByName(branchName string) notesPkg.BranchType {
 
 func buildDevBranchName(issueURL string) (string, error) {
 	// Extract issue number from URL
-	parts := strings.Split(issueURL, "/")
+	parts := strings.Split(issueURL, slash)
 	if len(parts) < 2 {
 		return "", fmt.Errorf("invalid issue URL format: %s", issueURL)
 	}
@@ -1073,12 +1067,12 @@ func buildDevBranchName(issueURL string) (string, error) {
 
 	// Extract owner and repo from URL
 	repoURL := strings.Split(issueURL, "/issues/")[0]
-	urlParts := strings.Split(repoURL, "/")
-	if len(urlParts) < 5 {
+	urlParts := strings.Split(repoURL, slash)
+	if len(urlParts) < 5 { //nolint:revive
 		return "", fmt.Errorf("invalid GitHub URL format: %s", repoURL)
 	}
-	owner := urlParts[3]
-	repo := urlParts[4]
+	owner := urlParts[3] //nolint:revive
+	repo := urlParts[4]  //nolint:revive
 
 	// Use gh CLI to get issue title
 	stdout, stderr, err := new(exec.PipedExec).
@@ -1109,8 +1103,8 @@ func buildDevBranchName(issueURL string) (string, error) {
 	branchName := fmt.Sprintf("%s-%s", issueNumber, kebabTitle)
 
 	// Ensure branch name doesn't exceed git's limit (usually around 250 chars)
-	if len(branchName) > 100 {
-		branchName = branchName[:100]
+	if len(branchName) > maximumBranchNameLength {
+		branchName = branchName[:maximumBranchNameLength]
 	}
 	branchName = helper.CleanArgFromSpecSymbols(branchName)
 	// Add suffix "-dev" for a dev branch
@@ -1181,7 +1175,7 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) string {
 func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
-		return fmt.Errorf("failed to get main branch: %w", err)
+		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	stdout, stderr, err := new(exec.PipedExec).
@@ -1323,7 +1317,7 @@ func AddNotes(wd string, notes []string) error {
 func GetNotes(wd, branchName string) (notes []string, revCount int, err error) {
 	mainBranchName, err := GetMainBranch(wd)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get main branch: %w", err)
+		return nil, 0, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	// get all revision of the branch which does not belong to main branch
@@ -1334,7 +1328,7 @@ func GetNotes(wd, branchName string) (notes []string, revCount int, err error) {
 	if err != nil {
 		logger.Verbose(stderr)
 
-		return notes, 0, fmt.Errorf("failed to get commit list: %v", err)
+		return notes, 0, fmt.Errorf("failed to get commit list: %w", err)
 	}
 	if len(stdout) == 0 {
 		return notes, 0, errors.New("error: No commits found in current branch")
@@ -1354,7 +1348,7 @@ func GetNotes(wd, branchName string) (notes []string, revCount int, err error) {
 			}
 			logger.Verbose(stderr)
 
-			return notes, len(revList), fmt.Errorf("failed to get notes: %v", err)
+			return notes, len(revList), fmt.Errorf("failed to get notes: %w", err)
 		}
 		// split notes into lines
 		rawNotes := strings.Split(stdout, caret)
@@ -1425,7 +1419,7 @@ func GetMergedBranchList(wd string) (brlist []string, err error) {
 	mbrlistraw := strings.Split(stdout, caret)
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get main branch: %w", err)
+		return nil, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	curbr, err := GetCurrentBranchName(wd)
@@ -1495,7 +1489,7 @@ func DeleteBranchesRemote(wd string, brs []string) error {
 			return deleteErr
 		})
 		if err != nil {
-			return fmt.Errorf("Branch %s was not deleted: %w", br, err)
+			return fmt.Errorf("branch %s was not deleted: %w", br, err)
 		}
 
 		fmt.Printf("Branch %s deleted\n", br)
@@ -1507,7 +1501,7 @@ func DeleteBranchesRemote(wd string, brs []string) error {
 func PullUpstream(wd string) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
-		return fmt.Errorf("failed to get main branch: %w", err)
+		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	err = new(exec.PipedExec).
@@ -1568,7 +1562,7 @@ func GetGoneBranchesLocal(wd string) (*[]string, error) {
 	myremotelist := strings.Split(stdout, caret)
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get main branch: %w", err)
+		return nil, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	curbr, err := GetCurrentBranchName(wd)
@@ -1581,14 +1575,12 @@ func GetGoneBranchesLocal(wd string) (*[]string, error) {
 		bfound := false
 		if strings.Contains(mybranch, curbr) {
 			bfound = true
-		} else {
-			if !strings.Contains(mybranch, mainBranch) && !strings.Contains(mybranch, "HEAD") {
-				for _, mbranch := range myremotelist {
-					mbranch = strings.TrimSpace(mbranch)
-					if mybranch == mbranch {
-						bfound = true
-						break
-					}
+		} else if !strings.Contains(mybranch, mainBranch) && !strings.Contains(mybranch, "HEAD") {
+			for _, mbranch := range myremotelist {
+				mbranch = strings.TrimSpace(mbranch)
+				if mybranch == mbranch {
+					bfound = true
+					break
 				}
 			}
 		}
@@ -1746,7 +1738,7 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 }
 
 func retrieveRepoNameFromUPL(prurl string) string {
-	var strs []string = strings.Split(prurl, slash)
+	var strs = strings.Split(prurl, slash)
 	if len(strs) < minRepoNameLength {
 		return ""
 	}
@@ -1760,64 +1752,6 @@ func retrieveRepoNameFromUPL(prurl string) string {
 		}
 	}
 	return res
-}
-
-func prCheckAbsent(val *gchResponse) bool {
-	return strings.Contains(val._stderr, nochecksmsg)
-}
-
-func prCheckSuccess(val *gchResponse) bool {
-	ss := strings.Split(val._stdout, caret)
-	for _, s := range ss {
-		if strings.Contains(s, "build") && strings.Contains(s, "pass") {
-			return true
-		}
-	}
-	return false
-}
-
-func waitPRChecks(parentrepo string, prurl string) *gchResponse {
-	c := make(chan *gchResponse)
-
-	// Run checking status of PR Checks
-	go runPRChecksChecks(parentrepo, prurl, c)
-
-	strw := msgWaitingPR
-	var val *gchResponse
-	var ok bool
-	waitTimer := time.NewTimer(prTimeWait * time.Second)
-	fmt.Print(strw)
-	for {
-		select {
-		case val, ok = <-c:
-			fmt.Println("")
-			if ok {
-				return val
-			}
-			return &gchResponse{_err: errors.New(ErrSomethingWrong)}
-		case <-waitTimer.C:
-			fmt.Println("")
-			return &gchResponse{_err: errors.New(ErrTimer40Sec)}
-		default:
-			helper.Delay()
-			fmt.Print(".")
-		}
-	}
-}
-
-func runPRChecksChecks(parentrepo string, prurl string, c chan *gchResponse) {
-	var stdout, stderr string
-	var err error
-	if len(parentrepo) == 0 {
-		stdout, stderr, err = new(exec.PipedExec).
-			Command("gh", "pr", "checks", prurl, "--watch").
-			RunToStrings()
-	} else {
-		stdout, stderr, err = new(exec.PipedExec).
-			Command("gh", "pr", "checks", prurl, "--watch", "-R", parentrepo).
-			RunToStrings()
-	}
-	c <- &gchResponse{stdout, stderr, err}
 }
 
 // getRemotes shows list of names of all remotes
@@ -1894,65 +1828,6 @@ func hasRemoteTrackingBranch(wd string, branchName string) (bool, error) {
 	}
 
 	return false, nil
-}
-
-func setUpstreamBranch(wd string, repo string, branch string) error {
-	mainBranchName, err := GetMainBranch(wd)
-	if err != nil {
-		return err
-	}
-
-	if branch == "" {
-		branch = mainBranchName
-	}
-
-	return new(exec.PipedExec).
-		Command(git, "push", "--set-upstream", repo, branch).
-		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
-}
-
-// GetCommitFileSizes returns quantity of cmmited files and their total sizes
-func GetCommitFileSizes(wd string) (totalSize int, quantity int, err error) {
-	totalSize = 0
-	quantity = 0
-	stdout, _, err := new(exec.PipedExec).
-		Command(git, "status", "--porcelain").
-		WorkingDir(wd).
-		Command("gawk", "{if ($1 == \"??\") print $2}").
-		RunToStrings()
-	if err != nil {
-		return 0, 0, err
-	}
-	files := strings.Split(stdout, caret)
-
-	if len(files) == 0 {
-		return
-	}
-
-	for _, file := range files {
-		if len(file) > 0 {
-
-			stdout, _, err = new(exec.PipedExec).
-				Command("wc", "-c", file).
-				Command("gawk", "{print $1}").
-				RunToStrings()
-			if err != nil {
-				return 0, 0, err
-			}
-
-			strval := strings.TrimSpace(stdout)
-			if strval != "" {
-				sz, err := strconv.Atoi(strval)
-				if err != nil {
-					return 0, 0, fmt.Errorf("Error during conversion of value: %w", err)
-				}
-				totalSize += sz
-				quantity++
-			}
-		}
-	}
-	return totalSize, quantity, nil
 }
 
 func getGlobalHookFolder() string {
@@ -2214,7 +2089,7 @@ func extractIntegerPrefix(input string) (string, error) {
 	// Convert the matched string to an integer
 	integerValue, err := strconv.Atoi(match)
 	if err != nil {
-		return "", fmt.Errorf("error converting string to integer: %v", err)
+		return "", fmt.Errorf("error converting string to integer: %w", err)
 	}
 
 	return strconv.Itoa(integerValue), nil
@@ -2289,7 +2164,7 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) error {
 		Command("gh", "api", "repos/"+parentrepo+"/milestones", "--jq", ".[] | .title").
 		RunToStrings()
 	if err != nil {
-		return fmt.Errorf("Link issue to mileStone error: %w", err)
+		return fmt.Errorf("link issue to mileStone error: %w", err)
 	}
 	milestones := strings.Split(strMilestones, caret)
 	// Sample date string in the "yyyy.mm.dd" format.
@@ -2323,7 +2198,7 @@ func GetCurrentBranchName(wd string) (string, error) {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return "", fmt.Errorf("failed to get current branch name: %v", err)
+		return "", fmt.Errorf("failed to get current branch name: %w", err)
 	}
 
 	return strings.TrimSpace(branchName), nil
@@ -2356,7 +2231,7 @@ func CreateRemote(wd, remote, account, token, repoName string, isUpstream bool) 
 
 // buildRemoteURL constructs the remote URL for cloning
 func BuildRemoteURL(account, token, repoName string, isUpstream bool) string {
-	return "https://" + account + ":" + token + "@github.com/" + account + "/" + repoName + ".git"
+	return "https://" + account + ":" + token + "@github.com/" + account + slash + repoName + ".git"
 }
 
 // IamInMainBranch checks if current branch is main branch
@@ -2374,7 +2249,7 @@ func IamInMainBranch(wd string) (string, bool, error) {
 	mainBranch, err := GetMainBranch(wd)
 	logger.Verbose("Main branch: " + mainBranch)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to get main branch: %w", err)
+		return "", false, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	return currentBranchName, strings.EqualFold(currentBranchName, mainBranch), err
@@ -2382,6 +2257,7 @@ func IamInMainBranch(wd string) (string, bool, error) {
 
 // RemoveRepo removes a repository from GitHub
 func RemoveRepo(repoName, account, token string) error {
+	//nolint:gosec
 	cmd := osExec.Command("gh", "repo", "delete",
 		fmt.Sprintf("%s/%s", account, repoName),
 		"--yes")

@@ -98,7 +98,7 @@ func prCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 				return err
 			}
 			// Ask for confirmation before creating the PR
-			needDraft := false
+			var needDraft = false
 			if cmd.Flag(prdraftParamFull).Value.String() == "true" {
 				needDraft = true
 			}
@@ -196,9 +196,9 @@ func CheckCommands(commands []string) error {
 	if len(missing) > 0 {
 		if len(missing) == 1 {
 			return fmt.Errorf(redText("Error: missing required command: %s"), missing[0])
-		} else {
-			return fmt.Errorf(redText("Error: missing required commands: %v"), missing)
 		}
+
+		return fmt.Errorf(redText("Error: missing required commands: %v"), missing)
 	}
 
 	return nil

@@ -217,7 +217,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 		ClipboardContent: systrun.ClipboardContentUnavailableGithubIssue,
 		UpstreamState:    systrun.RemoteStateOK,
 		ForkState:        systrun.RemoteStateNull,
-		ExpectedStderr:   "Invalid GitHub issue link",
+		ExpectedStderr:   "invalid GitHub issue link",
 	}
 
 	sysTest := systrun.New(t, testConfig)

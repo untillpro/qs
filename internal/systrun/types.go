@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-git/go-git/v5"
+	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	goUtilsExec "github.com/untillpro/goutils/exec"
 	"github.com/untillpro/qs/gitcmds"
@@ -90,9 +90,9 @@ func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
 // ExpectationCloneIsSyncedWithFork checks if the clone is synchronized with the fork
 func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 	// Compare local and remote branches to ensure they're in sync
-	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitPkg.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
+		return fmt.Errorf(errFormatFailedToCloneRepos, err)
 	}
 
 	// Get the current branch
@@ -110,7 +110,7 @@ func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 	}
 
 	// Get the remote branch reference
-	remoteBranchRef := plumbing.NewRemoteReferenceName("origin", branchName)
+	remoteBranchRef := plumbing.NewRemoteReferenceName(origin, branchName)
 	remoteBranch, err := repo.Reference(remoteBranchRef, true)
 	if err != nil {
 		return fmt.Errorf("failed to get remote branch: %w", err)
@@ -128,18 +128,18 @@ func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 func ExpectationForkExists(ctx context.Context) error {
 	// Implement the logic to check if the fork exists
 	// get remotes of the local repo and check if remote, called origin, exists
-	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitPkg.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
+		return fmt.Errorf(errFormatFailedToCloneRepos, err)
 	}
 
 	// Check if the remote named "origin" exists
-	if _, err := repo.Remote("origin"); err != nil {
+	if _, err := repo.Remote(origin); err != nil {
 		return fmt.Errorf("origin remote not found after fork command: %w", err)
 	}
 
 	// Check if the remote URL accessible
-	cmd := exec.Command("git", "ls-remote", "origin")
+	cmd := exec.Command(git, "ls-remote", origin)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to access remote URL: %w", err)
 	}
@@ -151,6 +151,9 @@ func ExpectationForkExists(ctx context.Context) error {
 func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 	// extract repo and issue number from e.createdGithubIssueURL using regex
 	repoOwner, repoName, issueNum, err := parseGithubIssueURL(ctx.Value(contextCfg.CtxKeyCreatedGithubIssueURL).(string))
+	if err != nil {
+		return fmt.Errorf("failed to parse GitHub issue URL: %w", err)
+	}
 	// Get current branch from the repo
 	devBranchName, err := findBranchNameWithPrefix(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string), issueNum)
 	if err != nil {
@@ -183,7 +186,7 @@ func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
 	// Check if the large file hooks are installed
 	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
-		return fmt.Errorf("clone repo path not found in context")
+		return errCloneRepoPathNotFoundInContext
 	}
 
 	hookPath := filepath.Join(cloneRepoPath, ".git", "hooks", "pre-commit")
@@ -209,9 +212,9 @@ func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
 // ExpectationCurrentBranchHasPrefix checks if the current branch has the expected prefix
 func ExpectationCurrentBranchHasPrefix(ctx context.Context) error {
 	// Open the repository
-	repo, err := git.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitPkg.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
+		return fmt.Errorf(errFormatFailedToCloneRepos, err)
 	}
 
 	// Get the current branch
@@ -239,7 +242,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 	// 1. Check if PR branch exists with correct naming
 	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
-		return fmt.Errorf("clone repo path not found in context")
+		return errCloneRepoPathNotFoundInContext
 	}
 
 	anotherCloneRepoPath, ok := ctx.Value(contextCfg.CtxKeyAnotherCloneRepoPath).(string)
@@ -260,9 +263,9 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 
 	// Open the repository
-	repo, err := git.PlainOpen(cloneRepoPath)
+	repo, err := gitPkg.PlainOpen(cloneRepoPath)
 	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
+		return fmt.Errorf(errFormatFailedToCloneRepos, err)
 	}
 
 	// Check if PR branch exists locally
@@ -287,7 +290,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 
 	// 2. Check if branch has notes with branch_type=2
-	cmd := exec.Command("git", "-C", cloneRepoPath, "checkout", expectedPRBranch)
+	cmd := exec.Command(git, "-C", cloneRepoPath, "checkout", expectedPRBranch)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to checkout PR branch: %w", err)
 	}
@@ -308,7 +311,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 
 	// 3. Check if the PR branch has exactly one squashed commit
 	// First get number of commits
-	cmd = exec.Command("git", "-C", cloneRepoPath, "rev-list", "--count", "HEAD")
+	cmd = exec.Command(git, "-C", cloneRepoPath, "rev-list", "--count", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to count commits: %w", err)
@@ -326,8 +329,8 @@ func ExpectationPRCreated(ctx context.Context) error {
 
 	// Check if we have more than 1 commit, and if so, verify the last one is the empty commit for notes
 	if commitCount > 1 {
-		cmd = exec.Command("git", "-C", cloneRepoPath, "log", "-1", "--pretty=%B")
-		output, err = cmd.Output()
+		cmd = exec.Command(git, "-C", cloneRepoPath, "log", "-1", "--pretty=%B")
+		_, err = cmd.Output()
 		if err != nil {
 			return fmt.Errorf("failed to get last commit message: %w", err)
 		}
@@ -357,7 +360,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 
 	// Check remotely in origin
 	stdout, stderr, err := new(goUtilsExec.PipedExec).
-		Command("git", "-C", cloneRepoPath, "ls-remote", "--heads", "origin", devBranchName).
+		Command(git, "-C", cloneRepoPath, "ls-remote", "--heads", origin, devBranchName).
 		RunToStrings()
 
 	if err != nil {
@@ -370,7 +373,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 
 	// Check remotely in upstream
 	stdout, stderr, err = new(goUtilsExec.PipedExec).
-		Command("git", "-C", cloneRepoPath, "ls-remote", "--heads", "upstream", devBranchName).
+		Command(git, "-C", cloneRepoPath, "ls-remote", "--heads", "upstream", devBranchName).
 		RunToStrings()
 
 	if err != nil {
@@ -438,7 +441,7 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 	// Check if the remote branch exists
 	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
-		return fmt.Errorf("clone repo path not found in context")
+		return errCloneRepoPathNotFoundInContext
 	}
 
 	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
@@ -451,7 +454,7 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 	err := helper.Retry(func() error {
 		var lsErr error
 		stdout, stderr, lsErr = new(goUtilsExec.PipedExec).
-			Command("git", "ls-remote", "--heads", "origin", remoteBranchName).
+			Command(git, "ls-remote", "--heads", origin, remoteBranchName).
 			WorkingDir(cloneRepoPath).
 			RunToStrings()
 		return lsErr
@@ -467,7 +470,7 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 
 	// check that remote branch has specific commit message
 	stdout, stderr, err = new(goUtilsExec.PipedExec).
-		Command("git", "log", "-1", "--pretty=%B", remoteBranchName).
+		Command(git, "log", "-1", "--pretty=%B", remoteBranchName).
 		WorkingDir(cloneRepoPath).
 		RunToStrings()
 
@@ -493,7 +496,7 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 	// Step 1: Get the remote URL and repo name
 	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
-		return fmt.Errorf("clone repo path not found in context")
+		return errCloneRepoPathNotFoundInContext
 	}
 
 	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
@@ -501,7 +504,7 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 		return fmt.Errorf("remote branch name not found in context")
 	}
 
-	remoteURL, err := gitcmds.GetRemoteUrlByName(cloneRepoPath, "origin")
+	remoteURL, err := gitcmds.GetRemoteUrlByName(cloneRepoPath, origin)
 	if err != nil {
 		return fmt.Errorf("failed to get remote URL: %w", err)
 	}
@@ -523,7 +526,7 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 
 	// Step 3: Clone the repository in the temp path
 	tempClonePath := filepath.Join(tempPath, repo)
-	cloneCmd := exec.Command("git", "clone", remoteURL)
+	cloneCmd := exec.Command(git, "clone", remoteURL)
 	cloneCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
 	cloneCmd.Dir = tempPath
 
@@ -563,117 +566,3 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 
 	return nil
 }
-
-//// ExpectationPrFromCloneIsSucceeded checks if PR from clone is successful
-//func ExpectationPrFromCloneIsSucceeded(ctx context.Context) error {
-//	// Step 1: Get the remote URL and repo name
-//	cloneRepoPath := ctx.Value(contextCfg.CtxKeyAnotherCloneRepoPath).(string)
-//	if cloneRepoPath == "" {
-//		return fmt.Errorf("clone repo path not found in context")
-//	}
-//
-//	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
-//	if !ok {
-//		return fmt.Errorf("remote branch name not found in context")
-//	}
-//
-//	remoteOriginURL, err := getRemoteUrlByName(cloneRepoPath, "origin")
-//	if err != nil {
-//		return fmt.Errorf("failed to get oririn remote URL: %w", err)
-//	}
-//
-//	remoteUpstreamURL, err := getRemoteUrlByName(cloneRepoPath, "upstream")
-//	if err != nil {
-//		return fmt.Errorf("failed to get upstream remote URL: %w", err)
-//	}
-//
-//	forkAccount, repo, forkToken, err := gitcmds.ParseGitRemoteURL(remoteOriginURL)
-//	if err != nil {
-//		return err
-//	}
-//
-//	upstreamAccount, repo, upstreamToken, err := gitcmds.ParseGitRemoteURL(remoteUpstreamURL)
-//	if err != nil {
-//		return err
-//	}
-//
-//	// Step 2: Create temp path for the clone
-//	tempPath, err := os.MkdirTemp("", "qs-test-clone-*")
-//	if err != nil {
-//		return fmt.Errorf("failed to create temp clone path: %w", err)
-//	}
-//
-//	defer func() {
-//		_ = os.RemoveAll(tempPath)
-//	}()
-//
-//	// Step 3: Clone the repository in the temp path
-//	tempClonePath := filepath.Join(tempPath, repo)
-//	cloneCmd := exec.Command("git", "clone", remoteOriginURL)
-//	cloneCmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", forkToken))
-//	cloneCmd.Dir = tempPath
-//
-//	if output, err := cloneCmd.CombinedOutput(); err != nil {
-//		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
-//	}
-//
-//	// Step 3.1: Configure remotes in temp clone
-//	if err := gitcmds.CreateRemote(
-//		st.anotherCloneRepoPath,
-//		"upstream",
-//		upstreamAccount,
-//		upstreamToken,
-//		repo,
-//		true,
-//	); err != nil {
-//		return err
-//	}
-//
-//	if err := gitcmds.CreateRemote(
-//		tempClonePath,
-//		"origin",
-//		forkAccount,
-//		forkToken,
-//		repo,
-//		false,
-//	); err != nil {
-//		return err
-//	}
-//
-//	// Step 4: Checkout on remote branch
-//	if err := checkoutOnBranch(tempClonePath, remoteBranchName); err != nil {
-//		return err
-//	}
-//
-//	// Step 4.1: Commit some changes
-//	if err := commitFiles(tempClonePath, true, "", 4); err != nil {
-//		return err
-//	}
-//
-//	// Step 5: Run `qs pr`
-//	if err := gitcmds.Pr(tempClonePath, false); err != nil {
-//		return err
-//	}
-//
-//	// Step 6: Check if notes are downloaded
-//	notes, ok := gitcmds.GetNotes(tempClonePath)
-//	if !ok {
-//		return errors.New("Error: No notes found in dev branch")
-//	}
-//
-//	if len(notes) == 0 {
-//		return fmt.Errorf("no notes downloaded")
-//	}
-//
-//	// Step 7: Check if notes are of correct type
-//	notesObj, ok := notesPkg.Deserialize(notes)
-//	if !ok {
-//		return errors.New("error: No notes found in dev branch")
-//	}
-//
-//	if notesObj.BranchType != notesPkg.BranchTypePr {
-//		return fmt.Errorf("notes downloaded but branch type is not pr")
-//	}
-//
-//	return nil
-//}

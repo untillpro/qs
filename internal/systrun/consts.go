@@ -4,6 +4,15 @@ const (
 	TestDataDir                 = ".testdata"
 	GithubURL                   = "https://github.com"
 	remoteGithubRepoURLTemplate = GithubURL + "/%s/%s.git"
+	issueBody                   = "Automated test issue created by QS system test framework"
+	origin                      = "origin"
+	git                         = "git"
+	errFormatFailedToCloneRepos = "failed to open cloned repository: %w"
+	formatGithubTokenEnv        = "GITHUB_TOKEN=%s"
+	cloneRepoDirPerm		= 0755
+	commitFilePerm		= 0644
+	readmeMDFileName            = "README.md"
+	changeDirFlag               = "-C"
 )
 
 const (
