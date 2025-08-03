@@ -6,13 +6,16 @@ const (
 	remoteGithubRepoURLTemplate = GithubURL + "/%s/%s.git"
 	issueBody                   = "Automated test issue created by QS system test framework"
 	origin                      = "origin"
+	upstream                    = "upstream"
 	git                         = "git"
 	errFormatFailedToCloneRepos = "failed to open cloned repository: %w"
 	formatGithubTokenEnv        = "GITHUB_TOKEN=%s"
-	cloneRepoDirPerm		= 0755
-	commitFilePerm		= 0644
+	cloneRepoDirPerm            = 0755
+	commitFilePerm              = 0644
 	readmeMDFileName            = "README.md"
 	changeDirFlag               = "-C"
+	defaultDevBranchName        = "branch-name-dev"
+	defaultPrBranchName         = "branch-name-pr"
 )
 
 const (
@@ -23,6 +26,9 @@ const (
 )
 
 type RemoteState int
+
+// e.g. if SyncState is SyncStateSynchronized then do nothing more
+// e.g. if SyncStateForkChanged then additionally one push from another clone
 type SyncState int
 type ClipboardContentType int
 type DevBranchState int
@@ -53,6 +59,8 @@ const (
 	SyncStateBothChangedConflict
 	// SyncStateDoesntTrackOrigin means that the dev branch does not track the origin
 	SyncStateDoesntTrackOrigin
+	// SyncStateCloneIsAheadOfFork means that the clone repo is ahead of the fork repo
+	SyncStateCloneIsAheadOfFork
 )
 
 const (

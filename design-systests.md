@@ -2,11 +2,17 @@
 
 ## Introduction
 
-System tests are designed to validate the functionality of the `qs` utility, to ensure that the utility behaves as expected in different situations.
+System tests are designed to validate the functionality of the `qs` utility, to ensure that the utility behaves as expected in different situations. The system tests create real GitHub repositories, perform actual Git operations, and validate the results against expected outcomes.
 
 ## Motivation
 
-The motivation behind these system tests is to ensure that the `qs` utility works correctly in a real-world scenario, where it interacts with remote repositories on GitHub. The tests will cover various aspects of the utility, including forking repositories, creating branches, making commits, and creating pull requests.
+The motivation behind these system tests is to ensure that the `qs` utility works correctly in a real-world scenario, where it interacts with remote repositories on GitHub. The tests cover various aspects of the utility, including:
+- Forking repositories and configuring remotes
+- Creating development and PR branches
+- Making commits and uploading changes
+- Creating pull requests and managing branch lifecycle
+- Downloading changes and synchronizing repositories
+- Integration with GitHub issues and Jira tickets
 
 ## Definitions
 
@@ -31,239 +37,531 @@ The motivation behind these system tests is to ensure that the `qs` utility work
 
 ## Principles
 
-- The framework must check prerequisites: existence of `qs` utility, `gh` utility, and `git` utility;
-- One system test - one `qs` command
-- Flow:
-  - Build the environment according to TestConfig
-  - Run the command
-  - Validate the command output using ExpectedStderr and ExpectedStdout
-  - Validate command result via checking expectations
-- RepoName: TestID-YYMMDDhhmmss
-  - TestID is a unique identifier for the test
-  - YYMMDDhhmmss is the date and time when the test was run
-- Environment variables:
-  - `UPSTREAM_GH_ACCOUNT`: it is environment variable used to set the GitHub account for the `Upstream Repo`
-  - `UPSTREAM_GH_TOKEN`: it is environment variable used to set the token for GitHub account of the `Upstream Repo`
-  - `FORK_GH_ACCOUNT`: it is environment variable used to set the GitHub account for the `Fork Repo`
-  - `FORK_GH_TOKEN`: it is environment variable used to set the token for GitHub account of the `Fork Repo`
-- Upstream repo path: github.com/{{.UPSTREAM_GH_ACCOUNT }}/{{.RepoName}}
-- Fork repo path: github.com/{{.FORK_GH_ACCOUNT}}/{{.RepoName}}
-- Clone repo path: ./.testdata/RepoName
+- **Prerequisites**: The framework checks for existence of `qs` utility, `gh` utility, and `git` utility
+- **One test, one command**: Each system test focuses on testing a single `qs` command
+- **Real GitHub integration**: Tests create actual GitHub repositories and perform real Git operations
+- **Comprehensive validation**: Tests validate both command output and resulting repository state
+- **Automatic cleanup**: Test repositories are automatically created and cleaned up
+- **Retry mechanisms**: Network operations include retry logic for reliability
+- **Cross-platform support**: Tests run on Windows, Linux, and macOS
 
-## Use cases
+### Test Flow:
+1. **Check prerequisites** - Verify required tools are available
+2. **Create test environment** - Set up upstream, fork, and clone repositories
+3. **Configure test state** - Set up branches, remotes, and sync states as needed
+4. **Run the command** - Execute the specified `qs` command
+5. **Validate output** - Check stdout/stderr against expected patterns
+6. **Check expectations** - Verify repository state matches expected outcomes
+7. **Cleanup** - Remove test repositories and temporary files
 
-qs fork
+### Repository Naming:
+- **Pattern**: `TestID-OS-YYMMDDhhmmss`
+  - `TestID`: Unique identifier for the test (e.g., "testfork_onexistingfork")
+  - `OS`: Operating system (darwin, linux, windows)
+  - `YYMMDDhhmmss`: Timestamp when the test was run
 
-UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null} If ForkState == Null && UpstreamState == OK {remotes.origin = UPSTREAM_REPO_URL }
+### Environment Variables:
+- `UPSTREAM_GH_ACCOUNT`: GitHub account for the upstream repository
+- `UPSTREAM_GH_TOKEN`: GitHub Personal Access Token for upstream account
+- `FORK_GH_ACCOUNT`: GitHub account for the fork repository
+- `FORK_GH_TOKEN`: GitHub Personal Access Token for fork account
+- `JIRA_API_TOKEN`: Jira API token (for Jira integration tests)
+- `JIRA_TICKET_URL`: Jira ticket URL (for Jira integration tests)
+- `JIRA_EMAIL`: Jira email (for Jira integration tests)
 
-| Name                | UpstreamState | ForkState | Expected Output                                                         |
-|---------------------|---------------|-----------|-------------------------------------------------------------------------|
-| Fork does not exist | OK            | Null      | Fork repo created                                                       |
-| Fork exists         | OK            | OK        | Adjusted remotes of the clone repo (origin → fork, upstream → upstream) |
-| No origin remote    | Null          | Null      | Error message: "origin remote not found"                                |
+### Repository Paths:
+- **Upstream repo**: `github.com/{{UPSTREAM_GH_ACCOUNT}}/{{RepoName}}`
+- **Fork repo**: `github.com/{{FORK_GH_ACCOUNT}}/{{RepoName}}`
+- **Clone repo**: `./.testdata/{{RepoName}}`
+- **Another clone**: `./.testdata/{{RepoName}}-another` (for multi-clone tests)
 
-qs dev
+## Test Scenarios
 
-UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null}, DevBranchExists                                                                                                             | Expected Output                                            |
+### qs fork
 
-| Name                         | UpstreamState | ForkState | DevBranchExists | Expected Output                                            |
-|------------------------------|---------------|-----------|-----------------|------------------------------------------------------------|
-| New dev branch needed        | OK            | OK        | false           | New dev branch is created in both clone and fork repos     |
-| Dev branch exists            | OK            | OK        | true            | New dev branch is not created                              |
-| Fork missing, branch missing | OK            | Null      | false           | New dev branch is created in both clone and upstream repos |
-| Fork missing, branch exists  | OK            | Null      | true            | New dev branch is not created                              |
+Tests the repository forking functionality and remote configuration.
 
-qs pr
+| Test Case                    | UpstreamState | ForkState | Expected Behavior                                                       |
+|------------------------------|---------------|-----------|-------------------------------------------------------------------------|
+| **Fork does not exist**     | OK            | Null      | Fork repo created, remotes configured (origin → fork, upstream → upstream) |
+| **Fork already exists**     | OK            | OK        | Error: "you are in fork already"                                       |
+| **No origin remote**        | Null          | Null      | Error: "origin remote not found"                                       |
 
-UpstreamState{OK, Misconfigured, Null}, ForkState{OK, Misconfigured, Null}, SyncState{Synchronized, ForkChanged, CloneChanged, BothChanged, BothChangedConflict, DoesntTrackOrigin} DoesntTrackOrigin means state when dev branch tracks non-origin remote
+### qs dev
 
-| Name                     | UpstreamState | ForkState | SyncState         | Expected Output                                                         |
-|--------------------------|---------------|-----------|-------------------|-------------------------------------------------------------------------|
-| Basic                    | OK            | OK        | Synchronized      | New pull request is created in upstream repo                            |
-| Upstream missing         | OK            | Null      | Synchronized      | New pull request is created in upstream repo                            |
-| Dev branch out of date   | OK            | OK        | ForkChanged       | Error message: "This branch is out-of-date. Merge automatically [y/n]?" |
-| Wrong branch checked out | OK            | OK        | DoesntTrackOrigin | Error message: "You are not on dev branch"                              |
+Tests development branch creation and management.
 
-## Core files
+| Test Case                    | UpstreamState | ForkState | DevBranchState | Expected Behavior                                          |
+|------------------------------|---------------|-----------|----------------|------------------------------------------------------------|
+| **New dev branch**           | OK            | OK        | NotExists      | New dev branch created in clone and pushed to fork        |
+| **Dev branch exists**        | OK            | OK        | ExistsAndCheckedOut | Switch to existing dev branch                      |
+| **Fork missing**             | OK            | Null      | NotExists      | New dev branch created in clone and pushed to upstream    |
+| **Custom branch name**       | OK            | OK        | NotExists      | Branch created with custom name from clipboard/input      |
+| **Delete dev branch (-d)**   | OK            | OK        | ExistsAndCheckedOut | Dev branch deleted locally and remotely            |
 
-`./internal/systrun/provide.go`
+### qs pr
+
+Tests pull request creation and branch lifecycle management.
+
+| Test Case                    | UpstreamState | ForkState | SyncState         | Expected Behavior                                          |
+|------------------------------|---------------|-----------|-------------------|------------------------------------------------------------|
+| **Basic PR creation**        | OK            | OK        | Synchronized      | PR created, dev branch → pr branch, dev branch deleted    |
+| **Fork missing**             | OK            | Null      | Synchronized      | PR created directly to upstream                            |
+| **Branch out of sync**       | OK            | OK        | ForkChanged       | Error or automatic merge prompt                            |
+| **Wrong branch**             | OK            | OK        | DoesntTrackOrigin | Error: branch not properly configured                      |
+
+### qs u (upload)
+
+Tests uploading local changes to remote repositories.
+
+| Test Case                    | UpstreamState | ForkState | SyncState                    | Expected Behavior                                          |
+|------------------------------|---------------|-----------|------------------------------|------------------------------------------------------------|
+| **Upload changes**           | OK            | OK        | UncommittedChangesInClone    | Changes committed and pushed to fork                       |
+| **No changes**               | OK            | OK        | Synchronized                 | No operation needed                                        |
+| **First push**               | OK            | OK        | CloneChanged                 | Tracking branch set up, changes pushed                    |
+
+### qs d (download)
+
+Tests downloading and synchronizing changes from remote repositories.
+
+| Test Case                    | UpstreamState | ForkState | SyncState         | Expected Behavior                                          |
+|------------------------------|---------------|-----------|-------------------|------------------------------------------------------------|
+| **Download changes**         | OK            | OK        | ForkChanged       | Local repo synchronized with fork and upstream            |
+| **No changes**               | OK            | OK        | Synchronized      | No operation needed                                        |
+| **Upstream only**            | OK            | Null      | Synchronized      | Local repo synchronized with upstream                      |
+
+## Architecture
+
+### Core Components
+
+#### 1. SystemTest (`./internal/systrun/types.go`)
 
 ```go
-func New(t *testing.T, testConfig *TestConfig) *SystemTest {
-    cloneRepoPath := //generate a unique path for the clone repo in .testdata dir of the root of the qs package
-    
-	return &SystemTest{t: t, cfg: testConfig, cloneRepoPath: cloneRepoPath}
+type SystemTest struct {
+    ctx                  context.Context
+    cfg                  *TestConfig
+    cloneRepoPath        string
+    anotherCloneRepoPath string
+    repoName             string
+    qsExecRootCmd        func(ctx context.Context, args []string) (context.Context, error)
 }
 ```
 
-`./internal/systrun/impl.go`
+The main test execution engine that orchestrates the entire test lifecycle.
+
+#### 2. Test Factory (`./internal/systrun/provide.go`)
+
+```go
+func New(t *testing.T, testConfig *TestConfig) *SystemTest {
+    timestamp := time.Now().Format("060102150405") // YYMMDDhhmmss
+    repoName := fmt.Sprintf("%s-%s-%s", testConfig.TestID, runtime.GOOS, timestamp)
+
+    return &SystemTest{
+        ctx:           context.Background(),
+        cfg:           testConfig,
+        repoName:      repoName,
+        cloneRepoPath: filepath.Join(wd, TestDataDir, repoName),
+        qsExecRootCmd: cmdproc.ExecRootCmd,
+    }
+}
+```
+
+Creates unique test instances with OS-specific repository names.
+
+#### 3. Test Execution Flow (`./internal/systrun/impl.go`)
 
 ```go
 func (st *SystemTest) Run() error {
-    // Check prerequisites
+    // 1. Check prerequisites (qs, gh, git availability)
     if err := st.checkPrerequisites(); err != nil {
         return err
     }
 
-    // Create test environment
+    // 2. Create test environment (repos, remotes, branches)
     if err := st.createTestEnvironment(); err != nil {
         return err
     }
 
-    // Run the command
-    actualStdout, actualStderr, err := st.runCommand();
+    // 3. Set GitHub authentication
+    if err := os.Setenv("GITHUB_TOKEN", st.cfg.GHConfig.ForkToken); err != nil {
+        return err
+    }
+
+    // 4. Execute the qs command
+    stdout, stderr, err := st.runCommand(st.cfg.CommandConfig)
+
+    // 5. Validate command output
     if err != nil {
+        if err := st.validateStderr(stderr); err != nil {
+            return err
+        }
+    }
+    if err := st.validateStdout(stdout); err != nil {
         return err
     }
 
-    // Validate output
-    if err := st.validateOutput(actualStdout, actualStderr); err != nil {
+    // 6. Check post-execution expectations
+    if err := st.checkExpectations(); err != nil {
         return err
     }
 
-  // Check expectations
-  if err := st.checkExpectations(); err != nil {
-      return err
-  }
+    // 7. Cleanup test environment
+    if err := st.cleanupTestEnvironment(); err != nil {
+        return err
+    }
 
-    return nil
+    return err
 }
 ```
 
-`./internal/systrun/types.go`
+### Configuration Types (`./internal/systrun/types.go`)
+
+#### TestConfig Structure
 
 ```go
-type SystemTest struct {
-	t   *testing.T
-	cfg *TestConfig
-}
-
-// TestConfig contains all configuration for a system test
 type TestConfig struct {
-	TestID          string
-    GHConfig        GithubConfig
-    Command         string
-    Args            []string
-    UpstreamState   RemoteState
-    ForkState       RemoteState
-    SyncState       SyncState
-    DevBranchExists bool
-    ExpectedStderr  string
-    ExpectedStdout  string
-    Expectations    []IExpectation
+    TestID                 string                // Unique test identifier
+    GHConfig               GithubConfig          // GitHub authentication
+    CommandConfig          *CommandConfig        // Command to execute
+    UpstreamState          RemoteState           // Upstream repo state
+    ForkState              RemoteState           // Fork repo state
+    SyncState              SyncState             // Synchronization state
+    DevBranchState         DevBranchState        // Dev branch state
+    ClipboardContent       ClipboardContentType  // Clipboard content type
+    RunCommandOnOtherClone bool                  // Run on secondary clone
+    NeedCollaboration      bool                  // Setup collaboration
+    BranchState            *BranchState          // Complex branch states
+    ExpectedStderr         string                // Expected error output
+    ExpectedStdout         string                // Expected standard output
+    Expectations           []ExpectationFunc     // Post-execution checks
 }
 
-// GithubConfig holds GitHub account and token information
+type CommandConfig struct {
+    Command string   // qs command name (fork, dev, pr, u, d)
+    Args    []string // Command arguments
+    Stdin   string   // Input to provide to command
+}
+
 type GithubConfig struct {
-	UpstreamAccount string
-    UpstreamToken   string
-    ForkAccount     string
-    ForkToken       string
+    UpstreamAccount string // GitHub username for upstream
+    UpstreamToken   string // GitHub token for upstream
+    ForkAccount     string // GitHub username for fork
+    ForkToken       string // GitHub token for fork
 }
 
-// ExpectedDevBranch represents the expected state of the dev branch
-type ExpectedDevBranch struct {
-    Exists bool
-}
-
-func (e ExpectedDevBranch) Check(cloneRepoPath string) error {
-    // Check if the dev branch exists in the clone repo
-	
-    return nil
-}
-
-// ExpectedRemoteState represents the expected state of a remote
-type ExpectedRemoteState struct {
-    UpstreamRemoteState RemoteState
-    ForkRemoteState     RemoteState
-}
-
-func (e ExpectedRemoteState) Check(cloneRepoPath string) error {
-    // Implement the logic to check the remote state
-
-    return nil
-}
-
-// ExpectedPullRequest represents the expected state of a pull request
-type ExpectedPullRequest struct {
-    Exists          bool
-    Title           string
-    ForkAccount     string
-    UpstreamAccount string
-}
-
-func (e ExpectedPullRequest) Check(cloneRepoPath string) error {
-	// Check if the pull request exists in the upstream repo
-	
-    return nil
-}
-
-// ExpectedDownloadResult represents the expected state after downloading changes
-type ExpectedDownloadResult struct {}
-
-func (e ExpectedDownloadResult) Check(cloneRepoPath string) error {
-    // Compare local and remote branches to ensure they're in sync
-    
-	return nil
-}
-
-// ExpectedUploadResult represents the expected state after uploading changes
-type ExpectedUploadResult struct {}
-
-func (e ExpectedUploadResult) Check(cloneRepoPath string) error {
-	// Compare local and remote branches to ensure they're in sync
-	
-    return nil
+type BranchState struct {
+    DevBranchExists      bool // Dev branch exists locally/remotely
+    DevBranchHasRtBranch bool // Dev branch has remote tracking
+    DevBranchIsAhead     bool // Dev branch ahead of remote
+    PRBranchExists       bool // PR branch exists
+    PRBranchHasRtBranch  bool // PR branch has remote tracking
+    PRBranchIsAhead      bool // PR branch ahead of remote
+    PRExists             bool // Pull request exists on GitHub
+    PRMerged             bool // Pull request is merged
 }
 ```
 
-`./internal/systrun/consts.go`
+#### State Enumerations (`./internal/systrun/const.go`)
 
 ```go
 type RemoteState int
+const (
+    RemoteStateOK RemoteState = iota           // Remote configured correctly
+    RemoteStateMisconfigured                   // Remote misconfigured
+    RemoteStateNull                            // No remote configured
+)
+
 type SyncState int
-
 const (
-	RemoteStateOK RemoteState = iota
-	RemoteStateMisconfigured
-	RemoteStateNull
+    SyncStateUnspecified SyncState = iota      // Not specified
+    SyncStateUncommitedChangesInClone          // Uncommitted local changes
+    SyncStateSynchronized                      // All repos in sync
+    SyncStateForkChanged                       // Fork has new changes
+    SyncStateCloneChanged                      // Clone has new changes
+    SyncStateBothChanged                       // Both have changes
+    SyncStateBothChangedConflict               // Conflicting changes
+    SyncStateDoesntTrackOrigin                 // Branch doesn't track origin
 )
 
+type DevBranchState int
 const (
-	SyncStateSynchronized SyncState = iota
-	SyncStateForkChanged
-	SyncStateCloneChanged
-	SyncStateBothChanged
-	SyncStateBothChangedConflict
-	SyncStateDoesntTrackOrigin
+    DevBranchStateNotExists DevBranchState = iota     // Branch doesn't exist
+    DevBranchStateExistsAndCheckedOut                 // Branch exists and current
+    DevBranchStateExistsButNotCheckedOut              // Branch exists but not current
+)
+
+type ClipboardContentType int
+const (
+    ClipboardContentEmpty ClipboardContentType = iota // Empty clipboard
+    ClipboardContentGithubIssue                       // GitHub issue URL
+    ClipboardContentUnavailableGithubIssue            // Invalid GitHub issue
+    ClipboardContentJiraTicket                        // Jira ticket URL
+    ClipboardContentCustom                            // Custom content
 )
 ```
 
-`./internal/systrun/impl.go`
+### Expectation System (`./internal/systrun/types.go`)
+
+The expectation system validates the post-execution state of repositories and GitHub resources.
+
+#### Expectation Function Type
 
 ```go
-// checkExpectations checks expectations after command execution
-func (st *SystemTest) checkExpectations() error {
-  for _, expectation := range st.cfg.Expectations {
-    if err := expectation.Check(st.cloneRepoPath); err != nil {
-        return fmt.Errorf("validation failed: %w", err)
-    }
-  }
-  
-  return nil
-}
+type ExpectationFunc func(ctx context.Context) error
+```
 
+#### Built-in Expectations
+
+```go
+// Repository State Expectations
+func ExpectationForkExists(ctx context.Context) error
+func ExpectationCurrentBranchHasPrefix(ctx context.Context) error
+func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error
+func ExpectationBranchLinkedToIssue(ctx context.Context) error
+
+// Branch Count Expectations
+func ExpectationOneLocalBranch(ctx context.Context) error
+func ExpectationTwoLocalBranches(ctx context.Context) error
+func ExpectationThreeLocalBranches(ctx context.Context) error
+func ExpectationOneRemoteBranch(ctx context.Context) error
+func ExpectationTwoRemoteBranches(ctx context.Context) error
+func ExpectationThreeRemoteBranches(ctx context.Context) error
+
+// Pull Request Expectations
+func ExpectationPRCreated(ctx context.Context) error
+
+// Synchronization Expectations
+func ExpectationCloneIsSyncedWithFork(ctx context.Context) error
+func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error
+func ExpectationNotesDownloaded(ctx context.Context) error
+
+// Tool Integration Expectations
+func ExpectationLargeFileHooksInstalled(ctx context.Context) error
+```
+
+#### Context-Based Data Passing
+
+The system uses Go's `context.Context` to pass data between test phases:
+
+```go
+// Context Keys (from internal/context package)
+CtxKeyCloneRepoPath         // Path to main clone
+CtxKeyAnotherCloneRepoPath  // Path to secondary clone
+CtxKeyDevBranchName         // Name of dev branch
+CtxKeyCustomBranchName      // Custom branch name
+CtxKeyBranchPrefix          // Branch prefix
+CtxKeyCreatedGithubIssueURL // Created GitHub issue URL
+CtxKeyJiraTicket            // Jira ticket identifier
+CtxKeyCommitMessage         // Commit message parts
+```
+
+### Test Environment Setup (`./internal/systrun/impl.go`)
+
+#### Environment Creation Process
+
+```go
 func (st *SystemTest) createTestEnvironment() error {
-    // create upstream, form and clone repos according to the test config
+    // 1. Create upstream repository on GitHub
+    if err := st.createUpstreamRepo(st.repoName, repoURL); err != nil {
+        return err
+    }
+
+    // 2. Create fork repository (if needed)
+    if err := st.createForkRepo(st.repoName); err != nil {
+        return err
+    }
+
+    // 3. Clone repository locally
+    if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
+        return err
+    }
+
+    // 4. Configure remotes based on test scenario
+    if err := st.configureRemotes(st.cloneRepoPath, st.repoName); err != nil {
+        return err
+    }
+
+    // 5. Setup dev branch if needed
+    if err := st.setupDevBranch(); err != nil {
+        return err
+    }
+
+    // 6. Configure collaboration (if needed)
+    if st.cfg.NeedCollaboration {
+        if err := st.configureCollaboration(); err != nil {
+            return err
+        }
+    }
+
+    // 7. Process clipboard content
+    if err := st.processClipboardContent(); err != nil {
+        return err
+    }
+
+    // 8. Setup sync state
+    if err := st.processSyncState(); err != nil {
+        return err
+    }
+
+    // 9. Create additional clone (if needed)
+    if err := st.createAnotherClone(); err != nil {
+        return err
+    }
+
+    return nil
 }
 ```
 
-`./internal/systrun/interface.go`
+## Test Examples
+
+### Basic Fork Test
 
 ```go
-// IExpectation is an interface for expectations in system tests
-type IExpectation interface {
-	// Check compares the current state of the system with the expected state
-	Check(cloneRepoPath string) error
+func TestFork_OnExistingFork(t *testing.T) {
+    testConfig := &systrun.TestConfig{
+        TestID:   strings.ToLower(t.Name()),
+        GHConfig: getGithubConfig(t),
+        CommandConfig: &systrun.CommandConfig{
+            Command: "fork",
+        },
+        UpstreamState:  systrun.RemoteStateOK,
+        ForkState:      systrun.RemoteStateOK,
+        ExpectedStderr: "you are in fork already",
+        Expectations:   []systrun.ExpectationFunc{systrun.ExpectationForkExists},
+    }
+
+    sysTest := systrun.New(t, testConfig)
+    err := sysTest.Run()
+    require.Error(t, err) // Expect error for existing fork
 }
+```
+
+### Complex Dev Branch Test
+
+```go
+func TestDevD_DevBranch_RT_PRMerged(t *testing.T) {
+    testConfig := &systrun.TestConfig{
+        TestID:   strings.ToLower(t.Name()),
+        GHConfig: getGithubConfig(t),
+        CommandConfig: &systrun.CommandConfig{
+            Command: "dev",
+            Args:    []string{"-d"},
+            Stdin:   "y",
+        },
+        UpstreamState: systrun.RemoteStateOK,
+        ForkState:     systrun.RemoteStateOK,
+        BranchState: &systrun.BranchState{
+            DevBranchExists:      true,
+            DevBranchHasRtBranch: true,
+            PRMerged:             true,
+        },
+        NeedCollaboration: true,
+        Expectations: []systrun.ExpectationFunc{
+            systrun.ExpectationOneLocalBranch,
+            systrun.ExpectationOneRemoteBranch,
+        },
+    }
+
+    sysTest := systrun.New(t, testConfig)
+    err := sysTest.Run()
+    require.NoError(t, err)
+}
+```
+
+### Upload Test with Sync State
+
+```go
+func TestUpload(t *testing.T) {
+    testConfig := &systrun.TestConfig{
+        TestID:   strings.ToLower(t.Name()),
+        GHConfig: getGithubConfig(t),
+        CommandConfig: &systrun.CommandConfig{
+            Command: "u",
+        },
+        UpstreamState:     systrun.RemoteStateOK,
+        ForkState:         systrun.RemoteStateOK,
+        SyncState:         systrun.SyncStateUncommitedChangesInClone,
+        ClipboardContent:  systrun.ClipboardContentGithubIssue,
+        NeedCollaboration: true,
+        Expectations:      []systrun.ExpectationFunc{
+            systrun.ExpectationRemoteBranchWithCommitMessage,
+        },
+    }
+
+    sysTest := systrun.New(t, testConfig)
+    err := sysTest.Run()
+    require.NoError(t, err)
+}
+```
+
+## Key Features
+
+### 1. **Retry Mechanisms**
+- All network operations include retry logic for reliability
+- Configurable via environment variables:
+  - `QS_MAX_RETRIES`: Maximum retry attempts (default: 3)
+  - `QS_RETRY_DELAY_SECONDS`: Initial delay (default: 2)
+  - `QS_MAX_RETRY_DELAY_SECONDS`: Maximum delay (default: 30)
+
+### 2. **Cross-Platform Support**
+- Tests run on Windows, Linux, and macOS
+- OS-specific repository naming prevents conflicts
+- Platform-specific dependency installation in CI
+
+### 3. **Real GitHub Integration**
+- Creates actual GitHub repositories
+- Tests real GitHub API interactions
+- Validates GitHub CLI functionality
+- Supports GitHub issue and Jira ticket integration
+
+### 4. **Comprehensive Validation**
+- Command output validation (stdout/stderr)
+- Repository state validation
+- Branch existence and configuration
+- Remote tracking branch validation
+- Pull request creation validation
+- Notes synchronization validation
+
+### 5. **Automatic Cleanup**
+- Test repositories automatically deleted after execution
+- Temporary files cleaned up
+- GitHub resources properly removed
+
+## Best Practices
+
+### Test Design
+1. **One command per test** - Each test focuses on a single `qs` command
+2. **Clear naming** - Test names reflect the scenario being tested
+3. **Comprehensive expectations** - Validate both success and failure cases
+4. **Realistic scenarios** - Test real-world usage patterns
+
+### Configuration
+1. **Use environment variables** - Store sensitive data in GitHub secrets
+2. **Unique test IDs** - Ensure test isolation with unique identifiers
+3. **Proper state setup** - Configure initial state to match test scenario
+4. **Clear expectations** - Define specific, measurable outcomes
+
+### Debugging
+1. **Verbose logging** - Use `-v` flag for detailed output
+2. **Context inspection** - Examine context values for debugging
+3. **Repository inspection** - Check `.testdata` directory for repo state
+4. **GitHub inspection** - Verify GitHub resources manually if needed
+
+## CI/CD Integration
+
+### GitHub Actions Workflow
+- Runs on Windows, Linux, and macOS
+- Uses repository secrets for authentication
+- Installs platform-specific dependencies
+- Runs tests with proper environment variables
+- Provides detailed failure reporting
+
+### Required Secrets
+- `UPSTREAM_GH_ACCOUNT` / `UPSTREAM_GH_TOKEN`
+- `FORK_GH_ACCOUNT` / `FORK_GH_TOKEN`
+- `JIRA_API_TOKEN` / `JIRA_TICKET_URL` / `JIRA_EMAIL` (optional)
+
+### Environment Variables
+- Retry configuration variables
+- `QS_SKIP_QS_VERSION_CHECK=true` for CI environments
 ```

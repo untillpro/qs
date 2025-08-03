@@ -16,7 +16,7 @@ func TestFork_OnExistingFork(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "fork",
 		},
 		UpstreamState:  systrun.RemoteStateOK,
@@ -38,7 +38,7 @@ func TestFork(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "fork",
 		},
 		UpstreamState: systrun.RemoteStateOK,
@@ -58,7 +58,7 @@ func TestFork_NoRemotes(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "fork",
 		},
 		UpstreamState:  systrun.RemoteStateNull,
@@ -78,7 +78,7 @@ func TestDev_CustomName(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
 			Stdin:   "y",
 		},
@@ -103,7 +103,7 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
@@ -130,7 +130,7 @@ func TestDev_ExistingBranch(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
 			Args:    []string{branchName},
 			Stdin:   "y",
@@ -156,7 +156,7 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: ghConfig,
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
@@ -184,16 +184,16 @@ func TestPR_FromOtherClone(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: ghConfig,
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "pr",
 		},
-		UpstreamState:              systrun.RemoteStateOK,
-		ForkState:                  systrun.RemoteStateOK,
-		ClipboardContent:           systrun.ClipboardContentGithubIssue,
-		SyncState:                  systrun.SyncStateSynchronized,
-		RunCommandFromAnotherClone: true,
-		NeedCollaboration:          true,
-		Expectations:               []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+		UpstreamState:          systrun.RemoteStateOK,
+		ForkState:              systrun.RemoteStateOK,
+		ClipboardContent:       systrun.ClipboardContentGithubIssue,
+		SyncState:              systrun.SyncStateSynchronized,
+		RunCommandOnOtherClone: true,
+		NeedCollaboration:      true,
+		Expectations:           []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
 	}
 
 	sysTest := systrun.New(t, testConfig)
@@ -209,7 +209,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: ghConfig,
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
@@ -232,7 +232,7 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
 			Args:    []string{"--no-fork"},
 			Stdin:   "y",
@@ -255,7 +255,7 @@ func TestPR_Synchronized(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "pr",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
@@ -278,7 +278,7 @@ func TestPR_FromJiraTicket(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "pr",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
@@ -300,7 +300,7 @@ func TestPR_ForkChanged(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "pr",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
@@ -323,7 +323,7 @@ func TestDownload(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "d",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
@@ -349,7 +349,7 @@ func TestUpload(t *testing.T) {
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
-		CommandConfig: systrun.CommandConfig{
+		CommandConfig: &systrun.CommandConfig{
 			Command: "u",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
@@ -358,6 +358,323 @@ func TestUpload(t *testing.T) {
 		ClipboardContent:  systrun.ClipboardContentGithubIssue,
 		NeedCollaboration: true,
 		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationRemoteBranchWithCommitMessage},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_DevBranch_NoRT_NoPR(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		ForkState: systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists: true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationTwoLocalBranches,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_DevBranch_RT_NoPR(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		ForkState: systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists:      true,
+			DevBranchHasRtBranch: true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationTwoLocalBranches,
+			systrun.ExpectationTwoRemoteBranches,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_DevBranch_RT_PROpen(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists:      true,
+			DevBranchHasRtBranch: true,
+			PRExists:             true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationTwoLocalBranches,
+			systrun.ExpectationTwoRemoteBranches,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_DevBranch_RT_PRMerged(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists:      true,
+			DevBranchHasRtBranch: true,
+			PRMerged:             true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationOneLocalBranch,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_DevBranch_NoRT_PRMerged(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists: true,
+			PRMerged:        true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationOneLocalBranch,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_PrBranch_NoRT_PRMerged(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			PRBranchExists: true,
+			PRMerged:       true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationOneLocalBranch,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_PrBranch_RT_PRMerged(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			PRBranchExists:      true,
+			PRBranchHasRtBranch: true,
+			PRMerged:            true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationOneLocalBranch,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_PrBranch_NoRT_PROpen(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			PRBranchExists: true,
+			PRExists:       true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationTwoLocalBranches,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_DevBranch_PrBranch_PROpen(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists: true,
+			PRBranchExists:  true,
+			PRExists:        true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationThreeLocalBranches,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_DevBranch_PrBranch_PRMerged(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists: true,
+			PRBranchExists:  true,
+			PRMerged:        true,
+		},
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationOneLocalBranch,
+			systrun.ExpectationOneRemoteBranch,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+func TestDevD_NoBranches(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+			Stdin:   "y",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationOneLocalBranch,
+			systrun.ExpectationOneRemoteBranch,
+		},
 	}
 
 	sysTest := systrun.New(t, testConfig)

@@ -17,6 +17,7 @@ import (
 	contextPkg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/jira"
+	"github.com/untillpro/qs/internal/notes"
 )
 
 func Dev(cmd *cobra.Command, wd string, args []string) error {
@@ -292,13 +293,33 @@ func deleteBranches(wd, parentRepo string) error {
 	// Iterate through branches
 	for _, branch := range branchesToAnalyze {
 		// Step 3.n: if pr is merged, then all related branches must be deleted
-		mergedPrExists, _, _, _, err := gitcmds.DoesPrExist(wd, parentRepo, branch, gitcmds.PRStateMerged)
+		prInfo, _, _, err := gitcmds.DoesPrExist(wd, parentRepo, branch, gitcmds.PRStateMerged)
 		if err != nil {
 			return err
 		}
 		// if pr is not merged yet then branch must live
-		if !mergedPrExists {
-			continue
+		if prInfo == nil {
+			skipBranch := true
+			// if dev branch then check if pull request is merged of the possible related pr branch
+			branchType := gitcmds.GetBranchTypeByName(branch)
+			if branchType == notes.BranchTypeDev {
+				// calculate possible related pr branch name
+				// e.g. if branch is "feature-123-dev" then related pr branch
+				// is "feature-123-pr"
+				prBranchName := strings.TrimSuffix(branch, "-dev") + "-pr"
+				// check if pull request is merged of the possible related pr branch
+				prInfo, _, _, err := gitcmds.DoesPrExist(wd, parentRepo, prBranchName, gitcmds.PRStateMerged)
+				if err != nil {
+					return err
+				}
+				// if pr is merged then remove dev branch
+				if prInfo != nil {
+					skipBranch = false
+				}
+			}
+			if skipBranch {
+				continue
+			}
 		}
 
 		if err := gitcmds.RemoveBranch(wd, branch); err != nil {
