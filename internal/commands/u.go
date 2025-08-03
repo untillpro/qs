@@ -43,14 +43,19 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		return errors.New("there is nothing to commit")
 	}
 
-	if err := setCommitMessage(cmd, cfgUpload, wd); err != nil {
+	if err := setCommitMessage(cmd, cfgUpload, wd, isMain); err != nil {
 		return err
 	}
 
 	return gitcmds.Upload(cmd, wd)
 }
 
-func setCommitMessage(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
+func setCommitMessage(
+	cmd *cobra.Command,
+	cfgUpload vcs.CfgUpload,
+	wd string,
+	isMainBranch bool,
+) error {
 	// find out a type of the branch
 	branchType, err := gitcmds.GetBranchType(wd)
 	if err != nil {
@@ -85,10 +90,15 @@ func setCommitMessage(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) er
 		}
 	default:
 		if totalLength == 0 {
-			return ErrEmptyCommitMessage
+			if isMainBranch {
+				return ErrEmptyCommitMessage
+			}
+			// default commit message for custom branch must be "wip" (work in process)
+			finalCommitMessages = append(finalCommitMessages, gitcmds.DefaultCommitMessage)
+		} else {
+			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 		}
 
-		finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 	}
 	// put commit a message to context
 	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, finalCommitMessages))
