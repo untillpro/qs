@@ -411,11 +411,12 @@ func Download(wd string) error {
 
 	var (
 		stderr string
+		stdout string
 	)
 	// Step 2: fetch origin --prune
 	err = helper.Retry(func() error {
 		_, stderr, err = new(exec.PipedExec).
-			Command(git, "fetch", "origin", "--prune").
+			Command(git, fetch, origin, "--prune").
 			WorkingDir(wd).
 			RunToStrings()
 
@@ -427,10 +428,10 @@ func Download(wd string) error {
 		return fmt.Errorf("failed to fetch origin --prune: %w", err)
 	}
 
-	// Step 3: git pull origin refs/notes/*:refs/notes/*
+	// Step 3: git fetch origin --force refs/notes/*:refs/notes/*
 	err = helper.Retry(func() error {
 		_, stderr, err = new(exec.PipedExec).
-			Command(git, "pull", "origin", "refs/notes/*:refs/notes/*").
+			Command(git, fetch, origin, "--force", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
 			RunToStrings()
 
@@ -438,8 +439,8 @@ func Download(wd string) error {
 	})
 	if err != nil {
 		logger.Verbose(stderr)
-		fmt.Println(`warning: command [git pull origin "refs/notes/*:refs/notes/*"] failed`)
-		fmt.Println(`hint: you can run command [git fetch origin --force "refs/notes/*:refs/notes/*"] to replace local notes by remote ones`)
+
+		return fmt.Errorf("failed to fetch notes: %w, stdout: %s", err, stdout)
 	}
 
 	// Get current branch info
@@ -472,7 +473,7 @@ func Download(wd string) error {
 		return fmt.Errorf("failed to merge origin/%s: %w", mainBranchName, err)
 	}
 
-	// check out back on previous branch
+	// check out back on the previous branch
 	if !isMain {
 		if err := CheckoutOnBranch(wd, currentBranchName); err != nil {
 			return err
@@ -510,7 +511,7 @@ func Download(wd string) error {
 	if upstreamExists {
 		err = helper.Retry(func() error {
 			_, stderr, err = new(exec.PipedExec).
-				Command(git, "pull", "--no-rebase", "upstream", mainBranchName).
+				Command(git, pull, "--no-rebase", "upstream", mainBranchName).
 				WorkingDir(wd).
 				RunToStrings()
 
@@ -544,12 +545,15 @@ func GetBranchesWithRemoteTracking(wd, remoteName string) ([]string, error) {
 	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "branch", "-vv").
 		WorkingDir(wd).
-		Command("awk", fmt.Sprintf("$3 ~ /\\[%s.*\\]/ {print $1}", remoteName)).
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
 
-		return nil, fmt.Errorf("failed to get list of branches with remote tracking: %w", err)
+		return nil, fmt.Errorf("failed to get list of rtBranchLines with remote tracking: %w", err)
+	}
+	// No remote tracking branches found
+	if len(stdout) == 0 {
+		return nil, nil
 	}
 
 	mainBranchName, err := GetMainBranch(wd)
@@ -557,9 +561,21 @@ func GetBranchesWithRemoteTracking(wd, remoteName string) ([]string, error) {
 		return nil, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
-	branches := strings.Split(strings.TrimSpace(stdout), caret)
-	branchesWithRemoteTracking := make([]string, 0, len(branches))
-	for _, branchName := range branches {
+	// remote tracking branch suffixes:
+	// - gone - branch is deleted on remote
+	// - ahead 1 - branch is ahead of remote by 1 commit, could be ahead by merge commit
+	rtBranchPattern := fmt.Sprintf(`\[%s/([A-Za-z0-9\-_\.\/]+):? ?(gone)?(ahead 1)?\]`, remoteName)
+	re := regexp.MustCompile(rtBranchPattern)
+
+	rtBranchLines := strings.Split(strings.TrimSpace(stdout), caret)
+	branchesWithRemoteTracking := make([]string, 0, len(rtBranchLines))
+	for _, rtBranchLine := range rtBranchLines {
+		matches := re.FindStringSubmatch(rtBranchLine)
+		if matches == nil {
+			continue
+		}
+
+		branchName := matches[1]
 		// exclude the main branch from the list
 		if branchName == mainBranchName {
 			continue
@@ -1045,8 +1061,8 @@ func SyncMainBranch(wd string) error {
 	return nil
 }
 
-// getBranchTypeByName returns branch type based on branch name
-func getBranchTypeByName(branchName string) notesPkg.BranchType {
+// GetBranchTypeByName returns branch type based on branch name
+func GetBranchTypeByName(branchName string) notesPkg.BranchType {
 	switch {
 	case strings.HasSuffix(branchName, "-dev"):
 		return notesPkg.BranchTypeDev
@@ -1138,7 +1154,7 @@ func GetBranchType(wd string) (notesPkg.BranchType, error) {
 		}
 	}
 
-	return getBranchTypeByName(currentBranchName), nil
+	return GetBranchTypeByName(currentBranchName), nil
 }
 
 // isOldStyledBranch checks if branch is old styled
@@ -1721,11 +1737,11 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return stdout, stderr, err
 	}
 
-	prExists, prInfo, stdout, stderr, err := DoesPrExist(wd, parentRepoName, prBranchName, PRStateOpen)
+	prInfo, stdout, stderr, err := DoesPrExist(wd, parentRepoName, prBranchName, PRStateOpen)
 	if err != nil {
 		return stdout, stderr, err
 	}
-	if !prExists {
+	if prInfo == nil {
 		return stdout, stderr, errors.New("PR not created")
 	}
 	// print PR URL
@@ -1808,6 +1824,9 @@ func hasRemoteTrackingBranch(wd string, branchName string) (bool, error) {
 		WorkingDir(wd).
 		Command("grep", branchName).
 		RunToStrings()
+	if len(stdout) == 0 {
+		return false, nil
+	}
 
 	if err != nil {
 		logger.Verbose(stderr)

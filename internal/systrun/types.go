@@ -32,22 +32,31 @@ type SystemTest struct {
 
 // TestConfig contains all configuration for a system test
 type TestConfig struct {
-	TestID        string
-	GHConfig      GithubConfig
-	CommandConfig CommandConfig
-	UpstreamState RemoteState
-	ForkState     RemoteState
-	// e.g. if SyncState is SyncStateSynchronized then do nothing more
-	// e.g. if SyncStateForkChanged then additionally one push from another clone
-	SyncState                  SyncState
-	DevBranchState             DevBranchState       // if true then create dev branch
-	ClipboardContent           ClipboardContentType // Content to be set in clipboard before running the test
-	RunCommandFromAnotherClone bool                 //
-	NeedCollaboration          bool
-	// If ExpectedStderr is not empty then check exit code of qs it must be != 0
-	ExpectedStderr string
-	ExpectedStdout string
-	Expectations   []ExpectationFunc
+	TestID                 string
+	GHConfig               GithubConfig
+	CommandConfig          *CommandConfig
+	UpstreamState          RemoteState
+	ForkState              RemoteState
+	SyncState              SyncState
+	DevBranchState         DevBranchState       // if true then create dev branch
+	ClipboardContent       ClipboardContentType // Content to be set in clipboard before running the test
+	RunCommandOnOtherClone bool                 // RunCommandOnOtherClone specifies if a command should be executed from an additional repository clone.
+	NeedCollaboration      bool
+	BranchState            *BranchState // if true then create branch with prefix
+	ExpectedStderr         string       // If ExpectedStderr is not empty then check exit code of qs it must be != 0
+	ExpectedStdout         string
+	Expectations           []ExpectationFunc
+}
+
+type BranchState struct {
+	DevBranchExists      bool // dev-branch exists
+	DevBranchHasRtBranch bool // Remote tracking branch exists
+	DevBranchIsAhead     bool // dev-branch is ahead of the remote tracking branch
+	PRBranchExists       bool // PR branch exists
+	PRBranchHasRtBranch  bool // Remote tracking branch exists
+	PRBranchIsAhead      bool // PR branch is ahead of the remote tracking branch
+	PRExists             bool // Pull request exists
+	PRMerged             bool // Pull request is merged
 }
 
 type CommandConfig struct {
@@ -400,7 +409,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 	// Use gh CLI to check if PR exists with retry logic
 
-	prExists, prInfo, _, _, err := gitcmds.DoesPrExist(
+	prInfo, _, _, err := gitcmds.DoesPrExist(
 		cloneRepoPath,
 		fmt.Sprintf("%s/%s", owner, repoName),
 		expectedPRBranch,
@@ -409,7 +418,7 @@ func ExpectationPRCreated(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !prExists {
+	if prInfo == nil {
 		return fmt.Errorf("PR branch %s does not exist on upstream remote", expectedPRBranch)
 	}
 
@@ -565,4 +574,105 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func expectationLocalBranchExists(ctx context.Context, expectedCount int) error {
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return errCloneRepoPathNotFoundInContext
+	}
+
+	// Get local branches
+	stdout, stderr, err := new(goUtilsExec.PipedExec).
+		Command(git, "branch", "--format", "%(refname:short)").
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+
+	if err != nil {
+		return fmt.Errorf("failed to list local branches: %w, stderr: %s", err, stderr)
+	}
+
+	// Count branches
+	branches := strings.Split(strings.TrimSpace(stdout), "\n")
+	// Filter out empty entries
+	var count int
+	for _, b := range branches {
+		if strings.TrimSpace(b) != "" {
+			count++
+		}
+	}
+
+	if count != expectedCount {
+		return fmt.Errorf("expected %d local branch, but found %d", expectedCount, count)
+	}
+
+	return nil
+}
+
+func expectationRemoteBranchExists(ctx context.Context, expectedCount int) error {
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return errCloneRepoPathNotFoundInContext
+	}
+
+	// Get remote branches from origin only
+	stdout, stderr, err := new(goUtilsExec.PipedExec).
+		Command(git, "branch", "-r", "--format", "%(refname:short)").
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+
+	if err != nil {
+		return fmt.Errorf("failed to list remote branches: %w, stderr: %s", err, stderr)
+	}
+
+	// Count origin branches
+	branches := strings.Split(strings.TrimSpace(stdout), "\n")
+	var count int
+	for _, b := range branches {
+		if strings.TrimSpace(b) != "" && strings.HasPrefix(b, "origin/") && b != "origin/HEAD" {
+			count++
+		}
+	}
+
+	if count != expectedCount {
+		return fmt.Errorf("expected %d remote branch in origin, but found %d", expectedCount, count)
+	}
+
+	return nil
+}
+
+// ExpectationOneLocalBranch checks if there is exactly one local branch in the clone repo
+func ExpectationOneLocalBranch(ctx context.Context) error {
+	//nolint:revive
+	return expectationLocalBranchExists(ctx, 1)
+}
+
+// ExpectationTwoLocalBranches checks if there are exactly two local branches in the clone repo
+func ExpectationTwoLocalBranches(ctx context.Context) error {
+	//nolint:revive
+	return expectationLocalBranchExists(ctx, 2)
+}
+
+// ExpectationThreeLocalBranches checks if there are exactly three local branches in the clone repo
+func ExpectationThreeLocalBranches(ctx context.Context) error {
+	//nolint:revive
+	return expectationLocalBranchExists(ctx, 3)
+}
+
+// ExpectationOneRemoteBranch checks if there is exactly one remote branch in the origin remote
+func ExpectationOneRemoteBranch(ctx context.Context) error {
+	//nolint:revive
+	return expectationRemoteBranchExists(ctx, 1)
+}
+
+// ExpectationTwoRemoteBranches checks if there are exactly two remote branches in the origin remote
+func ExpectationTwoRemoteBranches(ctx context.Context) error {
+	//nolint:revive
+	return expectationRemoteBranchExists(ctx, 2)
+}
+
+// ExpectationThreeRemoteBranches checks if there are exactly three remote branches in the origin remote
+func ExpectationThreeRemoteBranches(ctx context.Context) error {
+	//nolint:revive
+	return expectationRemoteBranchExists(ctx, 3)
 }

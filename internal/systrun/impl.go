@@ -21,6 +21,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
+	goUtilsExec "github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
@@ -51,6 +52,10 @@ func (st *SystemTest) checkPrerequisites() error {
 
 // checkCommand validates the command to be executed
 func (st *SystemTest) checkCommand() error {
+	if st.cfg.CommandConfig == nil {
+		return nil
+	}
+
 	switch st.cfg.CommandConfig.Command {
 	case commands.CommandNameFork,
 		commands.CommandNameDev,
@@ -147,11 +152,15 @@ func (st *SystemTest) createTestEnvironment() error {
 		return fmt.Errorf("failed to create another clone: %w", err)
 	}
 
+	if err := st.buildBranchState(st.cloneRepoPath, authToken); err != nil {
+		return fmt.Errorf("failed to build branch state: %w", err)
+	}
+
 	return nil
 }
 
 func (st *SystemTest) createAnotherClone() error {
-	if !st.cfg.RunCommandFromAnotherClone {
+	if !st.cfg.RunCommandOnOtherClone {
 		return nil
 	}
 
@@ -161,7 +170,7 @@ func (st *SystemTest) createAnotherClone() error {
 		return fmt.Errorf("failed to get oririn remote URL: %w", err)
 	}
 
-	remoteUpstreamURL, err := gitcmds.GetRemoteUrlByName(st.cloneRepoPath, "upstream")
+	remoteUpstreamURL, err := gitcmds.GetRemoteUrlByName(st.cloneRepoPath, upstream)
 	if err != nil {
 		if !strings.Contains(err.Error(), "not found") {
 			remoteUpstreamURL = ""
@@ -204,7 +213,7 @@ func (st *SystemTest) createAnotherClone() error {
 	// Step 3.1: Configure remotes in temp clone
 	if err := gitcmds.CreateRemote(
 		st.anotherCloneRepoPath,
-		"upstream",
+		upstream,
 		upstreamAccount,
 		upstreamToken,
 		repo,
@@ -337,10 +346,10 @@ func acceptPendingInvitations(token string) error {
 		} else {
 			fmt.Printf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status)
 		}
-
-		if helper.IsTest() {
-			helper.Delay()
-		}
+		//
+		//if helper.IsTest() {
+		//	helper.Delay()
+		//}
 	}
 
 	return nil
@@ -402,7 +411,7 @@ func (st *SystemTest) getCustomClipboardContent() string {
 func (st *SystemTest) createGitHubIssue() (string, error) {
 	// Create issue title based on test ID
 	issueTitle := fmt.Sprintf("Test automation issue for %s", st.cfg.TestID)
-	
+
 	var output []byte
 	// Run gh issue create command
 	err := helper.Retry(func() error {
@@ -416,7 +425,7 @@ func (st *SystemTest) createGitHubIssue() (string, error) {
 			fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.UpstreamToken))
 
 		output, err = cmd.Output()
-		
+
 		return err
 	})
 	if err != nil {
@@ -739,7 +748,7 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 
 		if err := gitcmds.CreateRemote(
 			wd,
-			"upstream",
+			upstream,
 			st.cfg.GHConfig.UpstreamAccount,
 			st.cfg.GHConfig.UpstreamToken,
 			repoName,
@@ -832,7 +841,11 @@ func (st *SystemTest) setupDevBranch() error {
 }
 
 // runCommand executes the specified qs command and captures stdout and stderr
-func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr string, err error) {
+func (st *SystemTest) runCommand(cmdCfg *CommandConfig) (stdout string, stderr string, err error) {
+	if cmdCfg == nil {
+		return "", "", nil
+	}
+
 	stdoutReader, stdoutWriter, err := os.Pipe()
 	if err != nil {
 		// notestdept
@@ -902,7 +915,7 @@ func (st *SystemTest) runCommand(cmdCfg CommandConfig) (stdout string, stderr st
 	qsArgs = append(qsArgs, cmdCfg.Args...)
 
 	runDir := st.cloneRepoPath
-	if st.cfg.RunCommandFromAnotherClone && st.anotherCloneRepoPath != "" {
+	if st.cfg.RunCommandOnOtherClone && st.anotherCloneRepoPath != "" {
 		runDir = st.anotherCloneRepoPath
 	}
 	qsArgs = append(qsArgs, changeDirFlag, runDir)
@@ -953,17 +966,74 @@ func (st *SystemTest) processSyncState() error {
 	case SyncStateUnspecified:
 		return nil
 	case SyncStateUncommitedChangesInClone:
-		return st.setSyncState(false, true, true, false, "")
+		return st.setSyncState(
+			false,
+			true,
+			true,
+			0,
+			false,
+			"",
+		)
 	case SyncStateSynchronized:
-		return st.setSyncState(true, true, true, false, "")
+		return st.setSyncState(
+			true,
+			true,
+			true,
+			0,
+			false,
+			"",
+		)
 	case SyncStateCloneChanged:
-		return st.setSyncState(true, true, false, false, "")
+		return st.setSyncState(
+			true,
+			true,
+			false,
+			0,
+			false,
+			"",
+		)
 	case SyncStateForkChanged:
-		return st.setSyncState(false, false, false, true, headerOfFilesInAnotherClone, 4)//nolint:revive
+		//nolint:revive
+		return st.setSyncState(
+			false,
+			false,
+			false,
+			0,
+			true,
+			headerOfFilesInAnotherClone,
+			4,
+		)
 	case SyncStateBothChanged:
-		return st.setSyncState(true, true, false, true, headerOfFilesInAnotherClone, 4)//nolint:revive
+		//nolint:revive
+		return st.setSyncState(
+			true,
+			true,
+			false,
+			0,
+			true,
+			headerOfFilesInAnotherClone,
+			4,
+		)
 	case SyncStateBothChangedConflict:
-		return st.setSyncState(true, true, false, true, headerOfFilesInAnotherClone, 3)//nolint:revive
+		//nolint:revive
+		return st.setSyncState(
+			true,
+			true,
+			false,
+			0,
+			true,
+			headerOfFilesInAnotherClone,
+			3,
+		)
+	case SyncStateCloneIsAheadOfFork:
+		return st.setSyncState(
+			true,
+			true,
+			true,
+			2,
+			false,
+			"",
+		)
 	default:
 		return fmt.Errorf("not supported yet sync state: %s", st.cfg.SyncState)
 	}
@@ -981,6 +1051,7 @@ func (st *SystemTest) setSyncState(
 	needToCommit bool,
 	needChangeClone bool,
 	needSync bool,
+	numberOfCommitsInCloneAfterSync int,
 	needChangeFork bool,
 	headerOfFilesInFork string,
 	idFilesInFork ...int,
@@ -991,7 +1062,6 @@ func (st *SystemTest) setSyncState(
 
 	// Set the expected dev branch name that will be used later for PR
 	createdGithubIssueURL, _ := st.ctx.Value(contextPkg.CtxKeyCreatedGithubIssueURL).(string)
-
 	jiraTicket, _ := st.ctx.Value(contextPkg.CtxKeyJiraTicket).(string)
 	if createdGithubIssueURL == "" && jiraTicket == "" {
 		return errors.New("a Jira ticket or GitHub issue must be use to create dev branch")
@@ -1002,7 +1072,7 @@ func (st *SystemTest) setSyncState(
 		return err
 	}
 
-	stdout, stderr, err := st.runCommand(CommandConfig{
+	stdout, stderr, err := st.runCommand(&CommandConfig{
 		Command: "dev",
 		Stdin:   "y",
 	})
@@ -1012,9 +1082,11 @@ func (st *SystemTest) setSyncState(
 
 	logger.Verbose(stdout)
 
+	//nolint:revive
+	idOfFilesToCommitInClone := []int{1, 2, 3} // Default file IDs to commit in clone
 	if needChangeClone {
 		// Create 3 commits with different files
-		if err := commitFiles(st.cloneRepoPath, needToCommit, "", 1, 2, 3); err != nil {//nolint:revive
+		if err := commitFiles(st.cloneRepoPath, needToCommit, "", idOfFilesToCommitInClone...); err != nil { //nolint:revive
 			return err
 		}
 	}
@@ -1037,6 +1109,18 @@ func (st *SystemTest) setSyncState(
 			return nil
 		}) // Retry up to 3 times for pushing dev branch
 		if err != nil {
+			return err
+		}
+	}
+
+	// Create some commits in clone repo after sync
+	idOfFilesToCommitAfterSync := []int{} // Default file IDs to commit in clone after sync
+	for i := 1; i <= numberOfCommitsInCloneAfterSync; i++ {
+		// Start from 4.txt if 1.txt, 2.txt, 3.txt were already committed
+		idOfFilesToCommitAfterSync = append(idOfFilesToCommitAfterSync, i+len(idOfFilesToCommitInClone))
+	}
+	if len(idOfFilesToCommitAfterSync) > 0 {
+		if err := commitFiles(st.cloneRepoPath, needToCommit, "", idOfFilesToCommitAfterSync...); err != nil { //nolint:revive
 			return err
 		}
 	}
@@ -1108,13 +1192,13 @@ func commitFiles(wd string, needToCommit bool, headerOfFiles string, idFiles ...
 // This simulates a scenario where changes are made in a different clone and pushed to the remote.
 // Parameters:
 // - originRemoteURL: the remote URL of the original repository
-// - branchName: the name of the branch to push changes to
+// - defaultDevBranchName: the name of the branch to push changes to
 // - headOfFiles: optional header to be added to each file
 // - idFiles: list of file IDs to create (e.g., 1, 2, 3 for 1.txt, 2.txt, 3.txt)
 func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFiles string, idFiles ...int) error {
 	// 1. Clone the repository to temp path
 	// 2. Pull the latest changes from the remote
-	// 3. Commit to the branchName
+	// 3. Commit to the defaultDevBranchName
 	// 4. Push the branch to the remote
 
 	// Step 1: Get account and repo name from originRemoteURL
@@ -1271,6 +1355,211 @@ func (st *SystemTest) removeRepo(repoName, account, token string) error {
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to delete repository: %w\nOutput: %s", err, output)
+	}
+
+	return nil
+}
+
+// buildBranchState sets the branch states for dev-branch and pr-branch based on the provided configuration.
+func (st *SystemTest) buildBranchState(wd, token string) error {
+	if st.cfg.BranchState == nil {
+		return nil
+	}
+
+	mainBranchName, err := gitcmds.GetMainBranch(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch name: %w", err)
+	}
+
+	parentRepo, err := gitcmds.GetParentRepoName(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get parent repository name: %w", err)
+	}
+
+	_, forkAccount, err := gitcmds.GetRepoAndOrgName(wd)
+	if err != nil {
+		return fmt.Errorf("failed to get fork account name: %w", err)
+	}
+
+	if err := setBranchState(
+		wd,
+		mainBranchName,
+		defaultDevBranchName,
+		parentRepo,
+		forkAccount,
+		token,
+		st.cfg.BranchState.DevBranchExists,
+		st.cfg.BranchState.DevBranchHasRtBranch,
+		st.cfg.BranchState.DevBranchIsAhead,
+		false,
+		false,
+	); err != nil {
+		return err
+	}
+
+	if err := setBranchState(
+		wd,
+		mainBranchName,
+		defaultPrBranchName,
+		parentRepo,
+		forkAccount,
+		token,
+		st.cfg.BranchState.PRBranchExists,
+		st.cfg.BranchState.PRBranchHasRtBranch,
+		st.cfg.BranchState.PRBranchIsAhead,
+		st.cfg.BranchState.PRExists,
+		st.cfg.BranchState.PRMerged,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// setBranchState creates a new branch, commits files, pushes the branch to the remote,
+// and optionally creates a pull request or merges it based on the provided parameters.
+// Parameters:
+// - wd: working directory where the git repository is located
+// - mainBranchName: name of the main branch to check out before creating a new branch
+// - branchName: name of the new branch to create
+// - branchExists: if true, then we need to create a new branch
+// - hasRtBranch: if true, then the branch has a remote tracking branch
+// - isAhead: if true, the branch is ahead of the remote tracking branch
+// - prExists: if true, a pull request already exists for the branch
+// - prMerged: if true, the pull request has been merged
+func setBranchState(
+	wd,
+	mainBranchName,
+	branchName,
+	parentRepo,
+	forkAccount,
+	token string,
+	branchExists,
+	hasRtBranch,
+	isAhead,
+	prExists,
+	prMerged bool,
+) error {
+	// An empty branch setup is ignored
+	if !branchExists && !hasRtBranch && !isAhead && !prExists && !prMerged {
+		return nil // No branch state to set
+	}
+
+	// Check out on the main branch
+	if err := gitcmds.CheckoutOnBranch(wd, mainBranchName); err != nil {
+		return err
+	}
+
+	// Create a new branch
+	_, stderr, err := new(goUtilsExec.PipedExec).
+		Command(git, "checkout", "-b", branchName).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return fmt.Errorf("failed to create new branch %s: %w", branchName, err)
+	}
+	// Commit files to the new branch
+	if err := commitFiles(wd, true, "", 1); err != nil {
+		return err
+	}
+	// Push the branch to the remote
+	err = helper.Retry(func() error {
+		_, stderr, err = new(goUtilsExec.PipedExec).
+			Command(git, "push", "-u", origin, branchName).
+			WorkingDir(wd).
+			RunToStrings()
+
+		return err
+	})
+	if err != nil {
+		logger.Verbose(stderr)
+
+		return fmt.Errorf("failed to push branch %s: %w", branchName, err)
+	}
+	// if the branch is ahead, commit more files
+	if isAhead {
+		// Commit more files to the branch
+		if err := commitFiles(wd, true, "", 2); err != nil {
+			return err
+		}
+	}
+
+	if prExists || prMerged {
+		//nolint:gosec
+		cmd := exec.Command(
+			"gh",
+			"pr",
+			"create",
+			fmt.Sprintf(`--head=%s`, forkAccount+":"+defaultPrBranchName),
+			fmt.Sprintf(`--repo=%s`, parentRepo),
+			`--body="This is a test PR"`,
+			`--title="Test PR"`,
+		)
+		cmd.Env = append(os.Environ(), fmt.Sprintf("GITHUB_TOKEN=%s", token))
+		cmd.Dir = wd
+
+		// create a pull request
+		err = helper.Retry(func() error {
+			return cmd.Run()
+		})
+		if err != nil {
+			logger.Verbose(stderr)
+
+			return fmt.Errorf("failed to create pull request: %w", err)
+		}
+
+		if prMerged {
+			// merge the pull request
+			// here is a code to merge the pull request
+			err = helper.Retry(func() error {
+				_, stderr, err = new(goUtilsExec.PipedExec).
+					Command("gh", "pr", "merge", "--merge", forkAccount+":"+defaultPrBranchName).
+					WorkingDir(wd).
+					RunToStrings()
+
+				return err
+			})
+			if err != nil {
+				logger.Verbose(stderr)
+
+				return fmt.Errorf("failed to merge pull request: %w", err)
+			}
+		}
+	}
+
+	if !branchExists {
+		// checking out on the main branch before deleting the branch
+		if err := gitcmds.CheckoutOnBranch(wd, mainBranchName); err != nil {
+			return err
+		}
+		// Delete the local branch
+		_, stderr, err = new(goUtilsExec.PipedExec).
+			Command("git", "branch", "-D", branchName).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			return fmt.Errorf("failed to delete local branch %s: %w", branchName, err)
+		}
+	}
+
+	if !hasRtBranch {
+		err := helper.Retry(func() error {
+			_, stderr, err = new(goUtilsExec.PipedExec).
+				Command(git, "push", origin, "--delete", branchName).
+				WorkingDir(wd).
+				RunToStrings()
+
+			return err
+		})
+		if err != nil {
+			logger.Verbose(stderr)
+
+			return fmt.Errorf("failed to delete remote branch %s: %w", branchName, err)
+		}
 	}
 
 	return nil
