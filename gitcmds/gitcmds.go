@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	goGitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/spf13/cobra"
@@ -123,10 +124,205 @@ func Status(wd string) error {
 	}
 	logger.Verbose(stdout)
 
-	return new(exec.PipedExec).
-		Command("git", "status", "-s", "-b", "-uall").
+	// Get git status output with colors for display
+	statusStdout, statusStderr, err := new(exec.PipedExec).
+		Command("git", "-c", "color.status=always", "status", "-s", "-b", "-uall").
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
+	if err != nil {
+		if len(statusStderr) > 0 {
+			logger.Verbose(statusStderr)
+		}
+		return fmt.Errorf("git status failed: %w", err)
+	}
+
+	// Print the colorized git status output
+	fmt.Print(statusStdout)
+
+	// Get clean output for parsing (without color codes)
+	cleanStatusStdout, _, err := new(exec.PipedExec).
+		Command("git", "status", "-s", "-b", "-uall", "--porcelain").
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose("Failed to get clean status for parsing: %v", err)
+		// Fallback to using the colored output for parsing
+		cleanStatusStdout = statusStdout
+	}
+
+	// Calculate and display file size information using clean output
+	if err := displayFileSizeInfo(wd, cleanStatusStdout); err != nil {
+		logger.Verbose("Failed to calculate file sizes: %v", err)
+	}
+
+	return nil
+}
+
+// displayFileSizeInfo calculates and displays file size information for untracked and modified files
+func displayFileSizeInfo(wd string, gitStatusOutput string) error {
+	// FileInfo holds information about a file
+	type FileInfo struct {
+		Name string
+		Size int64
+	}
+
+	lines := strings.Split(strings.TrimSpace(gitStatusOutput), "\n")
+	if len(lines) == 0 {
+		return nil
+	}
+
+	var files []FileInfo
+	var totalSize int64
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Skip a branch information line (starts with ##)
+		if strings.HasPrefix(line, "##") {
+			continue
+		}
+
+		// Parse git status line format: "XY filename"
+		// X and Y are status codes, filename starts at position 3
+		// Git status format: [X][Y][space][filename]
+		if len(line) < 4 {
+			continue // Line too short to contain status + space + filename
+		}
+
+		statusCodes := line[:2]
+		// The filename starts after the status codes and a space (position 3)
+		filename := strings.TrimSpace(line[2:])
+		// Skip empty filenames
+		if filename == "" {
+			continue
+		}
+
+		// Handle quoted filenames (Git quotes filenames with spaces or special characters)
+		filename = unquoteGitFilename(filename)
+
+		// Handle renamed files (format: "old -> new")
+		if strings.Contains(filename, " -> ") {
+			parts := strings.Split(filename, " -> ")
+			if len(parts) == 2 {
+				filename = strings.TrimSpace(parts[1]) // Use the new filename
+				// Handle quoted new filename
+				filename = unquoteGitFilename(filename)
+			}
+		}
+
+		// Get file size
+		filePath := filepath.Join(wd, filename)
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			// File might not exist (deleted) or be inaccessible, skip it
+			logger.Verbose(fmt.Sprintf("Could not stat file %s: %v", filename, err))
+			continue
+		}
+
+		// Skip directories
+		if fileInfo.IsDir() {
+			continue
+		}
+
+		size := fileInfo.Size()
+		files = append(files, FileInfo{Name: filename, Size: size})
+		totalSize += size
+
+		logger.Verbose(fmt.Sprintf("File: %s, Status: %s, Size: %d bytes", filename, statusCodes, size))
+	}
+
+	// Display summary if there are files
+	if len(files) > 0 {
+		fmt.Println()
+
+		// Create color functions
+		summaryColor := color.New(color.FgCyan, color.Bold)
+		labelColor := color.New(color.FgBlue)
+		fileColor := color.New(color.FgGreen)
+
+		// Display colorized summary header
+		summaryColor.Println("Summary:")
+
+		// Format total size with underscores and color
+		totalSizeStr := formatSizeWithUnderscores(totalSize)
+		totalSizeColored := getSizeColorByValue(totalSize).Sprint(totalSizeStr)
+		fmt.Printf("  %s %s bytes\n",
+			labelColor.Sprint("Total size:    "),
+			totalSizeColored)
+
+		// Find largest file
+		var largestFile FileInfo
+		for _, file := range files {
+			if file.Size > largestFile.Size {
+				largestFile = file
+			}
+		}
+
+		if largestFile.Name != "" {
+			largestSizeStr := formatSizeWithUnderscores(largestFile.Size)
+			largestSizeColored := getSizeColorByValue(largestFile.Size).Sprint(largestSizeStr)
+			fmt.Printf("  %s %s (%s bytes)\n",
+				labelColor.Sprint("Largest file:  "),
+				fileColor.Sprint(largestFile.Name),
+				largestSizeColored)
+		}
+	}
+
+	return nil
+}
+
+func unquoteGitFilename(filename string) string {
+	// Unquote Git filenames that are quoted with double quotes
+	if strings.HasPrefix(filename, `"`) && strings.HasSuffix(filename, `"`) {
+		filename = filename[1 : len(filename)-1]
+		// Unescape common escape sequences
+		filename = strings.ReplaceAll(filename, `\"`, `"`)
+		filename = strings.ReplaceAll(filename, `\\`, `\`)
+	}
+
+	return filename
+}
+
+// formatSizeWithUnderscores formats a number with underscores as thousand separators
+func formatSizeWithUnderscores(size int64) string {
+	str := strconv.FormatInt(size, 10)
+	if len(str) <= 3 {
+		return str
+	}
+
+	var result strings.Builder
+	for i, digit := range str {
+		if i > 0 && (len(str)-i)%3 == 0 {
+			result.WriteRune('_')
+		}
+		result.WriteRune(digit)
+	}
+
+	return result.String()
+}
+
+// getSizeColorByValue returns appropriate color based on file size
+func getSizeColorByValue(size int64) *color.Color {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	switch {
+	case size >= GB: // 1GB+ - Red (very large)
+		return color.New(color.FgRed, color.Bold)
+	case size >= 100*MB: // 100MB+ - Magenta (large)
+		return color.New(color.FgMagenta, color.Bold)
+	case size >= 10*MB: // 10MB+ - Yellow (medium-large)
+		return color.New(color.FgYellow, color.Bold)
+	case size >= MB: // 1MB+ - Yellow (medium)
+		return color.New(color.FgYellow)
+	case size >= 100*KB: // 100KB+ - Cyan (small-medium)
+		return color.New(color.FgCyan)
+	default: // <100KB - Green (small)
+		return color.New(color.FgGreen)
+	}
 }
 
 /*

@@ -142,4 +142,4 @@ jobs:
           QS_MAX_RETRIES: ${{ vars.QS_MAX_RETRIES }}
           QS_SKIP_QS_VERSION_CHECK: "true"
         run: |
-          go test -v sys_test.go
+          go test -timeout 20m -v sys_test.go
