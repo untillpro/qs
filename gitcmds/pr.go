@@ -362,7 +362,7 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
-		fmt.Println("Failed to merge origin/main into dev branch.")
+		fmt.Println(fmt.Sprintf("Failed to merge origin/%s into dev branch.", mainBranchName))
 
 		return "", err
 	}
