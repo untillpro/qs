@@ -356,21 +356,27 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	}
 
 	// Step 3: Merge from origin/main + upstream/main
-	_, _, err = new(exec.PipedExec).
+	_, stderr, err = new(exec.PipedExec).
 		Command("git", "merge", "origin/"+mainBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+		fmt.Println(fmt.Sprintf("Failed to merge origin/%s into dev branch.", mainBranchName))
+
 		return "", err
 	}
 
 	// Step 3.1
 	if upstreamExists {
-		_, _, err = new(exec.PipedExec).
+		_, stderr, err = new(exec.PipedExec).
 			Command("git", "merge", "upstream/"+mainBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
+			logger.Verbose(stderr)
+			fmt.Println(fmt.Sprintf("Failed to merge upstream/%s into dev branch.", mainBranchName))
+
 			return "", err
 		}
 	}
@@ -385,11 +391,14 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	}
 
 	// Step 5: Squash merge dev into PR branch
-	_, _, err = new(exec.PipedExec).
+	_, stderr, err = new(exec.PipedExec).
 		Command("git", "merge", "--squash", devBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+		fmt.Println("Failed to squash merge dev branch into pr branch")
+
 		return "", err
 	}
 

@@ -8,19 +8,19 @@ on:
     inputs:
       platform:
         description: 'Platform to run tests on (leave empty for all platforms)'
-        required: false
+        required: true
         type: choice
         options:
-          - ''
+          - all
           - windows-latest
           - ubuntu-latest
           - macos-latest
-        default: ''
+        default: all
 jobs:
   system-tests-on-all-platforms:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.platform == ''
-    name: Run System Tests
     runs-on: ${{ matrix.os }}
+    name: Run System Tests
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all'
     strategy:
       fail-fast: false
       matrix:
@@ -34,9 +34,9 @@ jobs:
         uses: ./.github/workflows/sys_tests_steps/run_sys_tests.yml
 
   system-tests-on-specific-platform:
-    if: github.event_name == 'workflow_dispatch' || github.event.inputs.platform != ''
-    name: Run System Tests
     runs-on: ${{ github.event.inputs.platform }}
+    if: github.event_name == 'workflow_dispatch' || github.event.inputs.platform != all
+    name: Run System Tests
     steps:
       - name: Check prerequisites
         uses: ./.github/workflows/sys_tests_steps/check_prerequisites.yml
