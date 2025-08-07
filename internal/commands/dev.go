@@ -327,29 +327,35 @@ func deleteBranches(wd, parentRepo string) error {
 	}
 
 	// Step4: show branches to be deleted
-	fmt.Println("Branches to be deleted:")
-	for _, branch := range branchesToBeDeleted {
-		fmt.Println(branch)
-	}
+	if len(branchesToBeDeleted) > 0 {
+		fmt.Println("Branches to be deleted:")
+		for _, branch := range branchesToBeDeleted {
+			fmt.Println(branch)
+		}
 
-	// Step 5: ask for confirmation
-	var response string
-	fmt.Println()
-	fmt.Print("Proceed with deletion? [y/n]?")
-	_, _ = fmt.Scanln(&response)
-	if response != pushYes {
-		fmt.Print(msgOkSeeYou)
+		// Step 5: ask for confirmation
+		var response string
+		fmt.Println()
+		fmt.Print("Proceed with deletion? [y/n]?")
+		_, _ = fmt.Scanln(&response)
+		if response != pushYes {
+			fmt.Print(msgOkSeeYou)
+			return nil
+		}
+
+		// Step 6: deletion branches
+		for _, branch := range branchesToBeDeleted {
+			if err := gitcmds.RemoveBranch(wd, branch); err != nil {
+				return fmt.Errorf("error deleting branch '%s': %w", branch, err)
+			}
+
+			fmt.Printf("Branch '%s' deleted successfully.\n", branch)
+		}
+
 		return nil
 	}
 
-	// Step 6: deletion branches
-	for _, branch := range branchesToBeDeleted {
-		if err := gitcmds.RemoveBranch(wd, branch); err != nil {
-			return fmt.Errorf("error deleting branch '%s': %w", branch, err)
-		}
-
-		fmt.Printf("Branch '%s' deleted successfully.\n", branch)
-	}
+	fmt.Println("No branches to delete.")
 
 	return nil
 }
