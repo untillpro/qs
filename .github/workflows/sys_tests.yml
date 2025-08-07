@@ -5,6 +5,17 @@ on:
     types: [opened, synchronize, reopened]
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to run tests on'
+        required: true
+        type: choice
+        options:
+          - all
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+        default: all
 jobs:
   system-tests:
     name: Run System Tests
@@ -12,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.platform != 'all' && fromJSON(format('["{0}"]', github.event.inputs.platform)) || fromJSON('["windows-latest", "ubuntu-latest", "macos-latest"]') }}
       max-parallel: 1
     steps:
       - name: Checkout code
