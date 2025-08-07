@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: 'Platform to run tests on (leave empty for all platforms)'
+        description: 'Platform to run tests on'
         required: true
         type: choice
         options:
@@ -36,7 +36,7 @@ jobs:
   system-tests-on-specific-platform:
     name: Run System Tests (${{ github.event.inputs.platform }})
     runs-on: ${{ github.event.inputs.platform }}
-    if: github.event_name == 'workflow_dispatch' || github.event.inputs.platform != all
+    if: github.event_name == 'workflow_dispatch' || github.event.inputs.platform != 'all'
     steps:
       - name: Check prerequisites
         uses: ./.github/workflows/sys_tests_steps/check_prerequisites.yml
