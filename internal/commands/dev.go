@@ -290,6 +290,7 @@ func deleteBranches(wd, parentRepo string) error {
 		return err
 	}
 
+	branchesToBeDeleted := make([]string, 0, len(branchesToAnalyze))
 	// Iterate through branches
 	for _, branch := range branchesToAnalyze {
 		// Step 3.n: if pr is merged, then all related branches must be deleted
@@ -322,9 +323,32 @@ func deleteBranches(wd, parentRepo string) error {
 			}
 		}
 
+		branchesToBeDeleted = append(branchesToBeDeleted, branch)
+	}
+
+	// Step4: show branches to be deleted
+	fmt.Println("Branches to be deleted:")
+	for _, branch := range branchesToBeDeleted {
+		fmt.Println(branch)
+	}
+
+	// Step 5: ask for confirmation
+	var response string
+	fmt.Println()
+	fmt.Print("Proceed with deletion? [y/n]?")
+	_, _ = fmt.Scanln(&response)
+	if response != pushYes {
+		fmt.Print(msgOkSeeYou)
+		return nil
+	}
+
+	// Step 6: deletion branches
+	for _, branch := range branchesToBeDeleted {
 		if err := gitcmds.RemoveBranch(wd, branch); err != nil {
-			return err
+			return fmt.Errorf("error deleting branch '%s': %w", branch, err)
 		}
+
+		fmt.Printf("Branch '%s' deleted successfully.\n", branch)
 	}
 
 	return nil
