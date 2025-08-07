@@ -1,0 +1,20 @@
+name: "Run System Tests"
+runs:
+  using: "composite"
+  steps:
+    - name: Run system tests
+      env:
+        UPSTREAM_GH_TOKEN: ${{ secrets.UPSTREAM_GH_TOKEN }}
+        FORK_GH_TOKEN: ${{ secrets.FORK_GH_TOKEN }}
+        UPSTREAM_GH_ACCOUNT: ${{ vars.UPSTREAM_GH_ACCOUNT }}
+        FORK_GH_ACCOUNT: ${{ vars.FORK_GH_ACCOUNT }}
+        JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        JIRA_TICKET_URL: ${{ secrets.JIRA_TICKET_URL }}
+        JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+        GH_TIMEOUT_MS: ${{ vars.GH_TIMEOUT_MS }}
+        QS_RETRY_DELAY_MS: ${{ vars.QS_RETRY_DELAY_MS }}
+        QS_MAX_RETRY_DELAY_MS: ${{ vars.QS_MAX_RETRY_DELAY_MS }}
+        QS_MAX_RETRIES: ${{ vars.QS_MAX_RETRIES }}
+        QS_SKIP_QS_VERSION_CHECK: "true"
+      run: |
+        go test -timeout 20m -v sys_test.go
