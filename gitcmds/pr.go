@@ -40,9 +40,6 @@ func Pr(wd string, needDraft bool) error {
 	if err != nil {
 		return err
 	}
-	if len(parentRepoName) == 0 {
-		return errors.New("you are in trunk. PR is only allowed from forked branch")
-	}
 
 	// If we are on dev branch than we need to create pr branch
 	if branchType == notesPkg.BranchTypeDev {
@@ -57,7 +54,7 @@ func Pr(wd string, needDraft bool) error {
 		}
 
 		var response string
-		if UpstreamNotExist(wd) {
+		if len(parentRepoName) > 0 && UpstreamNotExist(wd) {
 			fmt.Print("Upstream not found.\nRepository " + parentRepoName + " will be added as upstream. Agree[y/n]?")
 			_, _ = fmt.Scanln(&response)
 			if response != pushYes {

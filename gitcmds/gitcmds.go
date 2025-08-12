@@ -1906,16 +1906,21 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 	}
 	strBody := fmt.Sprintln(b)
 
-	_, forkAccount, err := GetRepoAndOrgName(wd)
+	repoName, forkAccount, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", "", err
+	}
+
+	repo := parentRepoName
+	if len(repo) == 0 {
+		repo = forkAccount + slash + repoName
 	}
 
 	args := []string{
 		"pr",
 		"create",
 		fmt.Sprintf(`--head=%s`, forkAccount+":"+prBranchName),
-		fmt.Sprintf(`--repo=%s`, parentRepoName),
+		fmt.Sprintf(`--repo=%s`, repo),
 		fmt.Sprintf(`--body=%s`, strings.TrimSpace(strBody)),
 		fmt.Sprintf(`--title=%s`, strings.TrimSpace(prTitle)),
 	}

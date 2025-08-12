@@ -1072,8 +1072,18 @@ func (st *SystemTest) setSyncState(
 		return err
 	}
 
+	parentRepo, err := gitcmds.GetParentRepoName(st.cloneRepoPath)
+	if err != nil {
+		return err
+	}
+
+	args := []string{}
+	if len(parentRepo) == 0 {
+		args = append(args, "--no-fork")
+	}
 	stdout, stderr, err := st.runCommand(&CommandConfig{
 		Command: "dev",
+		Args:    args,
 		Stdin:   "y",
 	})
 	if err != nil {
