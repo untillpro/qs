@@ -380,9 +380,19 @@ func ExpectationPRCreated(ctx context.Context) error {
 		return fmt.Errorf("dev branch %s still exists on origin after PR creation", devBranchName)
 	}
 
-	// Check remotely in upstream
+	parentRepo, err := gitcmds.GetParentRepoName(cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get parent repo name: %w", err)
+	}
+
+	remoteName := upstream
+	if len(parentRepo) == 0 {
+		remoteName = origin
+	}
+
+	// Check remotely in remoteName
 	stdout, stderr, err = new(goUtilsExec.PipedExec).
-		Command(git, "-C", cloneRepoPath, "ls-remote", "--heads", "upstream", devBranchName).
+		Command(git, "-C", cloneRepoPath, "ls-remote", "--heads", remoteName, devBranchName).
 		RunToStrings()
 
 	if err != nil {
@@ -390,20 +400,20 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 
 	if stdout != "" {
-		return fmt.Errorf("dev branch %s still exists on upstream after PR creation", devBranchName)
+		return fmt.Errorf("dev branch %s still exists on %s after PR creation", devBranchName, remoteName)
 	}
 
-	// 5. Check if a real pull request was created in upstream repo
+	// 5. Check if a real pull request was created in remoteName repo
 	// Extract repo owner and name from upstream remote
-	upstreamRemote, err := repo.Remote("upstream")
+	remote, err := repo.Remote(remoteName)
 	if err != nil {
 		return fmt.Errorf("upstream remote not found: %w", err)
 	}
 
-	upstreamRemoteURL := upstreamRemote.Config().URLs[0]
+	remoteURL := remote.Config().URLs[0]
 	var owner, repoName string
 
-	owner, repoName, _, err = gitcmds.ParseGitRemoteURL(upstreamRemoteURL)
+	owner, repoName, _, err = gitcmds.ParseGitRemoteURL(remoteURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse upstream URL: %w", err)
 	}

@@ -316,6 +316,28 @@ func TestPR_ForkChanged(t *testing.T) {
 	require.Error(err)
 }
 
+func TestPR_NoUpstream(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "pr",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
+		SyncState:         systrun.SyncStateCloneChanged,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
 // TestDownload tests synchronizing local repository with remote changes
 func TestDownload(t *testing.T) {
 	require := require.New(t)
