@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -126,7 +127,7 @@ func TestDev_NoUpstream_CustomName(t *testing.T) {
 func TestDev_ExistingBranch(t *testing.T) {
 	require := require.New(t)
 
-	branchName := "dev"
+	branchName := "branch-name"
 	testConfig := &systrun.TestConfig{
 		TestID:   strings.ToLower(t.Name()),
 		GHConfig: getGithubConfig(t),
@@ -135,10 +136,12 @@ func TestDev_ExistingBranch(t *testing.T) {
 			Args:    []string{branchName},
 			Stdin:   "y",
 		},
-		UpstreamState:  systrun.RemoteStateOK,
-		ForkState:      systrun.RemoteStateOK,
-		DevBranchState: systrun.DevBranchStateExistsButNotCheckedOut,
-		ExpectedStderr: "dev branch dev-dev already exists",
+		UpstreamState: systrun.RemoteStateOK,
+		ForkState:     systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists: true,
+		},
+		ExpectedStderr: fmt.Sprintf("dev branch %s-dev already exists", branchName),
 	}
 
 	sysTest := systrun.New(t, testConfig)

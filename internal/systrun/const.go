@@ -31,7 +31,6 @@ type RemoteState int
 // e.g. if SyncStateForkChanged then additionally one push from another clone
 type SyncState int
 type ClipboardContentType int
-type DevBranchState int
 
 const (
 	// RemoteStateOK means that remote of the clone repo is configured correctly
@@ -74,15 +73,6 @@ const (
 	ClipboardContentJiraTicket
 	// Custom content to be set in the clipboard before running the test command
 	ClipboardContentCustom
-)
-
-const (
-	// Dev branch does not exist
-	DevBranchStateNotExists DevBranchState = iota
-	// Dev branch exists and it is the current branch
-	DevBranchStateExistsAndCheckedOut
-	// Dev branch exists but it is not the current branch
-	DevBranchStateExistsButNotCheckedOut
 )
 
 const (
