@@ -119,6 +119,9 @@ func Status(wd string) error {
 		}
 	}
 
+	// Print the colorized git status output
+	fmt.Print(stdout)
+
 	if err != nil {
 		return fmt.Errorf("git remote -v failed: %w", err)
 	}
@@ -235,20 +238,11 @@ func displayFileSizeInfo(wd string, gitStatusOutput string) error {
 	if len(files) > 0 {
 		fmt.Println()
 
-		// Create color functions
-		summaryColor := color.New(color.FgCyan, color.Bold)
-		labelColor := color.New(color.FgBlue)
-		fileColor := color.New(color.FgGreen)
-
-		// Display colorized summary header
-		summaryColor.Println("Summary:")
+		fmt.Println("Summary:")
 
 		// Format total size with underscores and color
 		totalSizeStr := formatSizeWithUnderscores(totalSize)
-		totalSizeColored := getSizeColorByValue(totalSize).Sprint(totalSizeStr)
-		fmt.Printf("  %s %s bytes\n",
-			labelColor.Sprint("Total size:    "),
-			totalSizeColored)
+		fmt.Printf("  %s %s bytes\n", "Total size:    ", totalSizeStr)
 
 		// Find largest file
 		var largestFile FileInfo
@@ -260,11 +254,7 @@ func displayFileSizeInfo(wd string, gitStatusOutput string) error {
 
 		if largestFile.Name != "" {
 			largestSizeStr := formatSizeWithUnderscores(largestFile.Size)
-			largestSizeColored := getSizeColorByValue(largestFile.Size).Sprint(largestSizeStr)
-			fmt.Printf("  %s %s (%s bytes)\n",
-				labelColor.Sprint("Largest file:  "),
-				fileColor.Sprint(largestFile.Name),
-				largestSizeColored)
+			fmt.Printf("  %s %s (%s bytes)\n", "Largest file:  ", largestFile.Name, largestSizeStr)
 		}
 	}
 

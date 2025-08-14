@@ -38,7 +38,6 @@ type TestConfig struct {
 	UpstreamState          RemoteState
 	ForkState              RemoteState
 	SyncState              SyncState
-	DevBranchState         DevBranchState       // if true then create dev branch
 	ClipboardContent       ClipboardContentType // Content to be set in clipboard before running the test
 	RunCommandOnOtherClone bool                 // RunCommandOnOtherClone specifies if a command should be executed from an additional repository clone.
 	NeedCollaboration      bool

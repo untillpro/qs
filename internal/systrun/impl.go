@@ -129,11 +129,6 @@ func (st *SystemTest) createTestEnvironment() error {
 		return err
 	}
 
-	// Setup dev branch if needed
-	if err := st.setupDevBranch(); err != nil {
-		return err
-	}
-
 	if st.cfg.NeedCollaboration {
 		if err := st.configureCollaboration(); err != nil {
 			return err
@@ -771,70 +766,6 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 		}
 	default:
 		return errors.New("incorrect remote state configuration")
-	}
-
-	return nil
-}
-
-// setupDevBranch creates and configures the dev branch
-func (st *SystemTest) setupDevBranch() error {
-	if st.cfg.DevBranchState == DevBranchStateNotExists {
-		return nil // No dev branch needed
-	}
-
-	// Open the repository
-	repo, err := gitPkg.PlainOpen(st.cloneRepoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
-	}
-
-	// Get worktree
-	wt, err := repo.Worktree()
-	if err != nil {
-		return fmt.Errorf("failed to get worktree: %w", err)
-	}
-
-	// Create dev branch from HEAD
-	headRef, err := repo.Head()
-	if err != nil {
-		return fmt.Errorf("failed to get HEAD: %w", err)
-	}
-
-	// Create local dev branch
-	devBranchName := "dev-dev"
-	branchRef := plumbing.NewBranchReferenceName(devBranchName)
-	ref := plumbing.NewHashReference(branchRef, headRef.Hash())
-	if err := repo.Storer.SetReference(ref); err != nil {
-		return fmt.Errorf("failed to create dev branch: %w", err)
-	}
-
-	// Checkout the dev branch if it should be current
-	if st.cfg.DevBranchState == DevBranchStateExistsAndCheckedOut {
-		err = wt.Checkout(&gitPkg.CheckoutOptions{
-			Branch: branchRef,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to checkout dev branch: %w", err)
-		}
-	}
-
-	// Push dev branch to remote (if fork exists)
-	if st.cfg.ForkState != RemoteStateNull {
-		err = helper.Retry(func() error {
-			return repo.Push(&gitPkg.PushOptions{
-				RemoteName: origin,
-				Auth: &http.BasicAuth{
-					Username: "x-access-token",
-					Password: st.cfg.GHConfig.ForkToken,
-				},
-				RefSpecs: []config.RefSpec{
-					config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", devBranchName, devBranchName)),
-				},
-			})
-		})
-		if err != nil && !errors.Is(err, gitPkg.NoErrAlreadyUpToDate) {
-			return fmt.Errorf("failed to push dev branch to fork: %w", err)
-		}
 	}
 
 	return nil
