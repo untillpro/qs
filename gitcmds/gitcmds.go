@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fatih/color"
 	goGitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/spf13/cobra"
@@ -153,29 +152,61 @@ func Status(wd string) error {
 		cleanStatusStdout = statusStdout
 	}
 
+	files, err := getListOfChangedFiles(wd, cleanStatusStdout)
+	if err != nil {
+		return fmt.Errorf("failed to get list of changed and new files: %w", err)
+	}
+
 	// Calculate and display file size information using clean output
-	if err := displayFileSizeInfo(wd, cleanStatusStdout); err != nil {
+	if err := displaySummary(wd, files); err != nil {
 		logger.Verbose("Failed to calculate file sizes: %v", err)
 	}
 
 	return nil
 }
 
-// displayFileSizeInfo calculates and displays file size information for untracked and modified files
-func displayFileSizeInfo(wd string, gitStatusOutput string) error {
-	// FileInfo holds information about a file
-	type FileInfo struct {
-		Name string
-		Size int64
-	}
+// showDiffsOfChangedFiles shows diffs for modified files in the git repository
+// nolint: unused
+func showDiffsOfChangedFiles(wd string, files []FileInfo) error {
+	if len(files) == 0 {
+		fmt.Println("No changed files to show diffs for.")
 
-	lines := strings.Split(strings.TrimSpace(gitStatusOutput), "\n")
-	if len(lines) == 0 {
 		return nil
 	}
 
-	var files []FileInfo
-	var totalSize int64
+	fmt.Println()
+	fmt.Println("Diffs for changed files:")
+
+	for _, file := range files {
+		if file.status != fileStatusModified {
+			continue // Only show diffs for modified files
+		}
+
+		stdout, stderr, err := new(exec.PipedExec).
+			Command(git, "diff", "--color=always", file.name).
+			WorkingDir(wd).
+			RunToStrings()
+		_ = stdout
+		_ = stderr
+
+		if err != nil {
+			return fmt.Errorf("failed to show diff for %s: %w", file.name, err)
+		}
+
+		fmt.Println(stdout)
+	}
+
+	return nil
+}
+
+// getListOfChangedFiles parses the git status output and returns lists of changed files
+func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
+	lines := strings.Split(strings.TrimSpace(statusOutput), "\n")
+	if len(lines) == 0 {
+		return []FileInfo{}, nil
+	}
+
+	files := make([]FileInfo, 0, len(lines))
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -186,75 +217,145 @@ func displayFileSizeInfo(wd string, gitStatusOutput string) error {
 		}
 
 		// Parse git status line format: "XY filename"
-		// X and Y are status codes, filename starts at position 3
-		// Git status format: [X][Y][space][filename]
+		// nolint:revive
 		if len(line) < 4 {
 			continue // Line too short to contain status + space + filename
 		}
 
-		statusCodes := line[:2]
-		// The filename starts after the status codes and a space (position 3)
-		filename := strings.TrimSpace(line[2:])
-		// Skip empty filenames
-		if filename == "" {
-			continue
+		statusCode := strings.TrimSpace(line[:2])
+		name := strings.TrimSpace(line[2:])
+
+		oldName := name
+		if name == "" {
+			continue // Skip empty filenames
 		}
 
-		// Handle quoted filenames (Git quotes filenames with spaces or special characters)
-		filename = unquoteGitFilename(filename)
-
-		// Handle renamed files (format: "old -> new")
-		if strings.Contains(filename, " -> ") {
-			parts := strings.Split(filename, " -> ")
+		if strings.Contains(name, " -> ") {
+			// Handle renamed files (format: "old -> new")
+			parts := strings.Split(name, " -> ")
 			if len(parts) == 2 {
-				filename = strings.TrimSpace(parts[1]) // Use the new filename
-				// Handle quoted new filename
-				filename = unquoteGitFilename(filename)
+				name = strings.TrimSpace(unquoteGitFilename(parts[1]))    // Use the new filename
+				oldName = strings.TrimSpace(unquoteGitFilename(parts[0])) // Use the old filename
+			} else {
+				// TODO: Handle file name which -> as part of the file name
+				continue // Skip malformed renamed files
 			}
 		}
 
-		// Get file size
-		filePath := filepath.Join(wd, filename)
-		fileInfo, err := os.Stat(filePath)
-		if err != nil {
-			// File might not exist (deleted) or be inaccessible, skip it
-			logger.Verbose(fmt.Sprintf("Could not stat file %s: %v", filename, err))
-			continue
+		var status fileStatus
+		var err1 error
+		var err2 error
+
+		switch statusCode {
+		case `A`, `AM`:
+			status = fileStatusAdded
+		case `M`, `MM`, `RM`:
+			status = fileStatusModified
+		case `D`:
+			status = fileStatusDeleted
+		case `R`:
+			status = fileStatusRenamed
+		case `??`:
+			status = fileStatusUntracked
+		default:
+			return nil, fmt.Errorf("unknown file status %s for file %s", statusCode, name)
 		}
 
-		// Skip directories
-		if fileInfo.IsDir() {
-			continue
+		oldSize := int64(0)
+		newFileSize := int64(0)
+		switch status {
+		case fileStatusAdded:
+			newFileSize, err1 = getFileSize(wd, name)
+		case fileStatusModified:
+			newFileSize, err1 = getFileSize(wd, name)
+			oldSize, err2 = getFileSizeFromHEAD(wd, oldName)
+		case fileStatusDeleted:
+			oldSize, err2 = getFileSizeFromHEAD(wd, oldName)
+		case fileStatusRenamed:
+			newFileSize, err1 = getFileSize(wd, name)
+			oldSize = newFileSize
+		case fileStatusUntracked:
+			newFileSize, err2 = getFileSize(wd, name)
+		default:
+			return nil, fmt.Errorf("unknown file status %s for file %s", statusCode, name)
 		}
 
-		size := fileInfo.Size()
-		files = append(files, FileInfo{Name: filename, Size: size})
-		totalSize += size
+		if err2 != nil {
+			return nil, err2
+		}
+		if err1 != nil {
+			return nil, err1
+		}
 
-		logger.Verbose(fmt.Sprintf("File: %s, Status: %s, Size: %d bytes", filename, statusCodes, size))
+		sizeIncrease := newFileSize - oldSize
+		if sizeIncrease < 0 {
+			sizeIncrease = 0 // Ensure size increase is not negative
+		}
+
+		files = append(files, FileInfo{
+			status:       status,
+			name:         name,
+			oldName:      oldName,
+			sizeIncrease: sizeIncrease,
+		})
 	}
 
-	// Display summary if there are files
-	if len(files) > 0 {
-		fmt.Println()
+	return files, nil
+}
 
+func getFileSizeFromHEAD(wd, fileName string) (int64, error) {
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "cat-file", "-s", fmt.Sprintf("HEAD:%s", fileName)).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Error(stderr)
+
+		return 0, fmt.Errorf("failed to get file size from HEAD for %s: %w", fileName, err)
+	}
+
+	return strconv.ParseInt(strings.TrimSpace(stdout), decimalBase, bitSizeOfInt64)
+}
+
+func getFileSize(wd, fileName string) (int64, error) {
+	fileInfo, err := os.Stat(filepath.Join(wd, fileName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, fmt.Errorf("file %s does not exist: %w", fileName, err)
+		}
+		return 0, fmt.Errorf("failed to get file info for %s: %w", fileName, err)
+	}
+
+	return fileInfo.Size(), nil
+}
+
+// displaySummary calculates and displays file size information
+func displaySummary(wd string, files []FileInfo) error {
+	var (
+		totalSize   int64
+		largestFile FileInfo
+	)
+
+	for _, file := range files {
+		totalSize += file.sizeIncrease
+		if file.sizeIncrease > largestFile.sizeIncrease {
+			largestFile = file
+		}
+	}
+
+	// Print summary only if there are files to summarize
+	if totalSize > 0 {
+		fmt.Println()
 		fmt.Println("Summary:")
 
 		// Format total size with underscores and color
 		totalSizeStr := formatSizeWithUnderscores(totalSize)
-		fmt.Printf("  %s %s bytes\n", "Total size:    ", totalSizeStr)
+		fmt.Printf("  %s %s bytes\n", "Total positive delta:    ", totalSizeStr)
 
-		// Find largest file
-		var largestFile FileInfo
-		for _, file := range files {
-			if file.Size > largestFile.Size {
-				largestFile = file
-			}
-		}
-
-		if largestFile.Name != "" {
-			largestSizeStr := formatSizeWithUnderscores(largestFile.Size)
-			fmt.Printf("  %s %s (%s bytes)\n", "Largest file:  ", largestFile.Name, largestSizeStr)
+		// Find the largest file
+		if largestFile.name != "" {
+			largestSizeStr := formatSizeWithUnderscores(largestFile.sizeIncrease)
+			fmt.Printf("  %s %s (%s bytes)\n", "Largest positive delta:  ", largestFile.name, largestSizeStr)
 		}
 	}
 
@@ -275,44 +376,20 @@ func unquoteGitFilename(filename string) string {
 
 // formatSizeWithUnderscores formats a number with underscores as thousand separators
 func formatSizeWithUnderscores(size int64) string {
-	str := strconv.FormatInt(size, 10)
-	if len(str) <= 3 {
+	str := strconv.FormatInt(size, decimalBase)
+	if len(str) <= countOfZerosIn1000 {
 		return str
 	}
 
 	var result strings.Builder
 	for i, digit := range str {
-		if i > 0 && (len(str)-i)%3 == 0 {
+		if i > 0 && (len(str)-i)%countOfZerosIn1000 == 0 {
 			result.WriteRune('_')
 		}
 		result.WriteRune(digit)
 	}
 
 	return result.String()
-}
-
-// getSizeColorByValue returns appropriate color based on file size
-func getSizeColorByValue(size int64) *color.Color {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-	)
-
-	switch {
-	case size >= GB: // 1GB+ - Red (very large)
-		return color.New(color.FgRed, color.Bold)
-	case size >= 100*MB: // 100MB+ - Magenta (large)
-		return color.New(color.FgMagenta, color.Bold)
-	case size >= 10*MB: // 10MB+ - Yellow (medium-large)
-		return color.New(color.FgYellow, color.Bold)
-	case size >= MB: // 1MB+ - Yellow (medium)
-		return color.New(color.FgYellow)
-	case size >= 100*KB: // 100KB+ - Cyan (small-medium)
-		return color.New(color.FgCyan)
-	default: // <100KB - Green (small)
-		return color.New(color.FgGreen)
-	}
 }
 
 /*

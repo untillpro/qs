@@ -1,10 +1,13 @@
 package gitcmds
 
 const (
-	msgOkSeeYou             = "Ok, see you"
-	errMsgModFiles          = "you have modified files. Please first commit & push them"
-	maximumBranchNameLength = 100
+	msgOkSeeYou                 = "Ok, see you"
+	errMsgModFiles              = "you have modified files. Please first commit & push them"
+	maximumBranchNameLength     = 100
 	errMsgFailedToGetMainBranch = "failed to get main branch: %w"
+	countOfZerosIn1000          = 3
+	decimalBase                 = 10
+	bitSizeOfInt64              = 64
 )
 
 const largeFileHookContent = `
