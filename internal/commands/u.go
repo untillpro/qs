@@ -25,7 +25,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		return err
 	}
 	if isMain {
-		fmt.Println("You are in main branch.")
+		logger.Verbose("You are in main branch.")
 	}
 
 	// Fetch notes from origin
