@@ -376,6 +376,7 @@ func TestUpload(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: &systrun.CommandConfig{
 			Command: "u",
+			Stdin:   "y",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
 		ForkState:         systrun.RemoteStateOK,

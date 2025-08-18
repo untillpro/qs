@@ -265,17 +265,17 @@ func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
 		newFileSize := int64(0)
 		switch status {
 		case fileStatusAdded:
-			newFileSize, err1 = getFileSize(name)
+			newFileSize, err1 = getFileSize(wd, name)
 		case fileStatusModified:
-			newFileSize, err1 = getFileSize(name)
+			newFileSize, err1 = getFileSize(wd, name)
 			oldSize, err2 = getFileSizeFromHEAD(wd, oldName)
 		case fileStatusDeleted:
 			oldSize, err2 = getFileSizeFromHEAD(wd, oldName)
 		case fileStatusRenamed:
-			newFileSize, err1 = getFileSize(name)
+			newFileSize, err1 = getFileSize(wd, name)
 			oldSize = newFileSize
 		case fileStatusUntracked:
-			newFileSize, err2 = getFileSize(name)
+			newFileSize, err2 = getFileSize(wd, name)
 		default:
 			return nil, fmt.Errorf("unknown file status %s for file %s", statusCode, name)
 		}
@@ -317,8 +317,8 @@ func getFileSizeFromHEAD(wd, fileName string) (int64, error) {
 	return strconv.ParseInt(strings.TrimSpace(stdout), decimalBase, bitSizeOfInt64)
 }
 
-func getFileSize(fileName string) (int64, error) {
-	fileInfo, err := os.Stat(fileName)
+func getFileSize(wd, fileName string) (int64, error) {
+	fileInfo, err := os.Stat(filepath.Join(wd, fileName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, fmt.Errorf("file %s does not exist: %w", fileName, err)
