@@ -61,10 +61,11 @@ func (st *SystemTest) checkCommand() error {
 		commands.CommandNameDev,
 		commands.CommandNamePR,
 		commands.CommandNameD,
-		commands.CommandNameU:
+		commands.CommandNameU,
+		"":
 		return nil
 	default:
-		return fmt.Errorf("unknown command: %s", st.cfg.CommandConfig)
+		return fmt.Errorf("unknown command: %v", *st.cfg.CommandConfig)
 	}
 }
 
@@ -842,7 +843,9 @@ func (st *SystemTest) runCommand(cmdCfg *CommandConfig) (stdout string, stderr s
 	qsArgs := make([]string, 0, len(cmdCfg.Args)+2) // +2 for "qs" and "-v"
 	qsArgs = append(qsArgs, "qs")
 	qsArgs = append(qsArgs, "-v")
-	qsArgs = append(qsArgs, cmdCfg.Command)
+	if cmdCfg.Command != "" {
+		qsArgs = append(qsArgs, cmdCfg.Command)
+	}
 	qsArgs = append(qsArgs, cmdCfg.Args...)
 
 	runDir := st.cloneRepoPath
@@ -867,10 +870,12 @@ func (st *SystemTest) validateStdout(stdout string) error {
 	logger.Verbose(stdout)
 
 	// Check stdout if specified
-	if st.cfg.ExpectedStdout != "" {
-		if !strings.Contains(stdout, st.cfg.ExpectedStdout) {
-			return fmt.Errorf("expected stdout to contain: %q, got: %q",
-				st.cfg.ExpectedStdout, stdout)
+	if len(st.cfg.ExpectedStdout) > 0 {
+		for _, expectedLine := range st.cfg.ExpectedStdout {
+			if !strings.Contains(stdout, expectedLine) {
+				return fmt.Errorf("expected stdout to contain: %q, got: %q",
+					expectedLine, stdout)
+			}
 		}
 	}
 

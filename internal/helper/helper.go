@@ -154,14 +154,14 @@ func GetInstalledQSVersion() (string, error) {
 }
 
 func getLastQSVersion() string {
-	stdouts, stderr, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("go", "list", "-m", "-versions", "github.com/untillpro/qs").
 		RunToStrings()
 	if err != nil {
-		logger.Verbose("getLastQSVersion error:", stderr)
+		logger.Verbose(fmt.Sprintf("getLastQSVersion error: %v", stderr))
 	}
 
-	arr := strings.Split(strings.TrimSpace(stdouts), oneSpace)
+	arr := strings.Split(strings.TrimSpace(stdout), oneSpace)
 	if len(arr) == 0 {
 		return ""
 	}

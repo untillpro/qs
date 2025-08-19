@@ -43,7 +43,7 @@ type TestConfig struct {
 	NeedCollaboration      bool
 	BranchState            *BranchState // if true then create branch with prefix
 	ExpectedStderr         string       // If ExpectedStderr is not empty then check exit code of qs it must be != 0
-	ExpectedStdout         string
+	ExpectedStdout         []string
 	Expectations           []ExpectationFunc
 }
 

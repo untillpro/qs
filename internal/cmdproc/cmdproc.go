@@ -273,6 +273,8 @@ func ExecRootCmd(ctx context.Context, args []string) (context.Context, error) {
 
 		return gitcmds.Status(wd)
 	}
+	rootCmd.Flags().StringVarP(&params.Dir, "change-dir", "C", "", "change to dir before running the command. Any files named on the command line are interpreted after changing directories")
+
 	initChangeDirFlags(rootCmd.Commands(), params)
 
 	return ExecCommandAndCatchInterrupt(rootCmd)
