@@ -708,6 +708,36 @@ func TestDevD_NoBranches(t *testing.T) {
 	require.NoError(err)
 }
 
+func TestQS(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:           strings.ToLower(t.Name()),
+		GHConfig:         getGithubConfig(t),
+		CommandConfig:    &systrun.CommandConfig{},
+		UpstreamState:    systrun.RemoteStateOK,
+		ForkState:        systrun.RemoteStateOK,
+		SyncState:        systrun.SyncStateUncommitedChangesInClone,
+		ClipboardContent: systrun.ClipboardContentGithubIssue,
+		ExpectedStdout: []string{
+			"## ",
+			"origin\t",
+			"upstream\t",
+			"Summary:",
+			"Total positive delta: ",
+			"Largest positive delta: ",
+			"1.txt",
+			"2.txt",
+			"3.txt",
+		},
+		NeedCollaboration: true,
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
 // getGithubConfig retrieves GitHub credentials from environment variables
 // and skips the test if any credentials are missing
 func getGithubConfig(t *testing.T) systrun.GithubConfig {

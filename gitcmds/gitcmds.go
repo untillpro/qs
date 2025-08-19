@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	osExec "os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -69,13 +68,17 @@ const (
 )
 
 func CheckIfGitRepo(wd string) (string, error) {
-	stdout, _, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("git", "status", "-s").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
 		if strings.Contains(err.Error(), err128) {
 			err = errors.New("this is not a git repository")
+		} else if len(stderr) > 0 {
+			err = errors.New(strings.TrimSpace(stderr))
 		}
 	}
 
@@ -92,13 +95,22 @@ func ChangedFilesExist(wd string) (string, bool, error) {
 
 // stashEntriesExist checks if there are any stash entries in the git repository
 func stashEntriesExist(wd string) (bool, error) {
-	stdout, _, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "stash", "list").
 		WorkingDir(wd).
 		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return false, errors.New(stderr)
+		}
+
+		return false, fmt.Errorf("failed to check stash entries: %w", err)
+	}
 	stashEntries := strings.TrimSpace(stdout)
 
-	return len(stashEntries) > 0, err
+	return len(stashEntries) > 0, nil
 }
 
 // Status shows git repo status
@@ -110,21 +122,21 @@ func Status(wd string) error {
 		Command("sed", "s/(fetch)//").
 		RunToStrings()
 	if err != nil {
-		if len(stderr) > 0 {
-			logger.Verbose(stderr)
-		}
+		logger.Verbose(stderr)
+
 		if strings.Contains(err.Error(), err128) {
 			return errors.New("this is not a git repository")
 		}
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return err
 	}
 
 	// Print the colorized git status output
 	fmt.Print(stdout)
-
-	if err != nil {
-		return fmt.Errorf("git remote -v failed: %w", err)
-	}
-	logger.Verbose(stdout)
 
 	// Get git status output with colors for display
 	statusStdout, statusStderr, err := new(exec.PipedExec).
@@ -132,9 +144,12 @@ func Status(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(statusStderr)
+
 		if len(statusStderr) > 0 {
-			logger.Verbose(statusStderr)
+			return errors.New(statusStderr)
 		}
+
 		return fmt.Errorf("git status failed: %w", err)
 	}
 
@@ -142,14 +157,20 @@ func Status(wd string) error {
 	fmt.Print(statusStdout)
 
 	// Get clean output for parsing (without color codes)
-	cleanStatusStdout, _, err := new(exec.PipedExec).
+	cleanStatusStdout, stderr, err := new(exec.PipedExec).
 		Command("git", "status", "-s", "-b", "-uall", "--porcelain").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Verbose("Failed to get clean status for parsing: %v", err)
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
 		// Fallback to using the colored output for parsing
 		cleanStatusStdout = statusStdout
+
+		return fmt.Errorf("failed to get clean status for parsing: %w", err)
 	}
 
 	files, err := getListOfChangedFiles(wd, cleanStatusStdout)
@@ -159,7 +180,7 @@ func Status(wd string) error {
 
 	// Calculate and display file size information using clean output
 	if err := displaySummary(wd, files); err != nil {
-		logger.Verbose("Failed to calculate file sizes: %v", err)
+		logger.Verbose(fmt.Sprintf("Failed to calculate file sizes: %v", err))
 	}
 
 	return nil
@@ -186,10 +207,13 @@ func showDiffsOfChangedFiles(wd string, files []FileInfo) error {
 			Command(git, "diff", "--color=always", file.name).
 			WorkingDir(wd).
 			RunToStrings()
-		_ = stdout
-		_ = stderr
-
 		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
 			return fmt.Errorf("failed to show diff for %s: %w", file.name, err)
 		}
 
@@ -242,9 +266,11 @@ func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
 			}
 		}
 
-		var status fileStatus
-		var err1 error
-		var err2 error
+		var (
+			status fileStatus
+			err1   error
+			err2   error
+		)
 
 		switch statusCode {
 		case `A`, `AM`:
@@ -310,6 +336,10 @@ func getFileSizeFromHEAD(wd, fileName string) (int64, error) {
 		RunToStrings()
 	if err != nil {
 		logger.Error(stderr)
+
+		if len(stderr) > 0 {
+			return 0, errors.New(stderr)
+		}
 
 		return 0, fmt.Errorf("failed to get file size from HEAD for %s: %w", fileName, err)
 	}
@@ -410,17 +440,24 @@ func formatSizeWithUnderscores(size int64) string {
 func Release(wd string) error {
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Pulling")
-	err := new(exec.PipedExec).
+	_, _ = fmt.Fprintln(os.Stdout, "Pulling")
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("git", pull).
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
-		return err
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("error pulling: %w", err)
 	}
+	logger.Verbose(stdout)
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Reading current version")
+	_, _ = fmt.Fprintln(os.Stdout, "Reading current version")
 	currentVersion, err := utils.ReadVersion()
 	if err != nil {
 		return fmt.Errorf("error reading file 'version': %w", err)
@@ -442,41 +479,55 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Updating 'version' file")
+	_, _ = fmt.Fprintln(os.Stdout, "Updating 'version' file")
 	if err := targetVersion.Save(); err != nil {
 		return fmt.Errorf("error saving file 'version': %w", err)
 	}
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Committing target version")
+	_, _ = fmt.Fprintln(os.Stdout, "Committing target version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + targetVersion.String()}
-		err = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, params...).
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
 		if err != nil {
-			return err
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("error committing target version: %w", err)
 		}
+		logger.Verbose(stdout)
 	}
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Tagging")
+	_, _ = fmt.Fprintln(os.Stdout, "Tagging")
 	{
 		tagName := "v" + targetVersion.String()
 		n := time.Now()
 		params := []string{"tag", mimm, "Version " + tagName + " of " + n.Format("2006/01/02 15:04:05"), tagName}
-		err = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, params...).
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
 		if err != nil {
-			return err
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("error tagging version: %w", err)
 		}
+		logger.Verbose(stdout)
 	}
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Bumping version")
+	_, _ = fmt.Fprintln(os.Stdout, "Bumping version")
 	newVersion := currentVersion
 	{
 		newVersion.Minor++
@@ -487,31 +538,51 @@ func Release(wd string) error {
 	}
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Committing new version")
+	_, _ = fmt.Fprintln(os.Stdout, "Committing new version")
 	{
 		params := []string{"commit", "-a", mimm, "#scm-ver " + newVersion.String()}
-		err = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, params...).
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
 		if err != nil {
-			return err
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("error committing new version: %w", err)
 		}
 	}
 
 	// *************************************************
-	fmt.Fprintln(os.Stdout, "Pushing to origin")
+	_, _ = fmt.Fprintln(os.Stdout, "Pushing to origin")
 	{
 		params := []string{push, "--follow-tags", origin}
 		err = helper.Retry(func() error {
-			return new(exec.PipedExec).
+			stdout, stderr, err = new(exec.PipedExec).
 				Command(git, params...).
 				WorkingDir(wd).
-				Run(os.Stdout, os.Stdout)
+				RunToStrings()
+			if err != nil {
+				if len(stderr) > 0 {
+					return errors.New(stderr)
+				}
+
+				return fmt.Errorf("error pushing to origin: %w", err)
+			}
+
+			return nil
 		})
 		if err != nil {
+			if len(stderr) > 0 {
+				logger.Verbose(stderr)
+			}
+
 			return err
 		}
+		logger.Verbose(stdout)
 	}
 
 	return nil
@@ -521,19 +592,27 @@ func Release(wd string) error {
 func Upload(cmd *cobra.Command, wd string) error {
 	commitMessageParts := cmd.Context().Value(contextPkg.CtxKeyCommitMessage).([]string)
 
-	err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "add", ".").
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
-		return err
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("git add failed: %w", err)
 	}
+	logger.Verbose(stdout)
 
 	params := []string{"commit", "-a"}
 	for _, m := range commitMessageParts {
 		params = append(params, mimm, m)
 	}
-	_, stderr, err := new(exec.PipedExec).
+
+	_, stderr, err = new(exec.PipedExec).
 		Command(git, params...).
 		WorkingDir(wd).
 		RunToStrings()
@@ -543,25 +622,39 @@ func Upload(cmd *cobra.Command, wd string) error {
 		fmt.Println(strings.TrimSpace(stderr))
 		fmt.Print("Do you want to commit anyway(y/n)?")
 		_, _ = fmt.Scanln(&response)
+
 		if response != "y" {
 			return nil
 		}
+
 		params = append(params, "-n")
-		err = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, params...).
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
-	}
-	if err != nil {
-		return err
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("git commit failed: %w", err)
+		}
 	}
 
 	// make pull before push
-	_, _, err = new(exec.PipedExec).
+	stdout, stderr, err = new(exec.PipedExec).
 		Command(git, pull).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
 		return fmt.Errorf("error pulling before push: %w", err)
 	}
 
@@ -572,10 +665,21 @@ func Upload(cmd *cobra.Command, wd string) error {
 
 	// Push notes to origin
 	err = helper.Retry(func() error {
-		return new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, push, origin, "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("git push notes failed: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
 		return err
@@ -586,8 +690,6 @@ func Upload(cmd *cobra.Command, wd string) error {
 	}
 
 	// Push branch to origin
-	var stdout string
-
 	// Check if branch already has upstream tracking
 	hasUpstream, err := hasUpstreamBranch(wd, brName)
 	if err != nil {
@@ -606,10 +708,19 @@ func Upload(cmd *cobra.Command, wd string) error {
 			Command(git, pushArgs...).
 			WorkingDir(wd).
 			RunToStrings()
-		return pushErr
+		if pushErr != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("git push failed: %w", pushErr)
+		}
+
+		return nil
 	})
 	if err != nil {
-		logger.Verbose(stderr)
 		return err
 	}
 	logger.Verbose(stdout)
@@ -624,6 +735,12 @@ func Stash(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
 		return fmt.Errorf("git stash failed: %w - %s", err, stderr)
 	}
 
@@ -637,9 +754,15 @@ func Unstash(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
 		const msg = "No stash entries found"
 		if strings.Contains(stdout, msg) || strings.Contains(stderr, msg) {
 			return nil // No stash to pop, return nil
+		}
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
 		}
 
 		return fmt.Errorf("git stash pop failed: %w", err)
@@ -649,15 +772,21 @@ func Unstash(wd string) error {
 }
 
 func HaveUncommittedChanges(wd string) (bool, error) {
-	output, _, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "status", "--porcelain").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return false, errors.New(stderr)
+		}
+
 		return false, fmt.Errorf("failed to check if there are uncommitted changes: %w", err)
 	}
 
-	return len(output) > 0, nil
+	return len(stdout) > 0, nil
 }
 
 // Download sources from git repo
@@ -678,33 +807,49 @@ func Download(wd string) error {
 	)
 	// Step 2: fetch origin --prune
 	err = helper.Retry(func() error {
-		_, stderr, err = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, fetch, origin, "--prune").
 			WorkingDir(wd).
 			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
 
-		return err
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to fetch origin --prune: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
-		logger.Verbose(stderr)
-
-		return fmt.Errorf("failed to fetch origin --prune: %w", err)
+		return err
 	}
+	logger.Verbose(stdout)
 
 	// Step 3: git fetch origin --force refs/notes/*:refs/notes/*
 	err = helper.Retry(func() error {
-		_, stderr, err = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, fetch, origin, "--force", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
 			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
 
-		return err
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to fetch notes: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
-		logger.Verbose(stderr)
-
-		return fmt.Errorf("failed to fetch notes: %w, stdout: %s", err, stdout)
+		return err
 	}
+	logger.Verbose(stdout)
 
 	// Get current branch info
 	currentBranchName, isMain, err := IamInMainBranch(wd)
@@ -733,6 +878,10 @@ func Download(wd string) error {
 	if err != nil {
 		logger.Verbose(stderr)
 
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
 		return fmt.Errorf("failed to merge origin/%s: %w", mainBranchName, err)
 	}
 
@@ -760,6 +909,10 @@ func Download(wd string) error {
 			if err != nil {
 				logger.Verbose(stderr)
 
+				if len(stderr) > 0 {
+					return errors.New(stderr)
+				}
+
 				return fmt.Errorf("failed to merge origin/%s: %w", currentBranchName, err)
 			}
 		}
@@ -773,18 +926,25 @@ func Download(wd string) error {
 
 	if upstreamExists {
 		err = helper.Retry(func() error {
-			_, stderr, err = new(exec.PipedExec).
+			stdout, stderr, err = new(exec.PipedExec).
 				Command(git, pull, "--no-rebase", "upstream", mainBranchName).
 				WorkingDir(wd).
 				RunToStrings()
+			if err != nil {
+				logger.Verbose(stderr)
+				if len(stderr) > 0 {
+					return errors.New(stderr)
+				}
 
-			return err
+				return fmt.Errorf("failed to pull upstream/%s --no-rebase: %w", mainBranchName, err)
+			}
+
+			return nil
 		})
 		if err != nil {
-			logger.Verbose(stderr)
-
-			return fmt.Errorf("failed to pull upstream/%s --no-rebase: %w", mainBranchName, err)
+			return err
 		}
+		logger.Verbose(stdout)
 	}
 
 	return nil
@@ -797,6 +957,10 @@ func CheckoutOnBranch(wd, branchName string) error {
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
 
 		return fmt.Errorf("failed to checkout on %s: %w", branchName, err)
 	}
@@ -811,6 +975,10 @@ func GetBranchesWithRemoteTracking(wd, remoteName string) ([]string, error) {
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return nil, errors.New(stderr)
+		}
 
 		return nil, fmt.Errorf("failed to get list of rtBranchLines with remote tracking: %w", err)
 	}
@@ -851,23 +1019,41 @@ func GetBranchesWithRemoteTracking(wd, remoteName string) ([]string, error) {
 
 // Gui shows gui
 func Gui(wd string) error {
-	return new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "gui").
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("git gui failed: %w", err)
+	}
+	fmt.Print(stdout)
+
+	return nil
 }
 
 func getFullRepoAndOrgName(wd string) (string, error) {
-	stdout, _, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "config", "--local", "remote.origin.url").
 		WorkingDir(wd).
 		Command("sed", "s/\\.git$//").
 		RunToStrings()
 	if err != nil {
-		return "", fmt.Errorf("getFullRepoAndOrgName failed: %w", err)
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to get remote origin URL: %w", err)
 	}
 
-	return strings.TrimSuffix(strings.TrimSpace(stdout), slash), err
+	return strings.TrimSuffix(strings.TrimSpace(stdout), slash), nil
 }
 
 // GetRepoAndOrgName - from .git/config
@@ -973,36 +1159,68 @@ func Fork(wd string) (string, error) {
 		return "", err
 	}
 	if chExist {
-		if err := new(exec.PipedExec).
+		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, "add", ".").
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout); err != nil {
-			return repo, err
-		}
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
 
-		if err := new(exec.PipedExec).
+			if len(stderr) > 0 {
+				return repo, errors.New(stderr)
+			}
+
+			return repo, fmt.Errorf("git add failed: %w", err)
+		}
+		fmt.Println(stdout)
+
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, "stash").
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout); err != nil {
-			return repo, err
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return repo, errors.New(stderr)
+			}
+
+			return repo, fmt.Errorf("git stash failed: %w", err)
 		}
+		fmt.Println(stdout)
 	}
 
+	var (
+		stdout string
+		stderr string
+	)
 	err = helper.Retry(func() error {
-		return new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to fork repository: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
-		logger.Verbose("Fork error:", err)
 		return repo, err
 	}
+	fmt.Println(stdout)
 
 	// Get current user name to verify fork
 	userName, err := getUserName(wd)
 	if err != nil {
-		logger.Verbose("Failed to get user name for verification:", err)
+		logger.Verbose(fmt.Sprintf("Failed to get user name for verification: %v", err))
+
 		return repo, err
 	}
 
@@ -1019,11 +1237,12 @@ func Fork(wd string) (string, error) {
 		return helper.VerifyGitHubRepoExists(userName, repo, "")
 	})
 	if err != nil {
-		logger.Verbose("Fork verification failed:", err)
+		logger.Verbose(fmt.Sprintf("Fork verification failed: %v", err))
+
 		return repo, fmt.Errorf("fork verification failed: %w", err)
 	}
+	_, _ = fmt.Fprintln(os.Stdout, "Fork created and verified successfully")
 
-	fmt.Fprintln(os.Stdout, "Fork created and verified successfully")
 	return repo, nil
 }
 
@@ -1049,6 +1268,12 @@ func PopStashedFiles(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
 		return fmt.Errorf("PopStashedFiles error: %s", stderr)
 	}
 
@@ -1063,10 +1288,14 @@ func GetMainBranch(wd string) (string, error) {
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
-		logger.Verbose(stdout)
 
-		return "", err
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to get main branch: %w", err)
 	}
+	logger.Verbose(stdout)
 
 	// Check if the output contains "main" or "master"
 	mainBranchFound := strings.Contains(stdout, "/main")
@@ -1085,22 +1314,40 @@ func GetMainBranch(wd string) (string, error) {
 }
 
 func getUserName(wd string) (string, error) {
-	stdout, _, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("gh", "api", "user").
 		WorkingDir(wd).
 		Command("jq", "-r", ".login").
 		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
 
-	return strings.TrimSpace(stdout), err
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to get user name: %w", err)
+	}
+
+	return strings.TrimSpace(stdout), nil
 }
 
 func MakeUpstreamForBranch(wd string, parentRepo string) error {
-	_, _, err := new(exec.PipedExec).
+	_, stderr, err := new(exec.PipedExec).
 		Command(git, "remote", "add", "upstream", "https://github.com/"+parentRepo).
 		WorkingDir(wd).
 		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
 
-	return err
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("failed to add upstream remote: %w", err)
+	}
+
+	return nil
 }
 
 // MakeUpstream s.e.
@@ -1119,40 +1366,79 @@ func MakeUpstream(wd string, repo string) error {
 		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
-	err = new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "remote", "rename", "origin", "upstream").
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
-		return err
-	}
+		logger.Verbose(stderr)
 
-	err = new(exec.PipedExec).
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("failed to rename origin to upstream: %w", err)
+	}
+	fmt.Println(stdout)
+
+	stdout, stderr, err = new(exec.PipedExec).
 		Command(git, "remote", "add", "origin", "https://github.com/"+userName+slash+repo).
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
-		return err
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("failed to add origin remote: %w", err)
 	}
+	fmt.Println(stdout)
+
 	// delay to ensure remote is added
 	if helper.IsTest() {
 		helper.Delay()
 	}
 
 	err = helper.Retry(func() error {
-		return new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, "fetch", "origin").
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to fetch origin: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
 		return err
 	}
+	logger.Verbose(stdout)
 
-	return new(exec.PipedExec).
+	stdout, stderr, err = new(exec.PipedExec).
 		Command(git, branch, "--set-upstream-to", originSlash+mainBranch, mainBranch).
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("failed to set upstream for main branch: %w", err)
+	}
+	fmt.Println(stdout)
+
+	return nil
 }
 
 func GetIssueRepoFromURL(url string) (repoName string) {
@@ -1198,29 +1484,41 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 		}
 	}
 
-	err = new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("gh", "repo", "set-default", myrepo).
 		WorkingDir(wd).
-		Run(os.Stdout, os.Stdout)
+		RunToStrings()
 	if err != nil {
-		return "", nil, err
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return "", nil, errors.New(stderr)
+		}
+
+		return "", nil, fmt.Errorf("failed to set default repo: %w", err)
 	}
+	fmt.Println(stdout)
 
 	branchName, err := buildDevBranchName(githubIssueURL)
 	if err != nil {
 		return "", nil, err
 	}
 
-	// check if branch already exists in remote
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "ls-remote", "--heads", "origin", branch).
+	// check if a branch already exists in remote
+	stdout, stderr, err = new(exec.PipedExec).
+		Command(git, "ls-remote", "--heads", origin, branch).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
 
-		return "", nil, err
+		if len(stderr) > 0 {
+			return "", nil, errors.New(stderr)
+		}
+
+		return "", nil, fmt.Errorf("failed to check if branch exists in origin remote: %w", err)
 	}
+
 	if len(stdout) > 0 {
 		return "", nil, fmt.Errorf("branch %s already exists in origin remote", branch)
 	}
@@ -1236,9 +1534,15 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
-		return "", nil, err
-	}
-	// delay to ensure branch is created
+
+		if len(stderr) > 0 {
+			return "", nil, errors.New(stderr)
+		}
+
+		return "", nil, fmt.Errorf("failed to create development branch for issue: %w", err)
+	} // delay to ensure branch is created
+	logger.Verbose(stdout)
+
 	if helper.IsTest() {
 		helper.Delay()
 	}
@@ -1251,7 +1555,11 @@ func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...st
 		return "", nil, errors.New("can not create branch for issue")
 	}
 	// old-style notes
-	issueName := GetIssueNameByNumber(strIssueNum, parentRepo)
+	issueName, err := GetIssueNameByNumber(strIssueNum, parentRepo)
+	if err != nil {
+		return "", nil, err
+	}
+
 	comment := IssuePRTtilePrefix + " '" + issueName + "' "
 	body := ""
 	if len(issueName) > 0 {
@@ -1289,7 +1597,11 @@ func SyncMainBranch(wd string) error {
 		if err != nil {
 			logger.Verbose(stderr)
 
-			return fmt.Errorf("failed to pull from upstream/main: %w, stdout: %s", err, stdout)
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to pull from upstream/%s with rebase: %w", mainBranch, err)
 		}
 		logger.Verbose(stdout)
 	}
@@ -1302,7 +1614,11 @@ func SyncMainBranch(wd string) error {
 	if err != nil {
 		logger.Verbose(stderr)
 
-		return fmt.Errorf("failed to pull from origin/main: %w, stdout: %s", err, stdout)
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("failed to pull from origin/%s: %w with rebase", mainBranch, err)
 	}
 	logger.Verbose(stdout)
 
@@ -1313,15 +1629,21 @@ func SyncMainBranch(wd string) error {
 			Command(git, push, "origin", mainBranch).
 			WorkingDir(wd).
 			RunToStrings()
-		return pushErr
+		if pushErr != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to push to origin/%s: %w", mainBranch, pushErr)
+		}
+
+		return nil
 	})
-	if err != nil {
-		logger.Verbose(stderr)
-		return fmt.Errorf("failed to push to origin/main: %w, stdout: %s", err, stdout)
-	}
 	logger.Verbose(stdout)
 
-	return nil
+	return err
 }
 
 // GetBranchTypeByName returns branch type based on branch name
@@ -1359,8 +1681,15 @@ func buildDevBranchName(issueURL string) (string, error) {
 		RunToStrings()
 
 	if err != nil {
-		return "", fmt.Errorf("failed to get issue: %w, stderr: %s", err, stderr)
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to get issue title: %w", err)
 	}
+	logger.Verbose(stdout)
 
 	// Parse JSON response
 	var issueData struct {
@@ -1434,16 +1763,22 @@ func isOldStyledBranch(notes []string) bool {
 	return false
 }
 
-func GetIssueNameByNumber(issueNum string, parentrepo string) string {
-	stdouts, _, err := new(exec.PipedExec).
+func GetIssueNameByNumber(issueNum string, parentrepo string) (string, error) {
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("gh", "issue", "view", issueNum, "--repo", parentrepo).
 		Command("grep", "title:").
 		Command("gawk", "{ $1=\"\"; print substr($0, 2) }").
 		RunToStrings()
 	if err != nil {
-		return ""
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to get issue name by number: %w", err)
 	}
-	return strings.TrimSpace(stdouts)
+	return strings.TrimSpace(stdout), nil
 }
 
 // Dev creates dev branch and pushes it to origin
@@ -1575,13 +1910,20 @@ func AddNotes(wd string, notes []string) error {
 	for _, s := range notes {
 		str := strings.TrimSpace(s)
 		if len(str) > 0 {
-			err := new(exec.PipedExec).
+			stdout, stderr, err := new(exec.PipedExec).
 				Command(git, "notes", "append", "-m", str).
 				WorkingDir(wd).
-				Run(os.Stdout, os.Stdout)
+				RunToStrings()
 			if err != nil {
-				return err
+				logger.Verbose(stderr)
+
+				if len(stderr) > 0 {
+					return errors.New(stderr)
+				}
+
+				return fmt.Errorf("failed to add note: %w", err)
 			}
+			fmt.Println(stdout)
 		}
 	}
 
@@ -1653,12 +1995,21 @@ func GetParentRepoName(wd string) (name string, err error) {
 		return "", err
 	}
 
-	stdout, _, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("gh", "api", "repos/"+org+slash+repo, "--jq", ".parent.full_name").
 		WorkingDir(wd).
 		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
 
-	return strings.TrimSpace(stdout), err
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to get parent repo name: %w", err)
+	}
+
+	return strings.TrimSpace(stdout), nil
 }
 
 // IsBranchInMain Is my branch in main org?
@@ -2238,11 +2589,17 @@ func SetLocalPreCommitHook(wd string) error {
 		Command(git, "config", "--global", "--get", "core.hookspath").
 		Run(os.Stdout, os.Stdout)
 	if err == nil {
-		err = new(exec.PipedExec).
+		_, stderr, err := new(exec.PipedExec).
 			Command(git, "config", "--global", "--unset", "core.hookspath").
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
 		if err != nil {
-			return err
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to unset global hooks path: %w", err)
 		}
 	}
 	dir, err := GetRootFolder(wd)
@@ -2340,8 +2697,13 @@ func HasRemote(wd, remoteName string) (bool, error) {
 		Command(git, "remote").
 		WorkingDir(wd).
 		RunToStrings()
-
 	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return false, errors.New(stderr)
+		}
+
 		return false, fmt.Errorf("failed to list git remotes: %w: %s", err, stderr)
 	}
 
@@ -2433,13 +2795,6 @@ func GetIssueNumFromBranchName(parentrepo string, curbranch string) (issuenum st
 	return "", false
 }
 
-func GetIssuePRTitle(issueNum string, parentrepo string) []string {
-	name := GetIssueNameByNumber(issueNum, parentrepo)
-	s := IssuePRTtilePrefix + oneSpace + name
-	body := IssueSign + issueNum + oneSpace + name
-	return []string{s, body}
-}
-
 func LinkIssueToMileStone(issueNum string, parentrepo string) error {
 	if issueNum == "" {
 		return nil
@@ -2447,13 +2802,20 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) error {
 	if parentrepo == "" {
 		return nil
 	}
-	strMilestones, _, err := new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command("gh", "api", "repos/"+parentrepo+"/milestones", "--jq", ".[] | .title").
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
 		return fmt.Errorf("link issue to mileStone error: %w", err)
 	}
-	milestones := strings.Split(strMilestones, caret)
+
+	milestones := strings.Split(stdout, caret)
 	// Sample date string in the "yyyy.mm.dd" format.
 	dateString := "2006.01.02"
 	// Get the current date and time.
@@ -2464,13 +2826,21 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) error {
 		if err == nil {
 			if currentTime.Before(t) {
 				// Next milestone is found
-				err = new(exec.PipedExec).
+				stdout, stderr, err = new(exec.PipedExec).
 					Command("gh", "issue", "edit", issueNum, "--milestone", milestone, "--repo", parentrepo).
-					Run(os.Stdout, os.Stdout)
+					RunToStrings()
 				if err != nil {
-					return err
+					logger.Verbose(stderr)
+
+					if len(stderr) > 0 {
+						return errors.New(stderr)
+					}
+
+					return fmt.Errorf("failed to link issue to milestone: %w", err)
 				}
+				logger.Verbose(stdout)
 				fmt.Println("Issue #" + issueNum + " added to milestone '" + milestone + "'")
+
 				return nil
 			}
 		}
@@ -2480,11 +2850,17 @@ func LinkIssueToMileStone(issueNum string, parentrepo string) error {
 }
 
 func GetCurrentBranchName(wd string) (string, error) {
-	branchName, _, err := new(exec.PipedExec).
+	branchName, stderr, err := new(exec.PipedExec).
 		Command(git, branch, "--show-current").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
 		return "", fmt.Errorf("failed to get current branch name: %w", err)
 	}
 
@@ -2542,23 +2918,6 @@ func IamInMainBranch(wd string) (string, bool, error) {
 	return currentBranchName, strings.EqualFold(currentBranchName, mainBranch), err
 }
 
-// RemoveRepo removes a repository from GitHub
-func RemoveRepo(repoName, account, token string) error {
-	//nolint:gosec
-	cmd := osExec.Command("gh", "repo", "delete",
-		fmt.Sprintf("%s/%s", account, repoName),
-		"--yes")
-
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("GITHUB_TOKEN=%s", token))
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to delete repository: %w\nOutput: %s", err, output)
-	}
-
-	return nil
-}
-
 // GetRemoteUrlByName retrieves the URL of a specified remote by its name
 func GetRemoteUrlByName(wd string, remoteName string) (string, error) {
 	repo, err := goGitPkg.PlainOpen(wd)
@@ -2581,63 +2940,4 @@ func GetRemoteUrlByName(wd string, remoteName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("remote %s not found", remoteName)
-}
-
-// CleanupTestEnvironment removes all created resources: cloned repo, upstream repo, fork repo
-func CleanupTestEnvironment(cloneRepoPath, anotherCloneRepoPath string) error {
-	// Remove the another cloned repository
-	if anotherCloneRepoPath != "" {
-		if err := os.RemoveAll(anotherCloneRepoPath); err != nil {
-			return fmt.Errorf("failed to remove another cloned repository: %w", err)
-		}
-	}
-
-	// get remotes from main clone
-	remoteOriginURL, err := GetRemoteUrlByName(cloneRepoPath, "origin")
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			remoteOriginURL = ""
-		} else {
-			return fmt.Errorf("failed to get oririn remote URL: %w", err)
-		}
-	}
-
-	remoteUpstreamURL, err := GetRemoteUrlByName(cloneRepoPath, "upstream")
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			remoteUpstreamURL = ""
-		} else {
-			return fmt.Errorf("failed to get upstream remote URL: %w", err)
-		}
-	}
-
-	// Remove the cloned repository
-	if err := os.RemoveAll(cloneRepoPath); err != nil {
-		return fmt.Errorf("failed to remove cloned repository: %w", err)
-	}
-
-	var errList []error
-	// extract account, repo and token from remote url
-	forkAccount, repo, forkToken, err := ParseGitRemoteURL(remoteOriginURL)
-	if err == nil {
-		// Optionally remove the fork repository
-		if err := RemoveRepo(repo, forkAccount, forkToken); err != nil {
-			errList = append(errList, errors.Join(fmt.Errorf("failed to remove origin repository: %w", err)))
-		}
-	}
-
-	// extract account, repo and token from remote url
-	upstreamAccount, repo, upstreamToken, err := ParseGitRemoteURL(remoteUpstreamURL)
-	if err == nil {
-		// Optionally remove the upstream repository
-		if err := RemoveRepo(repo, upstreamAccount, upstreamToken); err != nil {
-			errList = append(errList, errors.Join(fmt.Errorf("failed to remove upstream repository: %w", err)))
-		}
-	}
-
-	if len(errList) > 0 {
-		return errors.Join(errList...)
-	}
-
-	return nil
 }

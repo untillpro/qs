@@ -49,7 +49,7 @@ func Pr(wd string, needDraft bool) error {
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
-			logger.Verbose("Failed to fetch notes: %v", err)
+			logger.Verbose(fmt.Sprintf("Failed to fetch notes: %v", err))
 			// Continue anyway, as notes might exist locally
 		}
 
@@ -63,7 +63,7 @@ func Pr(wd string, needDraft bool) error {
 			}
 			response = ""
 			if err := MakeUpstreamForBranch(wd, parentRepoName); err != nil {
-				return fmt.Errorf("failed to set upstream: %w", err)
+				return err
 			}
 		}
 
@@ -133,13 +133,24 @@ func Pr(wd string, needDraft bool) error {
 func pushPRBranch(wd, prBranchName string) error {
 	// Push notes to origin
 	err := helper.Retry(func() error {
-		return new(exec.PipedExec).
+		_, stderr, err := new(exec.PipedExec).
 			Command("git", "push", "origin", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
-			Run(os.Stdout, os.Stdout)
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to push notes to origin: %w", err)
+		}
+
+		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to push notes to origin: %w", err)
+		return err
 	}
 
 	if helper.IsTest() {
@@ -148,32 +159,28 @@ func pushPRBranch(wd, prBranchName string) error {
 
 	// Push PR branch to origin
 	err = helper.Retry(func() error {
-		_, _, pushErr := new(exec.PipedExec).
-			Command("git", "push", "-u", "origin", prBranchName).
+		_, stderr, err := new(exec.PipedExec).
+			Command(git, push, "-u", origin, prBranchName).
 			WorkingDir(wd).
 			RunToStrings()
-		return pushErr
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to push PR branch %s to origin: %w", prBranchName, err)
+		}
+
+		return nil
 	}) // Retry up to 3 times for pushing PR branch
-	if err != nil {
-		return err
-	}
 
 	if helper.IsTest() {
 		helper.Delay()
 	}
-	// Push PR branch to origin
-	err = helper.Retry(func() error {
-		_, _, pushErr := new(exec.PipedExec).
-			Command("git", "push", "-u", "origin", prBranchName).
-			WorkingDir(wd).
-			RunToStrings()
-		return pushErr
-	})
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return err
 }
 
 // DoesPrExist checks if a pull request exists for the current branch.
@@ -213,7 +220,11 @@ func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (*PR
 		if err != nil {
 			logger.Verbose(stderr)
 
-			return err
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to list PRs for branch %s: %w", currentBranchName, err)
 		}
 
 		if strings.Contains(stdout, "no pull requests match your search") {
@@ -257,25 +268,36 @@ func RemoveBranch(wd, branchName string) error {
 	if err != nil {
 		logger.Verbose(stderr)
 
-		return err
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("failed to delete local branch %s: %w", branchName, err)
 	}
 
 	// Delete branch from origin
-	err = helper.Retry(func() error {
+	return helper.Retry(func() error {
 		_, stderr, err = new(exec.PipedExec).
 			Command("git", "push", "origin", "--delete", branchName).
 			WorkingDir(wd).
 			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
 
-		return err
+			// If a branch does not exist on origin, we can ignore the error
+			if strings.Contains(stderr, "remote ref does not exist") {
+				return nil
+			}
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to delete remote branch %s: %w", branchName, err)
+		}
+
+		return nil
 	})
-	if err != nil && !strings.Contains(stderr, "remote ref does not exist") {
-		logger.Verbose(stderr)
-
-		return err
-	}
-
-	return nil
 }
 
 // createPRBranch creates a new branch for the pull request and checks out on it.
@@ -302,34 +324,55 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	}
 	upstreamMain := upstreamRemote + "/" + mainBranchName
 
+	var (
+		stdout string
+		stderr string
+	)
 	// Step 1: Fetch latest upstream
 	err = helper.Retry(func() error {
-		_, _, fetchErr := new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command("git", "fetch", upstreamRemote).
 			WorkingDir(wd).
 			RunToStrings()
-		return fetchErr
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to fetch upstream: %w", err)
+		}
+
+		return nil
 	}) // Retry up to 3 times for fetching upstream
 	if err != nil {
 		return "", err
 	}
+	logger.Verbose(stdout)
 
 	// Step 1.1: Fetch notes from origin
-	var stdout, stderr string
 	err = helper.Retry(func() error {
-		var fetchErr error
-		stdout, stderr, fetchErr = new(exec.PipedExec).
+		stdout, stderr, err = new(exec.PipedExec).
 			Command("git", "fetch", "origin", "--force", "refs/notes/*:refs/notes/*").
 			WorkingDir(wd).
 			RunToStrings()
-		return fetchErr
+		if err != nil {
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to fetch notes from origin: %w", err)
+		}
+
+		return nil
 	}) // Retry up to 3 times for fetching notes
 	if err != nil {
-		logger.Verbose(stdout)
-		logger.Verbose(stderr)
-
-		return "", fmt.Errorf("failed to fetch notes: %w", err)
+		return "", err
 	}
+	logger.Verbose(stdout)
 
 	// Step 2: Checkout dev branch
 
@@ -344,12 +387,18 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 		return "", errors.New("error: No commits found in dev branch")
 	}
 
-	_, _, err = new(exec.PipedExec).
+	_, stderr, err = new(exec.PipedExec).
 		Command("git", "checkout", devBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return "", err
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to checkout dev branch: %w", err)
 	}
 
 	// Step 3: Merge from origin/main + upstream/main
@@ -359,10 +408,12 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
-		fmt.Println()
-		fmt.Printf("Failed to merge origin/%s into dev branch.", mainBranchName)
 
-		return "", err
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to merge origin/%s into dev branch: %w", mainBranchName, err)
 	}
 
 	// Step 3.1
@@ -373,20 +424,28 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 			RunToStrings()
 		if err != nil {
 			logger.Verbose(stderr)
-			fmt.Println()
-			fmt.Printf("Failed to merge upstream/%s into dev branch.", mainBranchName)
 
-			return "", err
+			if len(stderr) > 0 {
+				return "", errors.New(stderr)
+			}
+
+			return "", fmt.Errorf("failed to merge upstream/%s into dev branch: %w", mainBranchName, err)
 		}
 	}
 
 	// Step 4: Create new PR branch from upstream/main
-	_, _, err = new(exec.PipedExec).
+	_, stderr, err = new(exec.PipedExec).
 		Command("git", "checkout", "-b", prBranchName, upstreamMain).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		return "", err
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to create PR branch %s from %s: %w", prBranchName, upstreamMain, err)
 	}
 
 	// Step 5: Squash merge dev into PR branch
@@ -396,9 +455,12 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
-		fmt.Println("Failed to squash merge dev branch into pr branch")
 
-		return "", err
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to squash merge dev branch %s into PR branch %s: %w", devBranchName, prBranchName, err)
 	}
 
 	// Step 6: Get issue description from notes for commit message
@@ -426,15 +488,18 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	}
 
 	// Step 7: Commit the squashed changes
-	stdout, stderr, err = new(exec.PipedExec).
+	_, stderr, err = new(exec.PipedExec).
 		Command("git", "commit", "-m", description).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
-		logger.Verbose(stdout)
 		logger.Verbose(stderr)
 
-		return "", err
+		if len(stderr) > 0 {
+			return "", errors.New(stderr)
+		}
+
+		return "", fmt.Errorf("failed to commit squashed changes: %w", err)
 	}
 
 	// Add empty commit to create commit object and link notes to it
@@ -475,11 +540,25 @@ func GetIssueDescription(issueURL string) (string, error) {
 
 	err = helper.Retry(func() error {
 		stdout, stderr, err := new(exec.PipedExec).
-			Command("gh", "issue", "view", issueNumber, "--repo", fmt.Sprintf("%s/%s", owner, repo), "--json", "title,body").
+			Command(
+				"gh",
+				"issue",
+				"view",
+				issueNumber,
+				"--repo",
+				fmt.Sprintf("%s/%s", owner, repo),
+				"--json",
+				"title,body",
+			).
 			RunToStrings()
-
 		if err != nil {
-			return fmt.Errorf("failed to get issue: %w, stderr: %s", err, stderr)
+			logger.Verbose(stderr)
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to retrieve issue data for %s/%s#%s: %w", owner, repo, issueNumber, err)
 		}
 
 		// Parse JSON response
