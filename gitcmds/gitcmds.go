@@ -2300,7 +2300,7 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		prTitle, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
 	default:
 		fmt.Print("Enter pull request title: ")
-		if _, err := fmt.Scanln(&prTitle); err != nil {
+		if _, err := fmt.Scan(&prTitle); err != nil {
 			return "", "", err
 		}
 		prTitle = strings.TrimSpace(prTitle)
