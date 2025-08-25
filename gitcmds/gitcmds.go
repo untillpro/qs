@@ -2295,12 +2295,14 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 	}
 
 	var prTitle string
+	var isCustomBranch bool
 	switch {
 	case len(notesObj.GithubIssueURL) > 0:
 		prTitle, err = GetIssueDescription(notesObj.GithubIssueURL)
 	case len(notesObj.JiraTicketURL) > 0:
 		prTitle, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
 	default:
+		isCustomBranch = true
 		fmt.Print("Enter pull request title: ")
 		reader := bufio.NewReader(os.Stdin)
 
@@ -2319,10 +2321,13 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 		return "", "", fmt.Errorf("error retrieving pull request title: %w", err)
 	}
 
+	var strNotes string
 	var url string
-
-	_, url = GetNoteAndURL(notes)
+	strNotes, url = GetNoteAndURL(notes)
 	b := GetBodyFromNotes(notes)
+	if len(b) == 0 && !isCustomBranch {
+		b = strNotes
+	}
 	if len(url) > 0 {
 		b = b + caret + url
 	}
