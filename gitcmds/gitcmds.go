@@ -1,6 +1,7 @@
 package gitcmds
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ const (
 	mimm              = "-m"
 	slash             = "/"
 	caret             = "\n"
+	caretByte         = '\n'
 	git               = "git"
 	push              = "push"
 	pull              = "pull"
@@ -2293,16 +2295,23 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 	}
 
 	var prTitle string
+	var isCustomBranch bool
 	switch {
 	case len(notesObj.GithubIssueURL) > 0:
 		prTitle, err = GetIssueDescription(notesObj.GithubIssueURL)
 	case len(notesObj.JiraTicketURL) > 0:
 		prTitle, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
 	default:
+		isCustomBranch = true
 		fmt.Print("Enter pull request title: ")
-		if _, err := fmt.Scanln(&prTitle); err != nil {
+		reader := bufio.NewReader(os.Stdin)
+
+		// Read until newline (includes spaces)
+		prTitle, err = reader.ReadString(caretByte)
+		if err != nil {
 			return "", "", err
 		}
+
 		prTitle = strings.TrimSpace(prTitle)
 		if len(prTitle) < minPRTitleLength {
 			return "", "", errors.New("too short pull request title")
@@ -2316,7 +2325,7 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 	var url string
 	strNotes, url = GetNoteAndURL(notes)
 	b := GetBodyFromNotes(notes)
-	if len(b) == 0 {
+	if len(b) == 0 && !isCustomBranch {
 		b = strNotes
 	}
 	if len(url) > 0 {

@@ -7,6 +7,7 @@ const (
 	errMsgFailedToGetMainBranch = "failed to get main branch: %w"
 	countOfZerosIn1000          = 3
 	decimalBase                 = 10
+
 	bitSizeOfInt64              = 64
 )
 
