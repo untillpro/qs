@@ -160,7 +160,7 @@ func Status(wd string) error {
 
 	// Get clean output for parsing (without color codes)
 	cleanStatusStdout, stderr, err := new(exec.PipedExec).
-		Command("git", "status", "-s", "-b", "-uall", "--porcelain").
+		Command("git", "status", "-s", "-b", "-uall").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -234,6 +234,21 @@ func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
 
 	files := make([]FileInfo, 0, len(lines))
 
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "rev-parse", "--absolute-git-dir").
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return nil, errors.New(stderr)
+		}
+
+		return nil, fmt.Errorf("failed to get absolute git dir: %w", err)
+	}
+	gitDir := strings.TrimSpace(stdout)
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 
@@ -296,9 +311,9 @@ func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
 			newFileSize, err1 = getFileSize(wd, name)
 		case fileStatusModified:
 			newFileSize, err1 = getFileSize(wd, name)
-			oldSize, err2 = getFileSizeFromHEAD(wd, oldName)
+			oldSize, err2 = getFileSizeFromHEAD(wd, gitDir, oldName)
 		case fileStatusDeleted:
-			oldSize, err2 = getFileSizeFromHEAD(wd, oldName)
+			oldSize, err2 = getFileSizeFromHEAD(wd, gitDir, oldName)
 		case fileStatusRenamed:
 			newFileSize, err1 = getFileSize(wd, name)
 			oldSize = newFileSize
@@ -331,9 +346,16 @@ func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
 	return files, nil
 }
 
-func getFileSizeFromHEAD(wd, fileName string) (int64, error) {
+func getFileSizeFromHEAD(wd, gitDir, fileName string) (int64, error) {
+	repoRootDir := filepath.Dir(gitDir)
+	// compute relative path
+	relativePath, err := filepath.Rel(repoRootDir, wd)
+	if err != nil {
+		return 0, fmt.Errorf("failed to compute relative path from repo root to working dir: %w", err)
+	}
+
 	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "cat-file", "-s", fmt.Sprintf("HEAD:%s", fileName)).
+		Command(git, "cat-file", "-s", fmt.Sprintf("HEAD:%s", filepath.Join(relativePath, fileName))).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
