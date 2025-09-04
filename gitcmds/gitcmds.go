@@ -2391,7 +2391,6 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 	}
 	// print PR URL
 	if len(prInfo.URL) > 0 {
-		fmt.Println()
 		fmt.Println(prInfo.URL)
 	}
 
