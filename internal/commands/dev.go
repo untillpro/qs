@@ -167,6 +167,11 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	if err := setPreCommitHook(wd); err != nil {
 		logger.Verbose("Error setting pre-commit hook:", err)
 	}
+
+	// Ensure large file hook content is up to date
+	if err := gitcmds.EnsureLargeFileHookUpToDate(wd); err != nil {
+		logger.Verbose("Error updating large file hook content:", err)
+	}
 	// Unstash changes
 	if stashedUncommittedChanges {
 		if err := gitcmds.Unstash(wd); err != nil {

@@ -7,8 +7,10 @@ const (
 	errMsgFailedToGetMainBranch = "failed to get main branch: %w"
 	countOfZerosIn1000          = 3
 	decimalBase                 = 10
-	bitSizeOfInt64              = 64
-	refsNotes                   = "refs/notes/*:refs/notes/*"
+
+	bitSizeOfInt64        = 64
+	refsNotes             = "refs/notes/*:refs/notes/*"
+	LargeFileHookFilename = "large-file-hook.sh"
 )
 
 const largeFileHookContent = `

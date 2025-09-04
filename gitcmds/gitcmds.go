@@ -2551,7 +2551,7 @@ func LocalPreCommitHookExist(wd string) (bool, error) {
 }
 
 func largeFileHookExist(filepath string) bool {
-	substring := "large-file-hook.sh"
+	substring := LargeFileHookFilename
 	_, _, err := new(exec.PipedExec).Command("grep", "-l", substring, filepath).RunToStrings()
 
 	return err == nil
@@ -2689,7 +2689,7 @@ func fillPreCommitFile(wd, myFilePath string) error {
 	if err != nil {
 		return err
 	}
-	fName := "/.git/hooks/large-file-hook.sh"
+	fName := "/.git/hooks/" + LargeFileHookFilename
 	lfPath := dir + fName
 
 	lf, err := os.Create(lfPath)
@@ -2713,6 +2713,69 @@ func fillPreCommitFile(wd, myFilePath string) error {
 	}
 
 	return new(exec.PipedExec).Command("chmod", "+x", myFilePath).Run(os.Stdout, os.Stdout)
+}
+
+// isLargeFileHookContentUpToDate checks if the current large-file-hook.sh content matches the expected content
+func isLargeFileHookContentUpToDate(wd string) (bool, error) {
+	dir, err := GetRootFolder(wd)
+	if err != nil {
+		return false, err
+	}
+
+	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
+
+	// Check if the file exists
+	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
+		return false, nil // File doesn't exist, so it's not up to date
+	}
+
+	// Read the current content
+	currentContent, err := os.ReadFile(hookPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read large file hook: %w", err)
+	}
+
+	// Compare with expected content
+	return string(currentContent) == largeFileHookContent, nil
+}
+
+// updateLargeFileHookContent updates the large-file-hook.sh file with the current content
+func updateLargeFileHookContent(wd string) error {
+	dir, err := GetRootFolder(wd)
+	if err != nil {
+		return err
+	}
+
+	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
+
+	// Create or overwrite the hook file
+	lf, err := os.Create(hookPath)
+	if err != nil {
+		return fmt.Errorf("failed to create large file hook: %w", err)
+	}
+	defer func() {
+		_ = lf.Close()
+	}()
+
+	if _, err := lf.WriteString(largeFileHookContent); err != nil {
+		return fmt.Errorf("failed to write large file hook content: %w", err)
+	}
+
+	return nil
+}
+
+// EnsureLargeFileHookUpToDate checks and updates the large file hook if needed
+func EnsureLargeFileHookUpToDate(wd string) error {
+	upToDate, err := isLargeFileHookContentUpToDate(wd)
+	if err != nil {
+		return err
+	}
+
+	if !upToDate {
+		return updateLargeFileHookContent(wd)
+	}
+
+	return nil
 }
 
 func UpstreamNotExist(wd string) bool {

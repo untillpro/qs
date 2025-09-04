@@ -202,7 +202,7 @@ func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
 		return fmt.Errorf("pre-commit hook is not installed at %s", hookPath)
 	}
 
-	substring := "large-file-hook.sh"
+	substring := gitcmds.LargeFileHookFilename
 	stdout, _, err := new(goUtilsExec.PipedExec).
 		Command("grep", "-l", substring, hookPath).
 		RunToStrings()

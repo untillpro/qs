@@ -47,6 +47,11 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		return err
 	}
 
+	// Ensure large file hook content is up to date
+	if err := gitcmds.EnsureLargeFileHookUpToDate(wd); err != nil {
+		logger.Verbose("Error updating large file hook content:", err)
+	}
+
 	return gitcmds.Upload(cmd, wd)
 }
 
