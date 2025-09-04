@@ -8,26 +8,38 @@ const (
 	countOfZerosIn1000          = 3
 	decimalBase                 = 10
 
-	bitSizeOfInt64              = 64
+	bitSizeOfInt64        = 64
+	refsNotes             = "refs/notes/*:refs/notes/*"
+	LargeFileHookFilename = "large-file-hook.sh"
 )
 
 const largeFileHookContent = `
 #!/bin/bash
 totalsize=0
 totalcnt=0
-readarray -t arr2 < <(git status --porcelain | awk '{if ($1 == "??" || $1 == "A") print $2}')
-for row in "${arr2[@]}";do
-  extension="${row##*.}"
-  if [ "$extension" != "wasm" ]; then
-    fs=$(wc -c $row | awk '{print $1}')
-    totalsize=$(($totalsize+$fs))
-    totalcnt=$(($totalcnt+1))
+
+# Use -z to get NUL-separated records: "XY<space>path\0"
+while IFS= read -r -d '' entry; do
+  status="${entry:0:2}"         # e.g., "??", "A ", "AM", etc.
+  path="${entry:3}"             # skip "XY " to get the path
+
+  # consider untracked (??) and added (A*) files
+  if [[ "$status" == "??" || "$status" == A* ]]; then
+    extension="${path##*.}"
+    if [[ "$extension" != "wasm" ]]; then
+      # wc -c < file gives just the count; quote the path
+      fs=$(wc -c < "$path")
+      totalsize=$((totalsize + fs))
+      totalcnt=$((totalcnt + 1))
+    fi
   fi
-done
+done < <(git status --porcelain -z)
+
 if (( $totalsize > 100000 )); then 
   echo " Attempt to commit too large files: Files size = $totalsize"
 	 exit 1
 fi
+
 if (( $totalcnt > 200 )); then 
   echo " Attempt to commit too much files: Files number = $totalcnt"
 	 exit 1

@@ -738,6 +738,34 @@ func TestQS(t *testing.T) {
 	require.NoError(err)
 }
 
+// TestLargeFileHook tests that the large file precommit hook is functional
+func TestLargeFileHook(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"--no-fork"},
+			Stdin:   "y",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationBranchLinkedToIssue,
+			systrun.ExpectationLargeFileHooksInstalled,
+			systrun.ExpectationLargeFileHookFunctional,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
 // getGithubConfig retrieves GitHub credentials from environment variables
 // and skips the test if any credentials are missing
 func getGithubConfig(t *testing.T) systrun.GithubConfig {

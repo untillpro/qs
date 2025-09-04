@@ -202,7 +202,7 @@ func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
 		return fmt.Errorf("pre-commit hook is not installed at %s", hookPath)
 	}
 
-	substring := "large-file-hook.sh"
+	substring := gitcmds.LargeFileHookFilename
 	stdout, _, err := new(goUtilsExec.PipedExec).
 		Command("grep", "-l", substring, hookPath).
 		RunToStrings()
@@ -212,6 +212,67 @@ func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
 
 	if len(stdout) == 0 {
 		return fmt.Errorf("large file hook is not installed")
+	}
+
+	return nil
+}
+
+// ExpectationLargeFileHookFunctional tests that the large file hook actually prevents commits of large files
+func ExpectationLargeFileHookFunctional(ctx context.Context) error {
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return errCloneRepoPathNotFoundInContext
+	}
+
+	// First, ensure the hook is installed
+	if err := ExpectationLargeFileHooksInstalled(ctx); err != nil {
+		return fmt.Errorf("large file hook not installed: %w", err)
+	}
+
+	// Create a large test file (over 100KB)
+	largeFilePath := filepath.Join(cloneRepoPath, "large_test_file.txt")
+	largeContent := strings.Repeat("This is a test line to create a large file.\n", 3000) // ~120KB
+
+	if err := os.WriteFile(largeFilePath, []byte(largeContent), 0644); err != nil {
+		return fmt.Errorf("failed to create large test file: %w", err)
+	}
+
+	// Clean up the test file at the end
+	defer func() {
+		_ = os.Remove(largeFilePath)
+	}()
+
+	// Add the large file to git
+	_, stderr, err := new(goUtilsExec.PipedExec).
+		Command("git", "add", "large_test_file.txt").
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+	if err != nil {
+		return fmt.Errorf("failed to add large file to git: %w, stderr: %s", err, stderr)
+	}
+
+	// Try to commit - this should fail due to the large file hook
+	_, stderr, err = new(goUtilsExec.PipedExec).
+		Command("git", "commit", "-m", "Test commit with large file").
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+
+	// The commit should fail (err != nil) and stderr should contain the large file message
+	if err == nil {
+		return fmt.Errorf("expected commit to fail due to large file hook, but it succeeded")
+	}
+
+	if !strings.Contains(stderr, "Attempt to commit too large files") {
+		return fmt.Errorf("expected large file hook error message, but got: %s", stderr)
+	}
+
+	// Reset the git state to clean up
+	_, _, resetErr := new(goUtilsExec.PipedExec).
+		Command("git", "reset", "--hard", "HEAD").
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+	if resetErr != nil {
+		return fmt.Errorf("failed to reset git state: %w", resetErr)
 	}
 
 	return nil

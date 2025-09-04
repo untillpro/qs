@@ -13,8 +13,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
+
 	"github.com/untillpro/qs/gitcmds"
-	contextPkg "github.com/untillpro/qs/internal/context"
+	contextpkg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/jira"
 	"github.com/untillpro/qs/internal/notes"
@@ -101,7 +102,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
 		_, _ = fmt.Scanln(&response)
 		if response == pushYes {
-			branch, notes, err = gitcmds.DevIssue(wd, parentRepo, githubIssueURL, issueNum, args...)
+			branch, notes, err = gitcmds.CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL, issueNum, args...)
 			if err != nil {
 				return err
 			}
@@ -124,7 +125,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	}
 
 	// put branch name to command context
-	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyDevBranchName, branch))
+	cmd.SetContext(context.WithValue(cmd.Context(), contextpkg.CtxKeyDevBranchName, branch))
 
 	exists, err := branchExists(wd, branch)
 	if err != nil {
@@ -153,7 +154,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			}
 		}
 
-		if err := gitcmds.Dev(wd, branch, notes, checkRemoteBranchExistence); err != nil {
+		if err := gitcmds.CreateDevBranch(wd, branch, notes, checkRemoteBranchExistence); err != nil {
 			return err
 		}
 	default:
@@ -165,6 +166,11 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	// Create pre-commit hook to control committing file size
 	if err := setPreCommitHook(wd); err != nil {
 		logger.Verbose("Error setting pre-commit hook:", err)
+	}
+
+	// Ensure large file hook content is up to date
+	if err := gitcmds.EnsureLargeFileHookUpToDate(wd); err != nil {
+		logger.Verbose("Error updating large file hook content:", err)
 	}
 	// Unstash changes
 	if stashedUncommittedChanges {
@@ -208,7 +214,7 @@ func branchExists(wd, branchName string) (bool, error) {
 func getArgStringFromClipboard(ctx context.Context) string {
 	var err error
 	// context value is first
-	arg, ok := ctx.Value(contextPkg.CtxKeyClipboard).(string)
+	arg, ok := ctx.Value(contextpkg.CtxKeyClipboard).(string)
 	if !ok || len(arg) == 0 {
 		arg, err = clipboard.ReadAll()
 		if err != nil {

@@ -40,8 +40,6 @@ const (
 	originSlash       = "origin/"
 	httppref          = "https"
 	pushYes           = "y"
-	nochecksmsg       = "no checks reported"
-	msgWaitingPR      = "Waiting PR checks.."
 	MsgPreCommitError = "Attempt to commit too"
 	MsgCommitForNotes = "Commit for keeping notes in branch"
 	oneSpace          = " "
@@ -51,14 +49,11 @@ const (
 	userNotFound            = "git user name not found"
 	ErrAlreadyForkedMsg     = "you are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
-	ErrTimer40Sec           = "time out 40 seconds"
-	ErrSomethingWrong       = "something went wrong"
 	DefaultCommitMessage    = "wip"
 
 	IssuePRTtilePrefix = "Resolves issue"
 	IssueSign          = "Resolves #"
 
-	prTimeWait                     = 40
 	minIssueNoteLength             = 10
 	minPRTitleLength               = 8
 	minRepoNameLength              = 4
@@ -690,7 +685,7 @@ func Upload(cmd *cobra.Command, wd string) error {
 	// Push notes to origin
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			Command(git, push, origin, refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -855,7 +850,7 @@ func Download(wd string) error {
 	// Step 3: git fetch origin --force refs/notes/*:refs/notes/*
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, fetch, origin, "--force", "refs/notes/*:refs/notes/*").
+			Command(git, fetch, origin, "--force", refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -1483,8 +1478,8 @@ func GetIssueRepoFromURL(url string) (repoName string) {
 	return
 }
 
-// DevIssue create link between upstream Guthub issue and dev branch
-func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
+// CreateGithubLinkToIssue create a link between an upstream GitHub issue and the dev branch
+func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
 	repo, org, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
@@ -1805,12 +1800,12 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) (string, error) {
 	return strings.TrimSpace(stdout), nil
 }
 
-// Dev creates dev branch and pushes it to origin
+// CreateDevBranch creates dev branch and pushes it to origin
 // Parameters:
 // branch - branch name
 // notes - notes for branch
-// checkRemoteBranchExistence - if true, checks if branch already exists in remote
-func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool) error {
+// checkRemoteBranchExistence - if true, checks if a branch already exists in remote
+func CreateDevBranch(wd, branchName string, notes []string, checkRemoteBranchExistence bool) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
@@ -1837,7 +1832,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 	}
 
 	if checkRemoteBranchExistence {
-		// check if branch already exists in remote
+		// check if a branch already exists in remote
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, "ls-remote", "--heads", "origin", branchName).
 			WorkingDir(wd).
@@ -1854,6 +1849,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 		}
 	}
 
+	// Create new branch from main
 	err = new(exec.PipedExec).
 		Command(git, "checkout", "-B", branchName).
 		WorkingDir(wd).
@@ -1864,7 +1860,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 
 	// Fetch notes from origin before pushing
 	stdout, stderr, err = new(exec.PipedExec).
-		Command(git, fetch, "--force", origin, "refs/notes/*:refs/notes/*").
+		Command(git, fetch, origin, "--force", refsNotes).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -1889,7 +1885,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 	// Push notes to origin with retry
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			Command(git, push, origin, refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 
@@ -2555,7 +2551,7 @@ func LocalPreCommitHookExist(wd string) (bool, error) {
 }
 
 func largeFileHookExist(filepath string) bool {
-	substring := "large-file-hook.sh"
+	substring := LargeFileHookFilename
 	_, _, err := new(exec.PipedExec).Command("grep", "-l", substring, filepath).RunToStrings()
 
 	return err == nil
@@ -2693,7 +2689,7 @@ func fillPreCommitFile(wd, myFilePath string) error {
 	if err != nil {
 		return err
 	}
-	fName := "/.git/hooks/large-file-hook.sh"
+	fName := "/.git/hooks/" + LargeFileHookFilename
 	lfPath := dir + fName
 
 	lf, err := os.Create(lfPath)
@@ -2717,6 +2713,69 @@ func fillPreCommitFile(wd, myFilePath string) error {
 	}
 
 	return new(exec.PipedExec).Command("chmod", "+x", myFilePath).Run(os.Stdout, os.Stdout)
+}
+
+// isLargeFileHookContentUpToDate checks if the current large-file-hook.sh content matches the expected content
+func isLargeFileHookContentUpToDate(wd string) (bool, error) {
+	dir, err := GetRootFolder(wd)
+	if err != nil {
+		return false, err
+	}
+
+	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
+
+	// Check if the file exists
+	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
+		return false, nil // File doesn't exist, so it's not up to date
+	}
+
+	// Read the current content
+	currentContent, err := os.ReadFile(hookPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read large file hook: %w", err)
+	}
+
+	// Compare with expected content
+	return string(currentContent) == largeFileHookContent, nil
+}
+
+// updateLargeFileHookContent updates the large-file-hook.sh file with the current content
+func updateLargeFileHookContent(wd string) error {
+	dir, err := GetRootFolder(wd)
+	if err != nil {
+		return err
+	}
+
+	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
+
+	// Create or overwrite the hook file
+	lf, err := os.Create(hookPath)
+	if err != nil {
+		return fmt.Errorf("failed to create large file hook: %w", err)
+	}
+	defer func() {
+		_ = lf.Close()
+	}()
+
+	if _, err := lf.WriteString(largeFileHookContent); err != nil {
+		return fmt.Errorf("failed to write large file hook content: %w", err)
+	}
+
+	return nil
+}
+
+// EnsureLargeFileHookUpToDate checks and updates the large file hook if needed
+func EnsureLargeFileHookUpToDate(wd string) error {
+	upToDate, err := isLargeFileHookContentUpToDate(wd)
+	if err != nil {
+		return err
+	}
+
+	if !upToDate {
+		return updateLargeFileHookContent(wd)
+	}
+
+	return nil
 }
 
 func UpstreamNotExist(wd string) bool {

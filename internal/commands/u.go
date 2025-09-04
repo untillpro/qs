@@ -30,7 +30,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 
 	// Fetch notes from origin
 	_, _, err = new(exec.PipedExec).
-		Command("git", "fetch", "origin", "--force", "refs/notes/*:refs/notes/*").
+		Command(git, fetch, origin, "--force", refsNotes).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -45,6 +45,11 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 
 	if err := setCommitMessage(cmd, cfgUpload, wd, isMain); err != nil {
 		return err
+	}
+
+	// Ensure large file hook content is up to date
+	if err := gitcmds.EnsureLargeFileHookUpToDate(wd); err != nil {
+		logger.Verbose("Error updating large file hook content:", err)
 	}
 
 	return gitcmds.Upload(cmd, wd)
