@@ -40,8 +40,6 @@ const (
 	originSlash       = "origin/"
 	httppref          = "https"
 	pushYes           = "y"
-	nochecksmsg       = "no checks reported"
-	msgWaitingPR      = "Waiting PR checks.."
 	MsgPreCommitError = "Attempt to commit too"
 	MsgCommitForNotes = "Commit for keeping notes in branch"
 	oneSpace          = " "
@@ -51,14 +49,11 @@ const (
 	userNotFound            = "git user name not found"
 	ErrAlreadyForkedMsg     = "you are in fork already\nExecute 'qs dev [branch name]' to create dev branch"
 	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
-	ErrTimer40Sec           = "time out 40 seconds"
-	ErrSomethingWrong       = "something went wrong"
 	DefaultCommitMessage    = "wip"
 
 	IssuePRTtilePrefix = "Resolves issue"
 	IssueSign          = "Resolves #"
 
-	prTimeWait                     = 40
 	minIssueNoteLength             = 10
 	minPRTitleLength               = 8
 	minRepoNameLength              = 4
@@ -690,7 +685,7 @@ func Upload(cmd *cobra.Command, wd string) error {
 	// Push notes to origin
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			Command(git, push, origin, refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -855,7 +850,7 @@ func Download(wd string) error {
 	// Step 3: git fetch origin --force refs/notes/*:refs/notes/*
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, fetch, origin, "--force", "refs/notes/*:refs/notes/*").
+			Command(git, fetch, origin, "--force", refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -1483,8 +1478,8 @@ func GetIssueRepoFromURL(url string) (repoName string) {
 	return
 }
 
-// DevIssue create link between upstream Guthub issue and dev branch
-func DevIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
+// CreateGithubLinkToIssue create a link between an upstream GitHub issue and the dev branch
+func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber int, args ...string) (branch string, notes []string, err error) {
 	repo, org, err := GetRepoAndOrgName(wd)
 	if err != nil {
 		return "", nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
@@ -1805,12 +1800,12 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) (string, error) {
 	return strings.TrimSpace(stdout), nil
 }
 
-// Dev creates dev branch and pushes it to origin
+// CreateDevBranch creates dev branch and pushes it to origin
 // Parameters:
 // branch - branch name
 // notes - notes for branch
-// checkRemoteBranchExistence - if true, checks if branch already exists in remote
-func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool) error {
+// checkRemoteBranchExistence - if true, checks if a branch already exists in remote
+func CreateDevBranch(wd, branchName string, notes []string, checkRemoteBranchExistence bool) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
@@ -1837,7 +1832,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 	}
 
 	if checkRemoteBranchExistence {
-		// check if branch already exists in remote
+		// check if a branch already exists in remote
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, "ls-remote", "--heads", "origin", branchName).
 			WorkingDir(wd).
@@ -1854,6 +1849,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 		}
 	}
 
+	// Create new branch from main
 	err = new(exec.PipedExec).
 		Command(git, "checkout", "-B", branchName).
 		WorkingDir(wd).
@@ -1864,7 +1860,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 
 	// Fetch notes from origin before pushing
 	stdout, stderr, err = new(exec.PipedExec).
-		Command(git, fetch, "--force", origin, "refs/notes/*:refs/notes/*").
+		Command(git, fetch, origin, "--force", refsNotes).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -1889,7 +1885,7 @@ func Dev(wd, branchName string, notes []string, checkRemoteBranchExistence bool)
 	// Push notes to origin with retry
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, push, origin, "refs/notes/*:refs/notes/*").
+			Command(git, push, origin, refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 

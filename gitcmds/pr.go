@@ -45,7 +45,7 @@ func Pr(wd string, needDraft bool) error {
 	if branchType == notesPkg.BranchTypeDev {
 		// Fetch notes from origin before checking if they exist
 		_, _, err := new(exec.PipedExec).
-			Command(git, fetch, origin, "--force", "refs/notes/*:refs/notes/*").
+			Command(git, fetch, origin, "--force", refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -134,7 +134,7 @@ func pushPRBranch(wd, prBranchName string) error {
 	// Push notes to origin
 	err := helper.Retry(func() error {
 		_, stderr, err := new(exec.PipedExec).
-			Command("git", "push", "origin", "refs/notes/*:refs/notes/*").
+			Command(git, push, origin, refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -354,7 +354,7 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	// Step 1.1: Fetch notes from origin
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command("git", "fetch", "origin", "--force", "refs/notes/*:refs/notes/*").
+			Command(git, fetch, origin, "--force", refsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {

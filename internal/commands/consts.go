@@ -18,6 +18,10 @@ const (
 	oneSpace                = " "
 	EnvSkipQsVersionCheck   = "QS_SKIP_QS_VERSION_CHECK"
 	minimumCommitMessageLen = 8
+	fetch                   = "fetch"
+	origin                  = "origin"
+	git                     = "git"
+	refsNotes               = "refs/notes/*:refs/notes/*"
 )
 
 const (
