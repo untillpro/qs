@@ -133,7 +133,7 @@ func Status(wd string) error {
 	}
 
 	// Print the colorized git status output
-	fmt.Print(stdout)
+	printLn(stdout)
 
 	// Get git status output with colors for display
 	statusStdout, statusStderr, err := new(exec.PipedExec).
@@ -151,7 +151,7 @@ func Status(wd string) error {
 	}
 
 	// Print the colorized git status output
-	fmt.Print(statusStdout)
+	printLn(statusStdout)
 
 	// Get clean output for parsing (without color codes)
 	cleanStatusStdout, stderr, err := new(exec.PipedExec).
@@ -213,8 +213,7 @@ func showDiffsOfChangedFiles(wd string, files []FileInfo) error {
 
 			return fmt.Errorf("failed to show diff for %s: %w", file.name, err)
 		}
-
-		fmt.Println(stdout)
+		printLn(stdout)
 	}
 
 	return nil
@@ -638,7 +637,7 @@ func Upload(cmd *cobra.Command, wd string) error {
 	if strings.Contains(stderr, MsgPreCommitError) {
 		var response string
 		fmt.Println("")
-		fmt.Println(strings.TrimSpace(stderr))
+		printLn(strings.TrimSpace(stderr))
 		fmt.Print("Do you want to commit anyway(y/n)?")
 		_, _ = fmt.Scanln(&response)
 
@@ -1051,7 +1050,7 @@ func Gui(wd string) error {
 
 		return fmt.Errorf("git gui failed: %w", err)
 	}
-	fmt.Print(stdout)
+	printLn(stdout)
 
 	return nil
 }
@@ -1191,7 +1190,7 @@ func Fork(wd string) (string, error) {
 
 			return repo, fmt.Errorf("git add failed: %w", err)
 		}
-		fmt.Println(stdout)
+		printLn(stdout)
 
 		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, "stash").
@@ -1206,7 +1205,7 @@ func Fork(wd string) (string, error) {
 
 			return repo, fmt.Errorf("git stash failed: %w", err)
 		}
-		fmt.Println(stdout)
+		printLn(stdout)
 	}
 
 	var (
@@ -1233,7 +1232,7 @@ func Fork(wd string) (string, error) {
 	if err != nil {
 		return repo, err
 	}
-	fmt.Println(stdout)
+	printLn(stdout)
 
 	// Get current user name to verify fork
 	userName, err := getUserName(wd)
@@ -1398,7 +1397,7 @@ func MakeUpstream(wd string, repo string) error {
 
 		return fmt.Errorf("failed to rename origin to upstream: %w", err)
 	}
-	fmt.Println(stdout)
+	printLn(stdout)
 
 	stdout, stderr, err = new(exec.PipedExec).
 		Command(git, "remote", "add", "origin", "https://github.com/"+userName+slash+repo).
@@ -1413,7 +1412,7 @@ func MakeUpstream(wd string, repo string) error {
 
 		return fmt.Errorf("failed to add origin remote: %w", err)
 	}
-	fmt.Println(stdout)
+	printLn(stdout)
 
 	// delay to ensure remote is added
 	if helper.IsTest() {
@@ -1455,7 +1454,7 @@ func MakeUpstream(wd string, repo string) error {
 
 		return fmt.Errorf("failed to set upstream for main branch: %w", err)
 	}
-	fmt.Println(stdout)
+	printLn(stdout)
 
 	return nil
 }
@@ -1516,7 +1515,7 @@ func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber 
 
 		return "", nil, fmt.Errorf("failed to set default repo: %w", err)
 	}
-	fmt.Println(stdout)
+	printLn(stdout)
 
 	branchName, err := buildDevBranchName(githubIssueURL)
 	if err != nil {
@@ -1943,7 +1942,7 @@ func AddNotes(wd string, notes []string) error {
 
 				return fmt.Errorf("failed to add note: %w", err)
 			}
-			fmt.Println(stdout)
+			printLn(stdout)
 		}
 	}
 
@@ -3030,4 +3029,10 @@ func GetRemoteUrlByName(wd string, remoteName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("remote %s not found", remoteName)
+}
+
+func printLn(stdout string) {
+	if len(stdout) > 0 {
+		fmt.Println(stdout)
+	}
 }
