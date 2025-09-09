@@ -2299,26 +2299,21 @@ func GetBodyFromNotes(notes []string) string {
 	return b
 }
 
-func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft bool) (stdout string, stderr string, err error) {
+func createPR(
+	wd,
+	parentRepoName,
+	prBranchName,
+	issueDescription string,
+	notes []string,
+	asDraft bool,
+) (stdout string, stderr string, err error) {
 	if len(notes) == 0 {
 		return "", "", errors.New(ErrMsgPRNotesImpossible)
 	}
 
-	//ParseGitRemoteURL()
-	// get json notes object from dev branch
-	notesObj, ok := notesPkg.Deserialize(notes)
-	if !ok {
-		return "", "", errors.New("error deserializing notes")
-	}
-
-	var prTitle string
 	var isCustomBranch bool
-	switch {
-	case len(notesObj.GithubIssueURL) > 0:
-		prTitle, err = GetIssueDescription(notesObj.GithubIssueURL)
-	case len(notesObj.JiraTicketURL) > 0:
-		prTitle, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
-	default:
+	prTitle := issueDescription
+	if len(prTitle) == 0 {
 		isCustomBranch = true
 		fmt.Print("Enter pull request title: ")
 		reader := bufio.NewReader(os.Stdin)
@@ -2334,19 +2329,16 @@ func createPR(wd, parentRepoName, prBranchName string, notes []string, asDraft b
 			return "", "", errors.New("too short pull request title")
 		}
 	}
-	if err != nil {
-		return "", "", fmt.Errorf("error retrieving pull request title: %w", err)
-	}
 
 	var strNotes string
-	var url string
-	strNotes, url = GetNoteAndURL(notes)
+	var issueURL string
+	strNotes, issueURL = GetNoteAndURL(notes)
 	b := GetBodyFromNotes(notes)
 	if len(b) == 0 && !isCustomBranch {
 		b = strNotes
 	}
-	if len(url) > 0 {
-		b = b + caret + url
+	if len(issueURL) > 0 {
+		b = b + caret + issueURL
 	}
 	strBody := fmt.Sprintln(b)
 
@@ -3034,4 +3026,32 @@ func printLn(stdout string) {
 	if len(stdout) > 0 {
 		fmt.Println(stdout)
 	}
+}
+
+func getIssueDescription(notes []string) (string, error) {
+	var (
+		description string
+		err         error
+	)
+
+	if len(notes) == 0 {
+		return "", err
+	}
+
+	notesObj, ok := notesPkg.Deserialize(notes)
+	if !ok {
+		return "", nil
+	}
+
+	switch {
+	case len(notesObj.GithubIssueURL) > 0:
+		description, err = GetIssueDescription(notesObj.GithubIssueURL)
+	case len(notesObj.JiraTicketURL) > 0:
+		description, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
+	}
+	if err != nil {
+		return "", fmt.Errorf("error retrieving issue description: %w", err)
+	}
+
+	return description, nil
 }

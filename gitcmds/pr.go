@@ -10,7 +10,6 @@ import (
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/helper"
-	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
@@ -41,18 +40,28 @@ func Pr(wd string, needDraft bool) error {
 		return err
 	}
 
+	// Fetch notes from origin before checking if they exist
+	_, _, err = new(exec.PipedExec).
+		Command(git, fetch, origin, "--force", refsNotes).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(fmt.Sprintf("Failed to fetch notes: %v", err))
+		// Continue anyway, as notes might exist locally
+	}
+
+	notes, revCount, err := GetNotes(wd, currentBranchName)
+	if err != nil {
+		return err
+	}
+
+	issueDescription, err := getIssueDescription(notes)
+	if err != nil {
+		return err
+	}
+
 	// If we are on dev branch than we need to create pr branch
 	if branchType == notesPkg.BranchTypeDev {
-		// Fetch notes from origin before checking if they exist
-		_, _, err := new(exec.PipedExec).
-			Command(git, fetch, origin, "--force", refsNotes).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(fmt.Sprintf("Failed to fetch notes: %v", err))
-			// Continue anyway, as notes might exist locally
-		}
-
 		var response string
 		if len(parentRepoName) > 0 && UpstreamNotExist(wd) {
 			fmt.Print("Upstream not found.\nRepository " + parentRepoName + " will be added as upstream. Agree[y/n]?")
@@ -77,7 +86,7 @@ func Pr(wd string, needDraft bool) error {
 		}
 
 		// Create a new branch for the PR
-		prBranchName, err := createPRBranch(wd, currentBranchName)
+		prBranchName, err := createPRBranch(wd, currentBranchName, issueDescription)
 		if err != nil {
 			return fmt.Errorf("failed to create PR branch: %w", err)
 		}
@@ -108,7 +117,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Extract notes before any operations
-	notes, revCount, err := GetNotes(wd, currentBranchName)
+	notes, revCount, err = GetNotes(wd, currentBranchName)
 	if err != nil {
 		return err
 	}
@@ -118,7 +127,14 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	// Create PR
-	stdout, stderr, err := createPR(wd, parentRepoName, currentBranchName, notes, needDraft)
+	stdout, stderr, err := createPR(
+		wd,
+		parentRepoName,
+		currentBranchName,
+		issueDescription,
+		notes,
+		needDraft,
+	)
 	if err != nil {
 		logger.Verbose(stdout)
 		logger.Verbose(stderr)
@@ -304,7 +320,7 @@ func RemoveBranch(wd, branchName string) error {
 // Returns:
 // - name of the PR branch
 // - error if any operation fails
-func createPRBranch(wd, devBranchName string) (string, error) {
+func createPRBranch(wd, devBranchName, issueDescription string) (string, error) {
 	// Step 1: Get issue description from notes for a commit message
 	// extract notes from the dev branch before any operations
 	notes, revCount, err := GetNotes(wd, devBranchName)
@@ -319,17 +335,9 @@ func createPRBranch(wd, devBranchName string) (string, error) {
 	// update branch type in notes object
 	notesObj.BranchType = notesPkg.BranchTypePr
 
-	var description string
-	switch {
-	case len(notesObj.GithubIssueURL) > 0:
-		description, err = GetIssueDescription(notesObj.GithubIssueURL)
-	case len(notesObj.JiraTicketURL) > 0:
-		description, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
-	default:
-		description = DefaultCommitMessage
-	}
-	if err != nil {
-		return "", fmt.Errorf("error retrieving issue description: %w", err)
+	description := DefaultCommitMessage
+	if len(issueDescription) > 0 {
+		description = issueDescription
 	}
 
 	// Step 2: Generate a name for the PR branch
