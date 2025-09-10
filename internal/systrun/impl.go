@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1101,24 +1102,35 @@ func (st *SystemTest) setSyncState(
 // - idFiles: list of file IDs to create (e.g., 1, 2, 3 for 1.txt, 2.txt, 3.txt)
 func commitFiles(wd string, needToCommit bool, headerOfFiles string, idFiles ...int) error {
 	// Create 3 commits with different files
-	for _, id := range idFiles {
+	for i, id := range idFiles {
 		fileName := fmt.Sprintf("%d.txt", id)
-		filePath := filepath.Join(wd, fileName)
+		// Create nested directories for each file based on its index
+		pathParts := make([]string, 0, i+3)
+		pathParts = append(pathParts, wd)
+		for j := 0; j <= i; j++ {
+			pathParts = append(pathParts, strconv.Itoa(j))
+		}
+		pathParts = append(pathParts, fileName)
+		filePath := filepath.Join(pathParts...)
+
 		fileContent := strings.Builder{}
 		if headerOfFiles != "" {
 			fileContent.WriteString(headerOfFiles + "\n")
 		}
 		fileContent.WriteString(fmt.Sprintf("Content of file %d", id))
-
+		dirName := filepath.Dir(filePath)
 		// Create the file
+		if err := os.MkdirAll(dirName, cloneRepoDirPerm); err != nil {
+			return fmt.Errorf("failed to create directories for %s: %w", fileName, err)
+		}
 		if err := os.WriteFile(filePath, []byte(fileContent.String()), commitFilePerm); err != nil {
 			return fmt.Errorf("failed to create file %s: %w", fileName, err)
 		}
 
 		// Add file to git
-		addCmd := exec.Command(git, changeDirFlag, wd, "add", fileName)
+		addCmd := exec.Command(git, changeDirFlag, wd, "add", filePath)
 		if err := addCmd.Run(); err != nil {
-			return fmt.Errorf("failed to git add %s: %w", fileName, err)
+			return fmt.Errorf("failed to git add %s: %w", filePath, err)
 		}
 
 		if needToCommit {
