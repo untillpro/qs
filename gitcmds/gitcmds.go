@@ -347,9 +347,10 @@ func getFileSizeFromHEAD(wd, gitDir, fileName string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to compute relative path from repo root to working dir: %w", err)
 	}
-
+	// workaround for Windows paths
+	filePath := strings.ReplaceAll(filepath.Join(relativePath, fileName), "\\", "/")
 	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "cat-file", "-s", fmt.Sprintf("HEAD:%s", filepath.Join(relativePath, fileName))).
+		Command(git, "cat-file", "-s", fmt.Sprintf("HEAD:%s", filePath)).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {

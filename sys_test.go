@@ -726,9 +726,9 @@ func TestQS(t *testing.T) {
 			"Summary:",
 			"Total positive delta: ",
 			"Largest positive delta: ",
-			"1.txt",
-			"2.txt",
-			"3.txt",
+			"0/1.txt",
+			"0/1/2.txt",
+			"0/1/2/3.txt",
 		},
 		NeedCollaboration: true,
 	}
