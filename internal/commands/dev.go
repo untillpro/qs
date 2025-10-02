@@ -13,7 +13,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
-
 	"github.com/untillpro/qs/gitcmds"
 	contextpkg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
@@ -45,16 +44,26 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		args = append(args, clipargs)
 	}
 
-	noForkAllowed := (cmd.Flag(noForkParamFull).Value.String() == trueStr)
-	if !noForkAllowed {
-		if len(parentRepo) == 0 { // main repository, not forked
-			repo, org, err := gitcmds.GetRepoAndOrgName(wd)
-			if err != nil {
-				return err
-			}
+	// Auto-detect workflow mode:
+	// - If parentRepo exists OR upstream remote exists -> fork workflow
+	// - If no parentRepo AND no upstream remote -> single remote workflow
+	// Check if upstream remote exists
+	upstreamExists, err := gitcmds.HasRemote(wd, "upstream")
+	if err != nil {
+		return err
+	}
 
-			return fmt.Errorf("you are in %s/%s repo\nExecute 'qs fork' first", org, repo)
+	// Only require fork if:
+	// 1. No parent repo exists (not a fork), AND
+	// 2. Upstream remote exists (indicating fork workflow was intended)
+	// This catches the edge case where someone manually added upstream but didn't fork
+	if len(parentRepo) == 0 && upstreamExists {
+		repo, org, err := gitcmds.GetRepoAndOrgName(wd)
+		if err != nil {
+			return err
 		}
+
+		return fmt.Errorf("you are in %s/%s repo with upstream remote but no fork detected\nExecute 'qs fork' first", org, repo)
 	}
 
 	curBranch, isMain, err := gitcmds.IamInMainBranch(wd)
@@ -139,18 +148,18 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	case pushYes:
 		// Remote developer branch, linked to issue is created
 		var response string
-		if len(parentRepo) > 0 {
-			if gitcmds.UpstreamNotExist(wd) {
-				fmt.Print("Upstream not found.\nRepository " + parentRepo + " will be added as upstream. Agree[y/n]?")
-				_, _ = fmt.Scanln(&response)
-				if response != pushYes {
-					fmt.Print(msgOkSeeYou)
-					return nil
-				}
-				response = ""
-				if err := gitcmds.MakeUpstreamForBranch(wd, parentRepo); err != nil {
-					return err
-				}
+		// Only add upstream if we have a parent repo and upstream doesn't exist
+		// In single remote mode (no parent repo), we don't need upstream
+		if len(parentRepo) > 0 && !upstreamExists {
+			fmt.Print("Upstream not found.\nRepository " + parentRepo + " will be added as upstream. Agree[y/n]?")
+			_, _ = fmt.Scanln(&response)
+			if response != pushYes {
+				fmt.Print(msgOkSeeYou)
+				return nil
+			}
+			response = ""
+			if err := gitcmds.MakeUpstreamForBranch(wd, parentRepo); err != nil {
+				return err
 			}
 		}
 

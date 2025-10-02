@@ -97,32 +97,6 @@ func TestDev_CustomName(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestDev_NoUpstream_CustomName tests creating a new dev branch when it doesn't exist
-func TestDev_NoUpstream_CustomName(t *testing.T) {
-	require := require.New(t)
-
-	testConfig := &systrun.TestConfig{
-		TestID:   strings.ToLower(t.Name()),
-		GHConfig: getGithubConfig(t),
-		CommandConfig: &systrun.CommandConfig{
-			Command: "dev",
-			Args:    []string{"--no-fork"},
-			Stdin:   "y",
-		},
-		ClipboardContent: systrun.ClipboardContentCustom,
-		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateNull,
-		Expectations: []systrun.ExpectationFunc{
-			systrun.ExpectationCustomBranchIsCurrentBranch,
-			systrun.ExpectationLargeFileHooksInstalled,
-		},
-	}
-
-	sysTest := systrun.New(t, testConfig)
-	err := sysTest.Run()
-	require.NoError(err)
-}
-
 // TestDevExistingBranch tests behavior when dev branch already exists
 func TestDev_ExistingBranch(t *testing.T) {
 	require := require.New(t)
@@ -150,8 +124,33 @@ func TestDev_ExistingBranch(t *testing.T) {
 	require.Error(err)
 }
 
-// TestDevNoForkExistingIssue tests creating a dev branch when upstream remote doesn't exist
-func TestDev_NoFork_ExistingIssue(t *testing.T) {
+// TestDev_ExistingBranch_NoUpstream tests behavior when dev branch already exists
+func TestDev_ExistingBranch_NoUpstream(t *testing.T) {
+	require := require.New(t)
+
+	branchName := "branch-name"
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{branchName},
+			Stdin:   "y",
+		},
+		UpstreamState: systrun.RemoteStateOK,
+		BranchState: &systrun.BranchState{
+			DevBranchExists: true,
+		},
+		ExpectedStderr: fmt.Sprintf("dev branch %s-dev already exists", branchName),
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+
+	require.Error(err)
+}
+
+func TestDev_GitHubIssue_NoUpstream(t *testing.T) {
 	require := require.New(t)
 
 	ghConfig := getGithubConfig(t)
@@ -161,7 +160,6 @@ func TestDev_NoFork_ExistingIssue(t *testing.T) {
 		GHConfig: ghConfig,
 		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
-			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
@@ -204,8 +202,33 @@ func TestPR_FromOtherClone(t *testing.T) {
 	require.NoError(err)
 }
 
-// TestDev_NoFork_NonExistingIssue tests creating a dev branch when upstream remote doesn't exist
-func TestDev_NoFork_NonExistingIssue(t *testing.T) {
+func TestPR_FromOtherClone_NoUpstream(t *testing.T) {
+	require := require.New(t)
+
+	ghConfig := getGithubConfig(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: ghConfig,
+		CommandConfig: &systrun.CommandConfig{
+			Command: "pr",
+		},
+		UpstreamState:          systrun.RemoteStateOK,
+		ClipboardContent:       systrun.ClipboardContentGithubIssue,
+		SyncState:              systrun.SyncStateSynchronized,
+		RunCommandOnOtherClone: true,
+		NeedCollaboration:      true,
+		Expectations:           []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestDev_NonExistingIssue_NoUpstream tests creating a dev branch when upstream remote doesn't exist
+// Auto-detection handles single remote mode (no --no-fork flag needed)
+func TestDev_NonExistingIssue_NoUpstream(t *testing.T) {
 	require := require.New(t)
 
 	ghConfig := getGithubConfig(t)
@@ -214,12 +237,10 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 		GHConfig: ghConfig,
 		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
-			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
 		ClipboardContent: systrun.ClipboardContentUnavailableGithubIssue,
 		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateNull,
 		ExpectedStderr:   "invalid GitHub issue link",
 	}
 
@@ -228,8 +249,7 @@ func TestDev_NoFork_NonExistingIssue(t *testing.T) {
 	require.Error(err)
 }
 
-// TestDevNoForkJiraTicketURL tests creating a dev branch with a valid JIRA ticket URL
-func TestDev_NoFork_JiraTicketURL(t *testing.T) {
+func TestDev_JiraTicketURL_NoUpstream(t *testing.T) {
 	require := require.New(t)
 
 	testConfig := &systrun.TestConfig{
@@ -237,11 +257,9 @@ func TestDev_NoFork_JiraTicketURL(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
-			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
 		UpstreamState:    systrun.RemoteStateOK,
-		ForkState:        systrun.RemoteStateNull,
 		ClipboardContent: systrun.ClipboardContentJiraTicket,
 		Expectations:     []systrun.ExpectationFunc{systrun.ExpectationCurrentBranchHasPrefix},
 	}
@@ -263,6 +281,29 @@ func TestPR_Synchronized(t *testing.T) {
 		},
 		UpstreamState:     systrun.RemoteStateOK,
 		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateSynchronized,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestPR_Synchronized_NoUpstream tests creating a basic PR
+func TestPR_Synchronized_NoUpstream(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "pr",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
 		SyncState:         systrun.SyncStateSynchronized,
 		ClipboardContent:  systrun.ClipboardContentGithubIssue,
 		NeedCollaboration: true,
@@ -308,6 +349,28 @@ func TestPR_ForkChanged(t *testing.T) {
 		},
 		UpstreamState:     systrun.RemoteStateOK,
 		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateForkChanged,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.Error(err)
+}
+
+func TestPR_UpstreamChanged_NoFork(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "pr",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
 		SyncState:         systrun.SyncStateForkChanged,
 		ClipboardContent:  systrun.ClipboardContentGithubIssue,
 		NeedCollaboration: true,
@@ -391,6 +454,7 @@ func TestUpload(t *testing.T) {
 	require.NoError(err)
 }
 
+// TestDevD_DevBranch_NoRT_NoPR - develop branch exists, no remote tracking branch, no pull request
 func TestDevD_DevBranch_NoRT_NoPR(t *testing.T) {
 	require := require.New(t)
 
@@ -402,7 +466,7 @@ func TestDevD_DevBranch_NoRT_NoPR(t *testing.T) {
 			Args:    []string{"-d"},
 			Stdin:   "y",
 		},
-		ForkState: systrun.RemoteStateOK,
+		UpstreamState: systrun.RemoteStateOK,
 		BranchState: &systrun.BranchState{
 			DevBranchExists: true,
 		},
@@ -429,7 +493,7 @@ func TestDevD_DevBranch_RT_NoPR(t *testing.T) {
 			Args:    []string{"-d"},
 			Stdin:   "y",
 		},
-		ForkState: systrun.RemoteStateOK,
+		UpstreamState: systrun.RemoteStateOK,
 		BranchState: &systrun.BranchState{
 			DevBranchExists:      true,
 			DevBranchHasRtBranch: true,
@@ -747,7 +811,6 @@ func TestLargeFileHook(t *testing.T) {
 		GHConfig: getGithubConfig(t),
 		CommandConfig: &systrun.CommandConfig{
 			Command: "dev",
-			Args:    []string{"--no-fork"},
 			Stdin:   "y",
 		},
 		UpstreamState:     systrun.RemoteStateOK,
@@ -758,6 +821,55 @@ func TestLargeFileHook(t *testing.T) {
 			systrun.ExpectationBranchLinkedToIssue,
 			systrun.ExpectationLargeFileHooksInstalled,
 			systrun.ExpectationLargeFileHookFunctional,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestPR_FromJiraTicket_NoUpstream tests creating a PR in single remote mode
+// with automatic workflow detection
+func TestPR_FromJiraTicket_NoUpstream(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "pr",
+		},
+		ClipboardContent:  systrun.ClipboardContentJiraTicket,
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
+		SyncState:         systrun.SyncStateSynchronized,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestDev_CustomName_NoUpstream tests creating a dev branch in single remote mode
+// with automatic workflow detection
+func TestDev_CustomName_NoUpstream(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Stdin:   "y",
+		},
+		ClipboardContent: systrun.ClipboardContentCustom,
+		UpstreamState:    systrun.RemoteStateOK,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationCustomBranchIsCurrentBranch,
+			systrun.ExpectationLargeFileHooksInstalled,
 		},
 	}
 

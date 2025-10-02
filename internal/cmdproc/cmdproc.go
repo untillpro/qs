@@ -150,7 +150,6 @@ func devCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	}
 	cmd.Flags().BoolP(devDelParamFull, devDelParam, false, devDelMsgComment)
 	cmd.Flags().BoolP(ignorehookDelParamFull, ignorehookDelParam, false, devIgnoreHookMsgComment)
-	cmd.Flags().BoolP(noForkParamFull, noForkParam, false, devNoForkMsgComment)
 
 	return cmd
 }

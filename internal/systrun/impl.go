@@ -167,23 +167,8 @@ func (st *SystemTest) createAnotherClone() error {
 		return fmt.Errorf("failed to get oririn remote URL: %w", err)
 	}
 
-	remoteUpstreamURL, err := gitcmds.GetRemoteUrlByName(st.cloneRepoPath, upstream)
-	if err != nil {
-		if !strings.Contains(err.Error(), "not found") {
-			remoteUpstreamURL = ""
-		}
-
-		return fmt.Errorf("failed to get upstream remote URL: %w", err)
-	}
-
 	// extract account, repo and token from remote url
-	forkAccount, _, forkToken, err := gitcmds.ParseGitRemoteURL(remoteOriginURL)
-	if err != nil {
-		return err
-	}
-
-	// extract account, repo and token from remote url
-	upstreamAccount, repo, upstreamToken, err := gitcmds.ParseGitRemoteURL(remoteUpstreamURL)
+	forkAccount, repo, forkToken, err := gitcmds.ParseGitRemoteURL(remoteOriginURL)
 	if err != nil {
 		return err
 	}
@@ -207,16 +192,33 @@ func (st *SystemTest) createAnotherClone() error {
 		return fmt.Errorf("failed to clone repository: %w, output: %s", err, output)
 	}
 
-	// Step 3.1: Configure remotes in temp clone
-	if err := gitcmds.CreateRemote(
-		st.anotherCloneRepoPath,
-		upstream,
-		upstreamAccount,
-		upstreamToken,
-		repo,
-		true,
-	); err != nil {
-		return err
+	// Step 3.1: Configure upstream remote in temp clone if needed
+	if !st.cfg.NoUpstream() {
+		remoteUpstreamURL, err := gitcmds.GetRemoteUrlByName(st.cloneRepoPath, upstream)
+		if err != nil {
+			if !strings.Contains(err.Error(), "not found") {
+				remoteUpstreamURL = ""
+			}
+
+			return fmt.Errorf("failed to get upstream remote URL: %w", err)
+		}
+
+		// extract account, repo and token from remote url
+		upstreamAccount, repo, upstreamToken, err := gitcmds.ParseGitRemoteURL(remoteUpstreamURL)
+		if err != nil {
+			return err
+		}
+
+		if err := gitcmds.CreateRemote(
+			st.anotherCloneRepoPath,
+			upstream,
+			upstreamAccount,
+			upstreamToken,
+			repo,
+			true,
+		); err != nil {
+			return err
+		}
 	}
 
 	if err := gitcmds.CreateRemote(
@@ -1009,18 +1011,10 @@ func (st *SystemTest) setSyncState(
 		return err
 	}
 
-	parentRepo, err := gitcmds.GetParentRepoName(st.cloneRepoPath)
-	if err != nil {
-		return err
-	}
-
-	args := []string{}
-	if len(parentRepo) == 0 {
-		args = append(args, "--no-fork")
-	}
+	// No need to pass --no-fork flag anymore - auto-detection handles it
 	stdout, stderr, err := st.runCommand(&CommandConfig{
 		Command: "dev",
-		Args:    args,
+		Args:    []string{},
 		Stdin:   "y",
 	})
 	if err != nil {

@@ -33,13 +33,13 @@ type SyncState int
 type ClipboardContentType int
 
 const (
+	// RemoteStateNull means that the remote of the clone repo is null
+	RemoteStateNull RemoteState = iota
 	// RemoteStateOK means that remote of the clone repo is configured correctly
-	RemoteStateOK RemoteState = iota
+	RemoteStateOK
 	// RemoteStateMisconfigured means that the remote of the clone repo is not configured correctly,
 	// e.g. `qs u` should fail on permission error on `git push` (now it does not fail)
 	RemoteStateMisconfigured
-	// RemoteStateNull means that the remote of the clone repo is null
-	RemoteStateNull
 )
 
 const (

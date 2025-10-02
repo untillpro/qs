@@ -7,7 +7,6 @@ const (
 	pushYes     = "y"
 
 	devDelParamFull = "delete"
-	noForkParamFull = "no-fork"
 
 	devConfirm = "Dev branch '$reponame' will be created. Continue(y/n)? "
 
