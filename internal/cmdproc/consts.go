@@ -1,7 +1,7 @@
 package cmdproc
 
 const (
-	msgOkSeeYou       = "Ok, see you"
+	msgOkSeeYou      = "Ok, see you"
 	pushParamDesc    = "Upload sources to repo"
 	pushMessageWord  = "message"
 	pushMessageParam = "m"
@@ -22,14 +22,11 @@ const (
 	ignorehookDelParamFull = "ignore-hook"
 	prdraftParam           = "d"
 	prdraftParamFull       = "draft"
-	noForkParam            = "n"
-	noForkParamFull        = "no-fork"
 
 	prParamDesc = "Make pull request"
 
 	devDelMsgComment        = "Deletes all merged branches from forked repository"
 	devIgnoreHookMsgComment = "Ignore creating local hook"
-	devNoForkMsgComment     = "Allows to create branch in main repo"
 	prdraftMsgComment       = "Create draft of pull request"
 	devParamDesc            = "Create developer branch"
 	upgradeParamDesc        = "Print command to upgrade qs"

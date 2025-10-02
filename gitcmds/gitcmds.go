@@ -1595,20 +1595,24 @@ func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber 
 
 // SyncMainBranch syncs the local main branch with upstream and origin
 // Flow:
-// 1. Pull from UpstreamMain to MainBranch with rebase
-// 2. If upstream exists
-// - Pull from origin to MainBranch with rebase
-// - Push to origin from MainBranch
+// 1. If upstream exists: Pull from upstream/main to main with rebase
+// 2. Pull from origin/main to main with rebase
+// 3. Push to origin/main
+// In single remote mode (no upstream), only syncs with origin
 func SyncMainBranch(wd string) error {
 	mainBranch, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
-	// Pull from UpstreamMain to MainBranch with rebase
-	remoteUpstreamURL := GetRemoteUpstreamURL(wd)
+	// Check if upstream remote exists
+	upstreamExists, err := HasRemote(wd, "upstream")
+	if err != nil {
+		return fmt.Errorf("failed to check if upstream exists: %w", err)
+	}
 
-	if len(remoteUpstreamURL) > 0 {
+	// Pull from upstream/main if upstream exists (fork workflow)
+	if upstreamExists {
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, pull, "--rebase", "upstream", mainBranch, "--no-edit").
 			WorkingDir(wd).
@@ -2350,13 +2354,23 @@ func createPR(
 
 	repo := parentRepoName
 	if len(repo) == 0 {
+		// Single remote mode: no parent repo, PR to same repo
 		repo = forkAccount + slash + repoName
+	}
+
+	// Determine the head reference for the PR
+	// In fork mode: use "forkAccount:branchName" format
+	// In single remote mode: use just "branchName" format
+	headRef := prBranchName
+	if len(parentRepoName) > 0 {
+		// Fork mode: specify the fork account
+		headRef = forkAccount + ":" + prBranchName
 	}
 
 	args := []string{
 		"pr",
 		"create",
-		fmt.Sprintf(`--head=%s`, forkAccount+":"+prBranchName),
+		fmt.Sprintf(`--head=%s`, headRef),
 		fmt.Sprintf(`--repo=%s`, repo),
 		fmt.Sprintf(`--body=%s`, strings.TrimSpace(strBody)),
 		fmt.Sprintf(`--title=%s`, strings.TrimSpace(prTitle)),
@@ -2796,6 +2810,23 @@ func HasRemote(wd, remoteName string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// GetEffectiveUpstreamRemote returns the remote to use as upstream.
+// If 'upstream' remote exists, returns "upstream".
+// Otherwise, returns "origin" (single remote mode).
+// This allows qs to work in both fork and non-fork workflows.
+func GetEffectiveUpstreamRemote(wd string) (string, error) {
+	upstreamExists, err := HasRemote(wd, "upstream")
+	if err != nil {
+		return "", err
+	}
+
+	if upstreamExists {
+		return "upstream", nil
+	}
+
+	return "origin", nil
 }
 
 func GawkInstalled() bool {

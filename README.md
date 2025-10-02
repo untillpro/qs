@@ -40,23 +40,24 @@ go install github.com/untillpro/qs@latest
 
 ## Quick Start
 
+`qs` automatically detects your workflow mode:
+- **Single Remote Mode**: When you have direct push access (no upstream remote)
+- **Fork Mode**: When contributing to external projects (with upstream remote)
+
 ```bash
-# Initialize a forked workflow
+# For repositories with direct access (single remote mode)
+qs dev "feature-name"      # Create branch - no fork needed!
+qs u -m "commit message"   # Upload changes
+qs pr                      # Create PR to same repository
+
+# For external projects (fork mode)
 qs fork                    # Fork repository and configure remotes
+qs dev "feature-name"      # Create branch in your fork
+qs u -m "commit message"   # Upload changes
+qs pr                      # Create PR to upstream
 
-# Create a development branch
-qs dev                     # Create branch from clipboard content
-qs dev "feature-name"      # Create branch with specific name
-
-# Work with changes
-qs u -m "commit message"   # Upload changes (add + commit + push)
+# Common commands (work in both modes)
 qs d                       # Download changes (smart sync)
-
-# Create pull request
-qs pr                      # Create PR from current branch
-qs pr -d                   # Create draft PR
-
-# Check status
 qs                         # Show repository status
 ```
 
@@ -82,10 +83,12 @@ qs fork                    # Fork repository to your account and configure upstr
 #### Branch Operations
 ```bash
 qs dev [branch-name]       # Create development branch
+                          # - Auto-detects workflow mode (fork vs single remote)
                           # - Auto-detects branch name from clipboard
                           # - Supports GitHub issue URLs
                           # - Supports Jira ticket URLs
                           # - Links branch to issues automatically
+                          # - Works with or without upstream remote
 
 qs dev -d                  # Delete merged development branches
                           # - Removes local and remote branches
@@ -93,7 +96,6 @@ qs dev -d                  # Delete merged development branches
                           # - Cleans up tracking references
 
 qs dev -i, --ignore-hook   # Create branch without large file hooks
-qs dev -n, --no-fork       # Create branch in main repo (no fork required)
 ```
 
 #### Sync Operations
@@ -239,7 +241,34 @@ export JIRA_API_TOKEN="your-jira-api-token"
 
 ## Workflow Examples
 
-### Standard Fork Workflow
+### Single Remote Workflow (Direct Repository Access)
+For repositories where you have direct push access and don't need a fork:
+
+```bash
+# 1. Clone and work directly
+git clone https://github.com/your-org/your-repo.git
+cd your-repo
+
+# 2. Create feature branch (no fork needed!)
+qs dev "feature-awesome-feature"
+# qs automatically detects single remote mode
+
+# 3. Make changes and upload
+# ... edit files ...
+qs u -m "Add awesome feature"
+
+# 4. Create pull request to the same repository
+qs pr
+
+# 5. Clean up after merge
+qs dev -d
+```
+
+**Note**: `qs` automatically detects single remote mode when you don't have an upstream remote and works seamlessly with just the `origin` remote.
+
+### Fork Workflow (Contributing to External Projects)
+For contributing to repositories you don't have direct access to:
+
 ```bash
 # 1. Fork and setup
 git clone https://github.com/original/repo.git
@@ -253,7 +282,7 @@ qs dev "feature-awesome-feature"
 # ... edit files ...
 qs u -m "Add awesome feature"
 
-# 4. Create pull request
+# 4. Create pull request to upstream
 qs pr
 
 # 5. Clean up after merge

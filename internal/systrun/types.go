@@ -80,6 +80,10 @@ type Expectation int
 
 type ExpectationFunc func(_ context.Context) error
 
+func (cfg *TestConfig) NoUpstream() bool {
+	return cfg.UpstreamState == RemoteStateOK && cfg.ForkState == RemoteStateNull
+}
+
 // ExpectationCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
 func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
 	currentBranch, err := gitcmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
