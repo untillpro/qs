@@ -44,7 +44,7 @@ func GetJiraBranchName(args ...string) (branch string, comments []string, err er
 		jiraTicketID, ok := GetJiraTicketIDFromArgs(arg)
 		if ok {
 			var brName string
-			issueName, err := GetJiraIssueName("", jiraTicketID)
+			issueName, _, err := GetJiraIssueName("", jiraTicketID)
 			if err != nil {
 				return "", nil, err
 			}
@@ -82,13 +82,13 @@ func GetJiraBranchName(args ...string) (branch string, comments []string, err er
 // parameters:
 // - ticketURL: The URL of the JIRA ticket (optional).
 // - ticketID: The ID of the JIRA ticket (optional).
-func GetJiraIssueName(ticketURL, ticketID string) (name string, err error) {
+func GetJiraIssueName(ticketURL, ticketID string) (string, string, error) {
 	// Validate the issue key
 	if ticketID == "" {
 		var ok bool
 		ticketID, ok = GetJiraTicketIDFromArgs(ticketURL)
 		if !ok {
-			return "", errors.New("error: ticketID or ticketURL is required")
+			return "", ticketID, errors.New("error: ticketID or ticketURL is required")
 		}
 	}
 
@@ -101,18 +101,22 @@ func GetJiraIssueName(ticketURL, ticketID string) (name string, err error) {
 		fmt.Println("          https://id.atlassian.com/manage-profile/security/api-tokens           ")
 		fmt.Println("--------------------------------------------------------------------------------")
 
-		return "", errors.New("error: JIRA API token not found")
+		return "", ticketID, errors.New("error: JIRA API token not found")
 	}
-	var email string
+	var (
+		email string
+		err   error
+	)
+
 	email = os.Getenv("JIRA_EMAIL")
 	if email == "" {
 		email, err = helper.GetUserEmail() // Replace with your email
-	}
-	if err != nil {
-		return "", err
+		if err != nil {
+			return "", ticketID, err
+		}
 	}
 	if email == "" {
-		return "", errors.New("error: please export JIRA_EMAIL")
+		return "", ticketID, errors.New("error: please export JIRA_EMAIL")
 	}
 	fmt.Println("User email: ", email)
 
@@ -122,7 +126,7 @@ func GetJiraIssueName(ticketURL, ticketID string) (name string, err error) {
 	// Create HTTP client and request
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", err
+		return "", ticketID, err
 	}
 	req.SetBasicAuth(email, apiToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -130,18 +134,18 @@ func GetJiraIssueName(ticketURL, ticketID string) (name string, err error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", ticketID, err
 	}
 	defer resp.Body.Close()
 
 	// Read and parse the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", ticketID, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", err
+		return "", ticketID, err
 	}
 
 	var result struct {
@@ -150,13 +154,13 @@ func GetJiraIssueName(ticketURL, ticketID string) (name string, err error) {
 		} `json:"fields"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("error parsing JSON response: %w", err)
+		return "", ticketID, fmt.Errorf("error parsing JSON response: %w", err)
 	}
 
 	// Check if the summary field exists
 	if result.Fields.Summary == "" {
-		return "", nil
+		return "", ticketID, nil
 	}
 
-	return result.Fields.Summary, nil
+	return result.Fields.Summary, ticketID, nil
 }

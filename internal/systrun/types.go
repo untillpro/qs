@@ -16,7 +16,6 @@ import (
 	"github.com/untillpro/qs/gitcmds"
 	contextCfg "github.com/untillpro/qs/internal/context"
 	"github.com/untillpro/qs/internal/helper"
-	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 )
 
@@ -497,18 +496,9 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 
 	// extract expected PR title from GitHub issue or JIRA ticket
-	var expectedPRTitle string
-	if notesObj.GithubIssueURL != "" {
-		expectedPRTitle, err = gitcmds.GetIssueDescription(notesObj.GithubIssueURL)
-		if err != nil {
-			return err
-		}
-	}
-	if notesObj.JiraTicketURL != "" {
-		expectedPRTitle, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
-		if err != nil {
-			return err
-		}
+	expectedPRTitle, err := gitcmds.GetIssueDescription(notes)
+	if err != nil {
+		return err
 	}
 
 	// check actual PR title with expected one
