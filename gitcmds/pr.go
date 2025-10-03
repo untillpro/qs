@@ -55,7 +55,7 @@ func Pr(wd string, needDraft bool) error {
 		return err
 	}
 
-	issueDescription, err := getIssueDescription(notes)
+	issueDescription, err := GetIssueDescription(notes)
 	if err != nil {
 		return err
 	}
@@ -526,8 +526,8 @@ func createPRBranch(wd, devBranchName, issueDescription string) (string, error) 
 	return prBranchName, nil
 }
 
-// GetIssueDescription retrieves the title and body of a GitHub issue from its URL.
-func GetIssueDescription(issueURL string) (string, error) {
+// GetGitHubIssueDescription retrieves the title and body of a GitHub issue from its URL.
+func GetGitHubIssueDescription(issueURL string) (string, error) {
 	// Extract issue number from URL
 	parts := strings.Split(issueURL, "/")
 	if len(parts) < 1 {

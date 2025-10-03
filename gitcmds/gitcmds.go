@@ -3060,7 +3060,7 @@ func printLn(stdout string) {
 	}
 }
 
-func getIssueDescription(notes []string) (string, error) {
+func GetIssueDescription(notes []string) (string, error) {
 	var (
 		description string
 		err         error
@@ -3077,9 +3077,15 @@ func getIssueDescription(notes []string) (string, error) {
 
 	switch {
 	case len(notesObj.GithubIssueURL) > 0:
-		description, err = GetIssueDescription(notesObj.GithubIssueURL)
+		description, err = GetGitHubIssueDescription(notesObj.GithubIssueURL)
 	case len(notesObj.JiraTicketURL) > 0:
-		description, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
+		var jiraTicketID string
+		description, jiraTicketID, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
+		if err != nil {
+			return "", err
+		}
+
+		description = "[" + jiraTicketID + "] " + description
 	}
 	if err != nil {
 		return "", fmt.Errorf("error retrieving issue description: %w", err)
