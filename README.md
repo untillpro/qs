@@ -193,6 +193,10 @@ Automatic pre-commit hooks prevent large commits:
 - **Number of files**: 200 files maximum
 - **File exclusions**: Files with `.wasm` extension are excluded from size calculations
 
+Skip size check:
+
+ - `git commit -n -m "<message>"`
+
 ### Commit Message Validation
 - Minimum commit message length: 8 characters
 - Interactive prompts for short messages on main/master branches
