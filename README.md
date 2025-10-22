@@ -339,6 +339,16 @@ See [design-systests.md](design-systests.md) for detailed system test documentat
 
 ## Troubleshooting
 
+### git issues with rebase and merge
+
+If upstream exists then it must be the source of truth. Fundamental decision for merging problems:
+
+```bash
+$ git checkout main
+$ git reset --hard upstream/main
+$ git push origin main --force
+```
+
 ### Common Issues
 
 #### Prerequisites Missing
