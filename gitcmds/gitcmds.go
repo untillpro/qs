@@ -1618,6 +1618,9 @@ func SyncMainBranch(wd string) error {
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
+			if err := showWorkaroundIfConflict(wd, mainBranch, stderr); err != nil {
+				return err
+			}
 			logger.Verbose(stderr)
 
 			if len(stderr) > 0 {
@@ -1635,6 +1638,9 @@ func SyncMainBranch(wd string) error {
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
+		if err := showWorkaroundIfConflict(wd, mainBranch, stderr); err != nil {
+			return err
+		}
 		logger.Verbose(stderr)
 
 		if len(stderr) > 0 {
@@ -1667,6 +1673,24 @@ func SyncMainBranch(wd string) error {
 	logger.Verbose(stdout)
 
 	return err
+}
+
+// showWorkaroundIfConflict shows workaround instructions in case of merge conflict during rebase
+func showWorkaroundIfConflict(wd, mainBranch, stderr string) error {
+	if strings.Contains(stderr, "could not apply") {
+		// Abort the rebase
+		_, _, _ = new(exec.PipedExec).
+			Command("git", "rebase", "--abort").
+			WorkingDir(wd).RunToStrings()
+		// Provide instructions to reset and force-push
+		fmt.Printf("A conflict is detected in %s branch. To resolve the conflict, run the following commands to reset your %s branch to match upstream/%s and force-push the changes to your fork:\n\n", mainBranch, mainBranch, mainBranch)
+		fmt.Print("git checkout main\ngit fetch upstream\ngit reset --hard upstream/main\ngit push origin main --force\n\n")
+		fmt.Print("Warning: This will overwrite your main branch on origin with the state of upstream/main, discarding any local or remote changes that diverge from upstream. Make sure you have backed up any important work before proceeding.\n\n")
+
+		return fmt.Errorf("unable to rebase on upstream/%s", mainBranch)
+	}
+
+	return nil
 }
 
 // GetBranchTypeByName returns branch type based on branch name
