@@ -973,6 +973,8 @@ func (st *SystemTest) processSyncState() error {
 			false,
 			"",
 		)
+	case SyncStateMainBranchConflict:
+		return st.setMainBranchConflict()
 	default:
 		return fmt.Errorf("not supported yet sync state: %s", st.cfg.SyncState)
 	}
@@ -1085,6 +1087,97 @@ func (st *SystemTest) setSyncState(
 
 	if helper.IsTest() {
 		helper.Delay()
+	}
+
+	return nil
+}
+
+// setMainBranchConflict creates a conflict scenario in the main branch
+// This simulates the case where the fork's main branch has diverged from upstream/main
+// and cannot be rebased cleanly (AIR-1959)
+func (st *SystemTest) setMainBranchConflict() error {
+	mainBranch, err := gitcmds.GetMainBranch(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch: %w", err)
+	}
+
+	// Step 1: Make a conflicting change in upstream/main
+	// We'll modify the same file in both upstream and fork to create a conflict
+	upstreamRepoPath, err := os.MkdirTemp("", "qs-test-upstream-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp upstream path: %w", err)
+	}
+	defer os.RemoveAll(upstreamRepoPath)
+
+	// Clone upstream repo
+	upstreamURL := gitcmds.BuildRemoteURL(
+		st.cfg.GHConfig.UpstreamAccount,
+		st.cfg.GHConfig.UpstreamToken,
+		st.repoName,
+		true,
+	)
+	cloneCmd := exec.Command(git, "clone", upstreamURL, upstreamRepoPath)
+	cloneCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.UpstreamToken))
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to clone upstream repo: %w, output: %s", err, output)
+	}
+
+	// Make a change in upstream/main
+	conflictFilePath := filepath.Join(upstreamRepoPath, "conflict.txt")
+	if err := os.WriteFile(conflictFilePath, []byte("Upstream version of conflict file\n"), commitFilePerm); err != nil {
+		return fmt.Errorf("failed to create conflict file in upstream: %w", err)
+	}
+
+	addCmd := exec.Command(git, "-C", upstreamRepoPath, "add", "conflict.txt")
+	if err := addCmd.Run(); err != nil {
+		return fmt.Errorf("failed to add conflict file in upstream: %w", err)
+	}
+
+	commitCmd := exec.Command(git, "-C", upstreamRepoPath, "commit", "-m", "Upstream change to conflict.txt")
+	if err := commitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit in upstream: %w", err)
+	}
+
+	pushCmd := exec.Command(git, "-C", upstreamRepoPath, "push", "origin", mainBranch)
+	pushCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.UpstreamToken))
+	if output, err := pushCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push to upstream: %w, output: %s", err, output)
+	}
+
+	// Step 2: Make a conflicting change in fork/main (in the local clone)
+	// First, ensure we're on the main branch
+	if err := checkoutOnBranch(st.cloneRepoPath, mainBranch); err != nil {
+		return err
+	}
+
+	// Create a conflicting change in the same file
+	conflictFilePathFork := filepath.Join(st.cloneRepoPath, "conflict.txt")
+	if err := os.WriteFile(conflictFilePathFork, []byte("Fork version of conflict file\n"), commitFilePerm); err != nil {
+		return fmt.Errorf("failed to create conflict file in fork: %w", err)
+	}
+
+	addCmdFork := exec.Command(git, "-C", st.cloneRepoPath, "add", "conflict.txt")
+	if err := addCmdFork.Run(); err != nil {
+		return fmt.Errorf("failed to add conflict file in fork: %w", err)
+	}
+
+	commitCmdFork := exec.Command(git, "-C", st.cloneRepoPath, "commit", "-m", "Fork change to conflict.txt")
+	if err := commitCmdFork.Run(); err != nil {
+		return fmt.Errorf("failed to commit in fork: %w", err)
+	}
+
+	// Push to fork/main
+	pushCmdFork := exec.Command(git, "-C", st.cloneRepoPath, "push", "origin", mainBranch)
+	pushCmdFork.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.ForkToken))
+	if output, err := pushCmdFork.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push to fork: %w, output: %s", err, output)
+	}
+
+	// Step 3: Fetch upstream to ensure the conflict will be detected
+	fetchCmd := exec.Command(git, "-C", st.cloneRepoPath, "fetch", "upstream")
+	fetchCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.ForkToken))
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to fetch upstream: %w, output: %s", err, output)
 	}
 
 	return nil

@@ -878,6 +878,41 @@ func TestDev_CustomName_NoUpstream(t *testing.T) {
 	require.NoError(err)
 }
 
+// TestDev_MainBranchConflict tests AIR-1959: handling non-mergeable main branch properly
+// This test verifies that when there's a conflict in the main branch (local main diverged
+// from upstream/main and cannot be rebased), the tool provides a helpful workaround message
+func TestDev_MainBranchConflict(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Stdin:   "y",
+		},
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateMainBranchConflict,
+		NeedCollaboration: true,
+		ExpectedStdout: []string{
+			"A conflict is detected in main branch",
+			"you CAN run the following commands",
+			"git checkout main",
+			"git fetch upstream",
+			"git reset --hard upstream/main",
+			"git push origin main --force",
+			"Warning: This will overwrite your main branch",
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	// The command should fail with an error because of the conflict
+	require.Error(err)
+}
+
 // getGithubConfig retrieves GitHub credentials from environment variables
 // and skips the test if any credentials are missing
 func getGithubConfig(t *testing.T) systrun.GithubConfig {

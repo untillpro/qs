@@ -1683,7 +1683,7 @@ func showWorkaroundIfConflict(wd, mainBranch, stderr string) error {
 			Command("git", "rebase", "--abort").
 			WorkingDir(wd).RunToStrings()
 		// Provide instructions to reset and force-push
-		fmt.Printf("A conflict is detected in %s branch. To resolve the conflict, run the following commands to reset your %s branch to match upstream/%s and force-push the changes to your fork:\n\n", mainBranch, mainBranch, mainBranch)
+		fmt.Printf("A conflict is detected in %s branch. To resolve the conflict, you CAN run the following commands to reset your %s branch to match upstream/%s and force-push the changes to your fork:\n\n", mainBranch, mainBranch, mainBranch)
 		fmt.Print("git checkout main\ngit fetch upstream\ngit reset --hard upstream/main\ngit push origin main --force\n\n")
 		fmt.Print("Warning: This will overwrite your main branch on origin with the state of upstream/main, discarding any local or remote changes that diverge from upstream. Make sure you have backed up any important work before proceeding.\n\n")
 
@@ -1812,9 +1812,7 @@ func isOldStyledBranch(notes []string) bool {
 
 func GetIssueNameByNumber(issueNum string, parentrepo string) (string, error) {
 	stdout, stderr, err := new(exec.PipedExec).
-		Command("gh", "issue", "view", issueNum, "--repo", parentrepo).
-		Command("grep", "title:").
-		Command("gawk", "{ $1=\"\"; print substr($0, 2) }").
+		Command("gh", "issue", "view", issueNum, "--repo", parentrepo, "--json", "title").
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
@@ -1825,7 +1823,17 @@ func GetIssueNameByNumber(issueNum string, parentrepo string) (string, error) {
 
 		return "", fmt.Errorf("failed to get issue name by number: %w", err)
 	}
-	return strings.TrimSpace(stdout), nil
+
+	type issueDetails struct {
+		Title string `json:"title"`
+	}
+
+	var issue issueDetails
+	if err := json.Unmarshal([]byte(stdout), &issue); err != nil {
+		return "", fmt.Errorf("failed to parse issue title JSON: %w", err)
+	}
+
+	return issue.Title, nil
 }
 
 // CreateDevBranch creates dev branch and pushes it to origin
