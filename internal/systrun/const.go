@@ -60,6 +60,8 @@ const (
 	SyncStateDoesntTrackOrigin
 	// SyncStateCloneIsAheadOfFork means that the clone repo is ahead of the fork repo
 	SyncStateCloneIsAheadOfFork
+	// SyncStateMainBranchConflict means that the main branch in fork has diverged from upstream and cannot be rebased
+	SyncStateMainBranchConflict
 )
 
 const (
@@ -114,6 +116,8 @@ func (s SyncState) String() string {
 		return "SyncStateBothChangedConflict"
 	case SyncStateDoesntTrackOrigin:
 		return "SyncStateDoesntTrackOrigin"
+	case SyncStateMainBranchConflict:
+		return "SyncStateMainBranchConflict"
 	default:
 		return "unknown"
 	}

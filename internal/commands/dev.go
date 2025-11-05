@@ -274,7 +274,7 @@ func argContainsGithubIssueLink(wd string, args ...string) (issueNum int, issueU
 
 func checkIssueLink(wd, issueURL string) error {
 	// This function checks if the provided issueURL is a valid GitHub issue link via `gh issue view`.
-	cmd := exec.Command("gh", "issue", "view", issueURL)
+	cmd := exec.Command("gh", "issue", "view", "--json", "title,state", issueURL)
 	cmd.Dir = wd
 	if _, err := cmd.Output(); err != nil {
 		return fmt.Errorf("failed to check issue link: %w", err)
