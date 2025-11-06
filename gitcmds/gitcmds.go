@@ -3013,9 +3013,9 @@ func GetCurrentBranchName(wd string) (string, error) {
 
 // createRemote creates a remote in the cloned repository
 func CreateRemote(wd, remote, account, token, repoName string, isUpstream bool) error {
-	repo, err := goGitPkg.PlainOpen(wd)
+	repo, err := OpenGitRepository(wd)
 	if err != nil {
-		return fmt.Errorf("failed to open cloned repository: %w", err)
+		return err
 	}
 
 	if err = repo.DeleteRemote(remote); err != nil {
@@ -3064,9 +3064,9 @@ func IamInMainBranch(wd string) (string, bool, error) {
 
 // GetRemoteUrlByName retrieves the URL of a specified remote by its name
 func GetRemoteUrlByName(wd string, remoteName string) (string, error) {
-	repo, err := goGitPkg.PlainOpen(wd)
+	repo, err := OpenGitRepository(wd)
 	if err != nil {
-		return "", fmt.Errorf("failed to open repository: %w", err)
+		return "", err
 	}
 
 	remotes, err := repo.Remotes()
@@ -3124,4 +3124,18 @@ func GetIssueDescription(notes []string) (string, error) {
 	}
 
 	return description, nil
+}
+
+// OpenGitRepository opens a git repository at the specified directory
+func OpenGitRepository(dir string) (*goGitPkg.Repository, error) {
+	repo, err := goGitPkg.PlainOpen(dir)
+	if err != nil {
+		if errors.Is(err, goGitPkg.ErrRepositoryNotExists) {
+			return nil, errors.New("no .git directory found; please run this command inside a git repository")
+		}
+
+		return nil, fmt.Errorf("failed to open git repository: %w", err)
+	}
+
+	return repo, nil
 }
