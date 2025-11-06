@@ -9,7 +9,6 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/fatih/color"
-	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
@@ -193,9 +192,9 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 
 // branchExists checks if a branch with the given name already exists in the current git repository.
 func branchExists(wd, branchName string) (bool, error) {
-	repo, err := gitPkg.PlainOpen(wd)
+	repo, err := gitcmds.OpenGitRepository(wd)
 	if err != nil {
-		return false, fmt.Errorf("failed to open cloned repository: %w", err)
+		return false, err
 	}
 
 	branches, err := repo.Branches()

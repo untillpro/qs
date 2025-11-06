@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	goUtilsExec "github.com/untillpro/goutils/exec"
 	"github.com/untillpro/qs/gitcmds"
@@ -101,9 +100,9 @@ func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
 // ExpectationCloneIsSyncedWithFork checks if the clone is synchronized with the fork
 func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 	// Compare local and remote branches to ensure they're in sync
-	repo, err := gitPkg.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitcmds.OpenGitRepository(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
-		return fmt.Errorf(errFormatFailedToCloneRepos, err)
+		return err
 	}
 
 	// Get the current branch
@@ -139,9 +138,9 @@ func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 func ExpectationForkExists(ctx context.Context) error {
 	// Implement the logic to check if the fork exists
 	// get remotes of the local repo and check if remote, called origin, exists
-	repo, err := gitPkg.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitcmds.OpenGitRepository(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
-		return fmt.Errorf(errFormatFailedToCloneRepos, err)
+		return err
 	}
 
 	// Check if the remote named "origin" exists
@@ -284,9 +283,9 @@ func ExpectationLargeFileHookFunctional(ctx context.Context) error {
 // ExpectationCurrentBranchHasPrefix checks if the current branch has the expected prefix
 func ExpectationCurrentBranchHasPrefix(ctx context.Context) error {
 	// Open the repository
-	repo, err := gitPkg.PlainOpen(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitcmds.OpenGitRepository(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
 	if err != nil {
-		return fmt.Errorf(errFormatFailedToCloneRepos, err)
+		return err
 	}
 
 	// Get the current branch
@@ -335,9 +334,9 @@ func ExpectationPRCreated(ctx context.Context) error {
 	}
 
 	// Open the repository
-	repo, err := gitPkg.PlainOpen(cloneRepoPath)
+	repo, err := gitcmds.OpenGitRepository(cloneRepoPath)
 	if err != nil {
-		return fmt.Errorf(errFormatFailedToCloneRepos, err)
+		return err
 	}
 
 	// Check if PR branch exists locally

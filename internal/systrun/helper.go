@@ -5,14 +5,14 @@ import (
 	"regexp"
 	"strings"
 
-	gitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/untillpro/qs/gitcmds"
 )
 
 func findBranchNameWithPrefix(repoPath, prefix string) (string, error) {
-	repo, err := gitPkg.PlainOpen(repoPath)
+	repo, err := gitcmds.OpenGitRepository(repoPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open cloned repository: %w", err)
+		return "", err
 	}
 
 	branches, err := repo.Branches()
@@ -47,9 +47,9 @@ func parseGithubIssueURL(issueURL string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("invalid GitHub issue URL format: %s", issueURL)
 	}
 
-	repoOwner := matches[1]//nolint:revive
-	repoName := matches[2]//nolint:revive
-	issueNum := matches[3]//nolint:revive
+	repoOwner := matches[1] //nolint:revive
+	repoName := matches[2]  //nolint:revive
+	issueNum := matches[3]  //nolint:revive
 
 	return repoOwner, repoName, issueNum, nil
 }
