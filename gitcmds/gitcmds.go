@@ -3128,7 +3128,9 @@ func GetIssueDescription(notes []string) (string, error) {
 
 // OpenGitRepository opens a git repository at the specified directory
 func OpenGitRepository(dir string) (*goGitPkg.Repository, error) {
-	repo, err := goGitPkg.PlainOpen(dir)
+	repo, err := goGitPkg.PlainOpenWithOptions(dir, &goGitPkg.PlainOpenOptions{
+		DetectDotGit: true,
+	})
 	if err != nil {
 		if errors.Is(err, goGitPkg.ErrRepositoryNotExists) {
 			return nil, errors.New("no .git directory found; please run this command inside a git repository")
