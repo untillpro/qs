@@ -11,12 +11,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: 1.17
+    
+    - name: Checkout and Setup go
+      uses: untillpro/ci-action/checkout-and-setup-go@main
 
     - name: Build
       run: go build -v ./...

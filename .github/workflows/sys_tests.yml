@@ -26,16 +26,9 @@ jobs:
         os: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.platform != 'all' && fromJSON(format('["{0}"]', github.event.inputs.platform)) || fromJSON('["windows-latest", "ubuntu-latest", "macos-latest"]') }}
       max-parallel: 1
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.24.2'
-          check-latest: false
+      - name: Checkout and Setup go
+        uses: untillpro/ci-action/checkout-and-setup-go@main
 
       - name: Install dependencies
         run: go mod download
