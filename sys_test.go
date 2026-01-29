@@ -915,6 +915,31 @@ func TestDev_MainBranchConflict(t *testing.T) {
 
 // getGithubConfig retrieves GitHub credentials from environment variables
 // and skips the test if any credentials are missing
+// TestQS_FilesWithSpaces tests that qs can handle files with spaces in their names
+func TestQS_FilesWithSpaces(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateUnspecified,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationFilesWithSpacesHandled,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
 func getGithubConfig(t *testing.T) systrun.GithubConfig {
 	upstreamAccount := os.Getenv(systrun.EnvUpstreamGithubAccount)
 	upstreamToken := os.Getenv(systrun.EnvUpstreamGithubToken)
