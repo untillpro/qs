@@ -260,6 +260,9 @@ func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
 		statusCode := strings.TrimSpace(line[:2])
 		name := strings.TrimSpace(line[2:])
 
+		// Unquote Git filenames (Git quotes filenames with spaces and special characters)
+		name = unquoteGitFilename(name)
+
 		oldName := name
 		if name == "" {
 			continue // Skip empty filenames

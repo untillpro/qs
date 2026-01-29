@@ -739,3 +739,46 @@ func ExpectationThreeRemoteBranches(ctx context.Context) error {
 	//nolint:revive
 	return expectationRemoteBranchExists(ctx, 3)
 }
+
+// ExpectationFilesWithSpacesHandled checks that qs can handle files with spaces in their names
+func ExpectationFilesWithSpacesHandled(ctx context.Context) error {
+	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	if cloneRepoPath == "" {
+		return errCloneRepoPathNotFoundInContext
+	}
+
+	// Create a file with spaces in its name
+	fileWithSpaces := "test file with spaces.txt"
+	filePath := filepath.Join(cloneRepoPath, fileWithSpaces)
+	fileContent := "This is a test file with spaces in the name"
+	if err := os.WriteFile(filePath, []byte(fileContent), 0644); err != nil {
+		return fmt.Errorf("failed to create file with spaces: %w", err)
+	}
+
+	// Run git status to ensure the file is detected
+	stdout, stderr, err := new(goUtilsExec.PipedExec).
+		Command(git, "status", "-s", "-b", "-uall").
+		WorkingDir(cloneRepoPath).
+		RunToStrings()
+	if err != nil {
+		return fmt.Errorf("git status failed: %w, stderr: %s", err, stderr)
+	}
+
+	// Check if the file appears in git status output
+	if !strings.Contains(stdout, fileWithSpaces) {
+		return fmt.Errorf("file with spaces '%s' not found in git status output", fileWithSpaces)
+	}
+
+	// Now run qs command (empty command = status) to ensure it doesn't fail
+	// This will call gitcmds.Status which internally calls getListOfChangedFiles
+	if err := gitcmds.Status(cloneRepoPath); err != nil {
+		return fmt.Errorf("qs status failed with file with spaces: %w", err)
+	}
+
+	// Clean up the test file
+	if err := os.Remove(filePath); err != nil {
+		return fmt.Errorf("failed to remove test file: %w", err)
+	}
+
+	return nil
+}
