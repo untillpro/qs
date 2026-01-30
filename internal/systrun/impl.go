@@ -968,7 +968,7 @@ func (st *SystemTest) processSyncState() error {
 		return st.setSyncState(
 			true,
 			true,
-			true,
+			false,
 			2,
 			false,
 			"",
