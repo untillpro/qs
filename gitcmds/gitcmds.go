@@ -611,47 +611,12 @@ func Release(wd string) error {
 }
 
 // Upload uploads sources to git repo
-func Upload(cmd *cobra.Command, wd string) error {
-	commitMessageParts := cmd.Context().Value(contextPkg.CtxKeyCommitMessage).([]string)
+func Upload(cmd *cobra.Command, wd string, needToCommit bool) error {
+	if needToCommit {
+		commitMessageParts := cmd.Context().Value(contextPkg.CtxKeyCommitMessage).([]string)
 
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "add", ".").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return errors.New(stderr)
-		}
-
-		return fmt.Errorf("git add failed: %w", err)
-	}
-	logger.Verbose(stdout)
-
-	params := []string{"commit", "-a"}
-	for _, m := range commitMessageParts {
-		params = append(params, mimm, m)
-	}
-
-	_, stderr, err = new(exec.PipedExec).
-		Command(git, params...).
-		WorkingDir(wd).
-		RunToStrings()
-	if strings.Contains(stderr, MsgPreCommitError) {
-		var response string
-		fmt.Println("")
-		printLn(strings.TrimSpace(stderr))
-		fmt.Print("Do you want to commit anyway(y/n)?")
-		_, _ = fmt.Scanln(&response)
-
-		if response != "y" {
-			return nil
-		}
-
-		params = append(params, "-n")
-		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, params...).
+		stdout, stderr, err := new(exec.PipedExec).
+			Command(git, "add", ".").
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -661,12 +626,49 @@ func Upload(cmd *cobra.Command, wd string) error {
 				return errors.New(stderr)
 			}
 
-			return fmt.Errorf("git commit failed: %w", err)
+			return fmt.Errorf("git add failed: %w", err)
+		}
+		logger.Verbose(stdout)
+
+		params := []string{"commit", "-a"}
+		for _, m := range commitMessageParts {
+			params = append(params, mimm, m)
+		}
+
+		_, stderr, err = new(exec.PipedExec).
+			Command(git, params...).
+			WorkingDir(wd).
+			RunToStrings()
+		if strings.Contains(stderr, MsgPreCommitError) {
+			var response string
+			fmt.Println("")
+			printLn(strings.TrimSpace(stderr))
+			fmt.Print("Do you want to commit anyway(y/n)?")
+			_, _ = fmt.Scanln(&response)
+
+			if response != "y" {
+				return nil
+			}
+
+			params = append(params, "-n")
+			stdout, stderr, err = new(exec.PipedExec).
+				Command(git, params...).
+				WorkingDir(wd).
+				RunToStrings()
+			if err != nil {
+				logger.Verbose(stderr)
+
+				if len(stderr) > 0 {
+					return errors.New(stderr)
+				}
+
+				return fmt.Errorf("git commit failed: %w", err)
+			}
 		}
 	}
 
 	// make pull before push
-	stdout, stderr, err = new(exec.PipedExec).
+	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, pull).
 		WorkingDir(wd).
 		RunToStrings()

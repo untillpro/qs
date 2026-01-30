@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -39,20 +38,20 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	}
 
 	files := gitcmds.GetFilesForCommit(wd)
-	if len(files) == 0 {
-		return errors.New("there is nothing to commit")
+	neetToCommit := len(files) > 0
+	// If there are files to commit, set commit message
+	if neetToCommit {
+		if err := setCommitMessage(cmd, cfgUpload, wd, isMain); err != nil {
+			return err
+		}
+
+		// Ensure large file hook content is up to date
+		if err := gitcmds.EnsureLargeFileHookUpToDate(wd); err != nil {
+			logger.Verbose("Error updating large file hook content:", err)
+		}
 	}
 
-	if err := setCommitMessage(cmd, cfgUpload, wd, isMain); err != nil {
-		return err
-	}
-
-	// Ensure large file hook content is up to date
-	if err := gitcmds.EnsureLargeFileHookUpToDate(wd); err != nil {
-		logger.Verbose("Error updating large file hook content:", err)
-	}
-
-	return gitcmds.Upload(cmd, wd)
+	return gitcmds.Upload(cmd, wd, neetToCommit)
 }
 
 func setCommitMessage(

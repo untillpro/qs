@@ -454,6 +454,32 @@ func TestUpload(t *testing.T) {
 	require.NoError(err)
 }
 
+// TestUpload_NothingToCommit tests pushing when there are no uncommitted changes but unpushed commits exist
+func TestUpload_NothingToCommit(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "u",
+			Stdin:   "y",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateCloneIsAheadOfFork,
+		ClipboardContent:  systrun.ClipboardContentGithubIssue,
+		NeedCollaboration: true,
+		Expectations: []systrun.ExpectationFunc{
+			systrun.ExpectationCloneIsSyncedWithFork,
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
 // TestDevD_DevBranch_NoRT_NoPR - develop branch exists, no remote tracking branch, no pull request
 func TestDevD_DevBranch_NoRT_NoPR(t *testing.T) {
 	require := require.New(t)
