@@ -11,6 +11,17 @@ const (
 	bitSizeOfInt64        = 64
 	refsNotes             = "refs/notes/*:refs/notes/*"
 	LargeFileHookFilename = "large-file-hook.sh"
+
+	// Error message fragments for main branch sync issues (exported for test use)
+	MsgCannotFastForward          = "Error: Cannot fast-forward merge upstream/%s into %s."
+	MsgMainBranchDiverged         = "This usually means your local main branch has diverged from upstream."
+	MsgConflictDetected           = "A conflict is detected in %s branch. To resolve the conflict, you CAN run the following commands to reset your %s branch to match upstream/%s and force-push the changes to your fork:"
+	MsgToFixRunCommands           = "To fix this, run the following commands:"
+	MsgGitCheckoutMain            = "git checkout main"
+	MsgGitFetchUpstream           = "git fetch upstream"
+	MsgGitResetHardUpstream       = "git reset --hard upstream/main"
+	MsgGitPushOriginMainForce     = "git push origin main --force"
+	MsgWarningOverwriteMainBranch = "Warning: This will overwrite your main branch on origin with the state of upstream/main, discarding any local or remote changes that diverge from upstream. Make sure you have backed up any important work before proceeding."
 )
 
 const largeFileHookContent = `

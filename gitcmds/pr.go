@@ -440,11 +440,16 @@ func createPRBranch(wd, devBranchName, issueDescription string) (string, error) 
 
 	// Step 6: Merge from origin/main
 	stdout, stderr, err = new(exec.PipedExec).
-		Command("git", "merge", "origin/"+mainBranchName).
+		Command("git", "merge", "--ff-only", "origin/"+mainBranchName).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
+
+		// Check if fast-forward failed
+		if checkAndShowFastForwardFailure(stderr, mainBranchName) {
+			return "", fmt.Errorf("cannot fast-forward merge origin/%s into dev branch", mainBranchName)
+		}
 
 		if len(stderr) > 0 {
 			return "", errors.New(stderr)
@@ -457,11 +462,16 @@ func createPRBranch(wd, devBranchName, issueDescription string) (string, error) 
 	// Step 7: Merge from upstream/main if upstream exists
 	if upstreamExists {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command("git", "merge", "upstream/"+mainBranchName).
+			Command("git", "merge", "--ff-only", "upstream/"+mainBranchName).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
 			logger.Verbose(stderr)
+
+			// Check if fast-forward failed
+			if checkAndShowFastForwardFailure(stderr, mainBranchName) {
+				return "", fmt.Errorf("cannot fast-forward merge upstream/%s into dev branch", mainBranchName)
+			}
 
 			if len(stderr) > 0 {
 				return "", errors.New(stderr)

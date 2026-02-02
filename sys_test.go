@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/systrun"
 )
 
@@ -923,19 +924,54 @@ func TestDev_MainBranchConflict(t *testing.T) {
 		SyncState:         systrun.SyncStateMainBranchConflict,
 		NeedCollaboration: true,
 		ExpectedStdout: []string{
-			"A conflict is detected in main branch",
-			"you CAN run the following commands",
-			"git checkout main",
-			"git fetch upstream",
-			"git reset --hard upstream/main",
-			"git push origin main --force",
-			"Warning: This will overwrite your main branch",
+			"A conflict is detected in main branch", // Part of MsgConflictDetected
+			gitcmds.MsgGitCheckoutMain,
+			gitcmds.MsgGitFetchUpstream,
+			gitcmds.MsgGitResetHardUpstream,
+			gitcmds.MsgGitPushOriginMainForce,
+			"Warning: This will overwrite your main branch", // Part of MsgWarningOverwriteMainBranch
 		},
 	}
 
 	sysTest := systrun.New(t, testConfig)
 	err := sysTest.Run()
 	// The command should fail with an error because of the conflict
+	require.Error(err)
+}
+
+// TestDevD_MainBranchDiverged tests AIR-2783: fast-forward only merge failure
+// This test verifies that when fork's main branch has diverged from upstream/main
+// (no conflicts, but cannot fast-forward), the tool shows helpful error message with
+// instructions to reset the main branch to match upstream
+func TestDevD_MainBranchDiverged(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Args:    []string{"-d"},
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateMainBranchDiverged,
+		NeedCollaboration: true,
+		ExpectedStdout: []string{
+			"Error: Cannot fast-forward merge upstream/main into main", // Part of MsgCannotFastForward
+			gitcmds.MsgMainBranchDiverged,
+			gitcmds.MsgToFixRunCommands,
+			gitcmds.MsgGitCheckoutMain,
+			gitcmds.MsgGitFetchUpstream,
+			gitcmds.MsgGitResetHardUpstream,
+			gitcmds.MsgGitPushOriginMainForce,
+			"Warning: This will overwrite your main branch", // Part of MsgWarningOverwriteMainBranch
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	// The command should fail with an error because fast-forward is not possible
 	require.Error(err)
 }
 

@@ -894,19 +894,24 @@ func Download(wd string) error {
 		}
 	}
 
-	// Step 4: merge origin Main => Main
+	// Step 4: merge origin Main => Main with fast-forward only
 	_, stderr, err = new(exec.PipedExec).
-		Command(git, "merge", fmt.Sprintf("origin/%s", mainBranchName)).
+		Command(git, "merge", "--ff-only", fmt.Sprintf("origin/%s", mainBranchName)).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
 
+		// Check if fast-forward failed
+		if checkAndShowFastForwardFailure(stderr, mainBranchName) {
+			return fmt.Errorf("cannot fast-forward merge origin/%s", mainBranchName)
+		}
+
 		if len(stderr) > 0 {
 			return errors.New(stderr)
 		}
 
-		return fmt.Errorf("failed to merge origin/%s: %w", mainBranchName, err)
+		return fmt.Errorf("failed to merge origin/%s with --ff-only: %w", mainBranchName, err)
 	}
 
 	// check out back on the previous branch
@@ -942,25 +947,40 @@ func Download(wd string) error {
 		}
 	}
 
-	// Step 6: If upstream exists - pull upstream/Main --no-rebase => Main
+	// Step 6: If upstream exists - pull upstream/Main with fast-forward only
 	upstreamExists, err := HasRemote(wd, "upstream")
 	if err != nil {
 		return fmt.Errorf("failed to check if upstream exists: %w", err)
 	}
 
 	if upstreamExists {
+		// First, ensure we're on the main branch for upstream merge
+		currentBranchName, isMain, err := IamInMainBranch(wd)
+		if err != nil {
+			return err
+		}
+		if !isMain {
+			if err := CheckoutOnBranch(wd, mainBranchName); err != nil {
+				return err
+			}
+		}
+
 		err = helper.Retry(func() error {
 			stdout, stderr, err = new(exec.PipedExec).
-				Command(git, pull, "--no-rebase", "upstream", mainBranchName).
+				Command(git, pull, "--ff-only", "upstream", mainBranchName).
 				WorkingDir(wd).
 				RunToStrings()
 			if err != nil {
 				logger.Verbose(stderr)
+				// Check if fast-forward failed
+				if checkAndShowFastForwardFailure(stderr, mainBranchName) {
+					return fmt.Errorf("cannot fast-forward merge upstream/%s", mainBranchName)
+				}
 				if len(stderr) > 0 {
 					return errors.New(stderr)
 				}
 
-				return fmt.Errorf("failed to pull upstream/%s --no-rebase: %w", mainBranchName, err)
+				return fmt.Errorf("failed to pull upstream/%s with --ff-only: %w", mainBranchName, err)
 			}
 
 			return nil
@@ -969,6 +989,13 @@ func Download(wd string) error {
 			return err
 		}
 		logger.Verbose(stdout)
+
+		// Checkout back to the original branch if needed
+		if !isMain {
+			if err := CheckoutOnBranch(wd, currentBranchName); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -1680,6 +1707,27 @@ func SyncMainBranch(wd string) error {
 	return err
 }
 
+// checkAndShowFastForwardFailure checks if stderr contains fast-forward failure message,
+// and if so, displays helpful instructions and returns true
+func checkAndShowFastForwardFailure(stderr, mainBranch string) bool {
+	if strings.Contains(stderr, "fatal: Not possible to fast-forward") ||
+		strings.Contains(stderr, "not possible to fast-forward") {
+		fmt.Println("\n" + strings.Repeat("=", 80))
+		fmt.Printf(MsgCannotFastForward+"\n", mainBranch, mainBranch)
+		fmt.Println(MsgMainBranchDiverged)
+		fmt.Println("\n" + MsgToFixRunCommands)
+		fmt.Println(strings.Repeat("-", 80))
+		fmt.Println(MsgGitCheckoutMain)
+		fmt.Println(MsgGitFetchUpstream)
+		fmt.Println(MsgGitResetHardUpstream)
+		fmt.Println(MsgGitPushOriginMainForce)
+		fmt.Println(strings.Repeat("=", 80))
+		fmt.Println(MsgWarningOverwriteMainBranch)
+		return true
+	}
+	return false
+}
+
 // showWorkaroundIfConflict shows workaround instructions in case of merge conflict during rebase
 func showWorkaroundIfConflict(wd, mainBranch, stderr string) error {
 	if strings.Contains(stderr, "could not apply") {
@@ -1688,9 +1736,14 @@ func showWorkaroundIfConflict(wd, mainBranch, stderr string) error {
 			Command("git", "rebase", "--abort").
 			WorkingDir(wd).RunToStrings()
 		// Provide instructions to reset and force-push
-		fmt.Printf("A conflict is detected in %s branch. To resolve the conflict, you CAN run the following commands to reset your %s branch to match upstream/%s and force-push the changes to your fork:\n\n", mainBranch, mainBranch, mainBranch)
-		fmt.Print("git checkout main\ngit fetch upstream\ngit reset --hard upstream/main\ngit push origin main --force\n\n")
-		fmt.Print("Warning: This will overwrite your main branch on origin with the state of upstream/main, discarding any local or remote changes that diverge from upstream. Make sure you have backed up any important work before proceeding.\n\n")
+		fmt.Printf(MsgConflictDetected+"\n\n", mainBranch, mainBranch, mainBranch)
+		fmt.Println(MsgGitCheckoutMain)
+		fmt.Println(MsgGitFetchUpstream)
+		fmt.Println(MsgGitResetHardUpstream)
+		fmt.Println(MsgGitPushOriginMainForce)
+		fmt.Println()
+		fmt.Println(MsgWarningOverwriteMainBranch)
+		fmt.Println()
 
 		return fmt.Errorf("unable to rebase on upstream/%s", mainBranch)
 	}
@@ -2252,11 +2305,18 @@ func PullUpstream(wd string) error {
 		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
-	err = new(exec.PipedExec).
-		Command(git, pull, "-q", "upstream", mainBranch, "--no-edit").
-		Run(os.Stdout, os.Stdout)
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, pull, "--ff-only", "upstream", mainBranch, "--no-edit").
+		WorkingDir(wd).
+		RunToStrings()
 
 	if err != nil {
+		// Check if fast-forward failed
+		if checkAndShowFastForwardFailure(stderr, mainBranch) {
+			return fmt.Errorf("cannot fast-forward merge upstream/%s", mainBranch)
+		}
+
+		// If upstream doesn't exist, try to create it
 		parentRepoName, err := GetParentRepoName(wd)
 		if err != nil {
 			return fmt.Errorf("GetParentRepoName failed: %w", err)
@@ -2265,6 +2325,7 @@ func PullUpstream(wd string) error {
 		return MakeUpstreamForBranch(wd, parentRepoName)
 	}
 
+	logger.Verbose(stdout)
 	return nil
 }
 

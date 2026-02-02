@@ -62,6 +62,8 @@ const (
 	SyncStateCloneIsAheadOfFork
 	// SyncStateMainBranchConflict means that the main branch in fork has diverged from upstream and cannot be rebased
 	SyncStateMainBranchConflict
+	// SyncStateMainBranchDiverged means that the main branch in fork has diverged from upstream (no conflicts but cannot fast-forward)
+	SyncStateMainBranchDiverged
 )
 
 const (

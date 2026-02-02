@@ -975,6 +975,8 @@ func (st *SystemTest) processSyncState() error {
 		)
 	case SyncStateMainBranchConflict:
 		return st.setMainBranchConflict()
+	case SyncStateMainBranchDiverged:
+		return st.setMainBranchDiverged()
 	default:
 		return fmt.Errorf("not supported yet sync state: %s", st.cfg.SyncState)
 	}
@@ -1174,6 +1176,96 @@ func (st *SystemTest) setMainBranchConflict() error {
 	}
 
 	// Step 3: Fetch upstream to ensure the conflict will be detected
+	fetchCmd := exec.Command(git, "-C", st.cloneRepoPath, "fetch", "upstream")
+	fetchCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.ForkToken))
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to fetch upstream: %w, output: %s", err, output)
+	}
+
+	return nil
+}
+
+// setMainBranchDiverged creates a scenario where fork's main branch has diverged from upstream/main
+// but without conflicts (different files changed), so fast-forward merge will fail but rebase would work.
+// This tests the fast-forward only merge failure in Download() function (AIR-2783)
+func (st *SystemTest) setMainBranchDiverged() error {
+	mainBranch, err := gitcmds.GetMainBranch(st.cloneRepoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get main branch: %w", err)
+	}
+
+	// Step 1: Make a change in upstream/main (different file than fork will change)
+	upstreamRepoPath, err := os.MkdirTemp("", "qs-test-upstream-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp upstream path: %w", err)
+	}
+	defer os.RemoveAll(upstreamRepoPath)
+
+	// Clone upstream repo
+	upstreamURL := gitcmds.BuildRemoteURL(
+		st.cfg.GHConfig.UpstreamAccount,
+		st.cfg.GHConfig.UpstreamToken,
+		st.repoName,
+		true,
+	)
+	cloneCmd := exec.Command(git, "clone", upstreamURL, upstreamRepoPath)
+	cloneCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.UpstreamToken))
+	if output, err := cloneCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to clone upstream repo: %w, output: %s", err, output)
+	}
+
+	// Make a change in upstream/main (file A)
+	upstreamFilePath := filepath.Join(upstreamRepoPath, "upstream-change.txt")
+	if err := os.WriteFile(upstreamFilePath, []byte("Change made in upstream\n"), commitFilePerm); err != nil {
+		return fmt.Errorf("failed to create file in upstream: %w", err)
+	}
+
+	addCmd := exec.Command(git, "-C", upstreamRepoPath, "add", "upstream-change.txt")
+	if err := addCmd.Run(); err != nil {
+		return fmt.Errorf("failed to add file in upstream: %w", err)
+	}
+
+	commitCmd := exec.Command(git, "-C", upstreamRepoPath, "commit", "-m", "Upstream change")
+	if err := commitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit in upstream: %w", err)
+	}
+
+	pushCmd := exec.Command(git, "-C", upstreamRepoPath, "push", "origin", mainBranch)
+	pushCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.UpstreamToken))
+	if output, err := pushCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push to upstream: %w, output: %s", err, output)
+	}
+
+	// Step 2: Make a different change in fork/main (file B - no conflict with upstream's file A)
+	// First, ensure we're on the main branch
+	if err := checkoutOnBranch(st.cloneRepoPath, mainBranch); err != nil {
+		return err
+	}
+
+	// Create a different file change in fork
+	forkFilePath := filepath.Join(st.cloneRepoPath, "fork-change.txt")
+	if err := os.WriteFile(forkFilePath, []byte("Change made in fork\n"), commitFilePerm); err != nil {
+		return fmt.Errorf("failed to create file in fork: %w", err)
+	}
+
+	addCmdFork := exec.Command(git, "-C", st.cloneRepoPath, "add", "fork-change.txt")
+	if err := addCmdFork.Run(); err != nil {
+		return fmt.Errorf("failed to add file in fork: %w", err)
+	}
+
+	commitCmdFork := exec.Command(git, "-C", st.cloneRepoPath, "commit", "-m", "Fork change")
+	if err := commitCmdFork.Run(); err != nil {
+		return fmt.Errorf("failed to commit in fork: %w", err)
+	}
+
+	// Push to fork/main
+	pushCmdFork := exec.Command(git, "-C", st.cloneRepoPath, "push", "origin", mainBranch)
+	pushCmdFork.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.ForkToken))
+	if output, err := pushCmdFork.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to push to fork: %w, output: %s", err, output)
+	}
+
+	// Step 3: Fetch upstream to ensure the divergence will be detected
 	fetchCmd := exec.Command(git, "-C", st.cloneRepoPath, "fetch", "upstream")
 	fetchCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.ForkToken))
 	if output, err := fetchCmd.CombinedOutput(); err != nil {
