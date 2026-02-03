@@ -270,6 +270,53 @@ func TestDev_JiraTicketURL_NoUpstream(t *testing.T) {
 	require.NoError(err)
 }
 
+func TestDev_JiraTicketURL_InvalidJiraAPIToken(t *testing.T) {
+	require := require.New(t)
+
+	// Set JIRA related environment variables
+	apiToken := os.Getenv("JIRA_API_TOKEN")
+	err := os.Setenv("JIRA_API_TOKEN", "invalid_token")
+	require.NoError(err)
+	defer func() {
+		_ = os.Setenv("JIRA_API_TOKEN", apiToken)
+	}()
+
+	jiraEmail := os.Getenv("JIRA_EMAIL")
+	err = os.Setenv("JIRA_EMAIL", "user@server.com")
+	require.NoError(err)
+	defer func() {
+		_ = os.Setenv("JIRA_EMAIL", jiraEmail)
+	}()
+
+	jiraTicketURL := os.Getenv("JIRA_TICKET_URL")
+	err = os.Setenv("JIRA_TICKET_URL", "https://untill.atlassian.net/browse/AIR-2814")
+	require.NoError(err)
+	defer func() {
+		_ = os.Setenv("JIRA_TICKET_URL", jiraTicketURL)
+	}()
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "dev",
+			Stdin:   "y",
+		},
+		UpstreamState:    systrun.RemoteStateOK,
+		ClipboardContent: systrun.ClipboardContentJiraTicket,
+		ExpectedStdout: []string{
+			"Issue does not exist or you do not have permission to see it",
+			"Your JIRA_API_TOKEN environment variable is set and valid",
+			"The Jira ticket doesn't exist",
+			"You don't have permission to view it",
+		},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err = sysTest.Run()
+	require.NoError(err)
+}
+
 // TestPR_Synchronized tests creating a basic PR
 func TestPR_Synchronized(t *testing.T) {
 	require := require.New(t)

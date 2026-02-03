@@ -136,15 +136,22 @@ func GetJiraIssueName(ticketURL, ticketID string) (string, string, error) {
 	if err != nil {
 		return "", ticketID, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Read and parse the response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", ticketID, err
 	}
+	// Issue does not exist or you do not have permission to see it.
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return "", ticketID, ErrJiraIssueNotFoundOrInsufficientPermission
+		}
+
 		return "", ticketID, err
 	}
 

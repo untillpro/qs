@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -124,6 +125,14 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			branch += "-dev" // Add suffix "-dev" for a dev branch
 		}
 		if err != nil {
+			// Show suggestion if issue is not found or insufficient permission to see it
+			// And exit silently
+			if errors.Is(err, jira.ErrJiraIssueNotFoundOrInsufficientPermission) {
+				fmt.Print(jira.NotFoundIssueOrInsufficientAccessRightSuggestion)
+
+				return nil
+			}
+
 			return err
 		}
 
