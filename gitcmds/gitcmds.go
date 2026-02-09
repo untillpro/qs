@@ -1045,8 +1045,8 @@ func GetBranchesWithRemoteTracking(wd, remoteName string) ([]string, error) {
 
 	// remote tracking branch suffixes:
 	// - gone - branch is deleted on remote
-	// - ahead 1 - branch is ahead of remote by 1 commit, could be ahead by merge commit
-	rtBranchPattern := fmt.Sprintf(`\[%s/([A-Za-z0-9\-_\.\/]+):? ?(gone)?(ahead 1)?\]`, remoteName)
+	// - ahead \d+ - branch is ahead of remote by d commits, could be ahead by merge commit
+	rtBranchPattern := fmt.Sprintf(`\[%s/([A-Za-z0-9\-_\.\/]+):? ?(gone)?(ahead \d+)?\]`, remoteName)
 	re := regexp.MustCompile(rtBranchPattern)
 
 	rtBranchLines := strings.Split(strings.TrimSpace(stdout), caret)
