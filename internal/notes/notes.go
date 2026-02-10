@@ -46,6 +46,8 @@ type Notes struct {
 	// JiraTicketURL is the URL of the Jira ticket associated with the branch.
 	JiraTicketURL string     `json:"jira_ticket_url"`
 	BranchType    BranchType `json:"branch_type"` // Optional field to specify the type of branch (`dev` or `pr`)
+	// Description is the original text from the dev branch creation (e.g., from `qs dev {some text}`)
+	Description string `json:"description,omitempty"`
 }
 
 // Serialize is a function for serializing given notes field into a JSON string representation.
@@ -67,12 +69,14 @@ func Serialize(
 	githubIssueURL string,
 	jiraTicketURL string,
 	branchType BranchType,
+	description string,
 ) (string, error) {
 	n := Notes{
 		Version:        version,
 		GithubIssueURL: githubIssueURL,
 		JiraTicketURL:  jiraTicketURL,
 		BranchType:     branchType,
+		Description:    description,
 	}
 
 	bytes, err := json.Marshal(n)

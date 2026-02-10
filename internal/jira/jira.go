@@ -56,8 +56,8 @@ func GetJiraBranchName(args ...string) (branch string, comments []string, err er
 				}
 			} else {
 				jiraTicketURL := arg // Full JIRA ticket URL
-				// Prepare new notes
-				notesObj, err := notes.Serialize("", jiraTicketURL, notes.BranchTypeDev)
+				// Prepare new notes with issue name as description
+				notesObj, err := notes.Serialize("", jiraTicketURL, notes.BranchTypeDev, issueName)
 				if err != nil {
 					return "", nil, err
 				}

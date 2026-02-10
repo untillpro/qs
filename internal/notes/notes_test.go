@@ -34,7 +34,7 @@ func TestSerialize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			serialized, err := notes.Serialize(tt.githubIssueURL, tt.jiraTicketURL, tt.branchType)
+			serialized, err := notes.Serialize(tt.githubIssueURL, tt.jiraTicketURL, tt.branchType, "")
 
 			if tt.wantErr {
 				require.Error(t, err)

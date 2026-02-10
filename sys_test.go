@@ -1067,3 +1067,51 @@ func getGithubConfig(t *testing.T) systrun.GithubConfig {
 		ForkToken:       forkToken,
 	}
 }
+
+// TestPR_CustomText tests creating a PR from custom text (qs dev "some text" -> qs pr)
+// Verifies that the PR title and commit message use the custom text without prompting
+func TestPR_CustomText(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "pr",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateOK,
+		SyncState:         systrun.SyncStateSynchronized,
+		ClipboardContent:  systrun.ClipboardContentCustom,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}
+
+// TestPR_CustomText_NoUpstream tests creating a PR from custom text in single remote mode
+// Verifies that the PR title and commit message use the custom text without prompting
+func TestPR_CustomText_NoUpstream(t *testing.T) {
+	require := require.New(t)
+
+	testConfig := &systrun.TestConfig{
+		TestID:   strings.ToLower(t.Name()),
+		GHConfig: getGithubConfig(t),
+		CommandConfig: &systrun.CommandConfig{
+			Command: "pr",
+		},
+		UpstreamState:     systrun.RemoteStateOK,
+		ForkState:         systrun.RemoteStateNull,
+		SyncState:         systrun.SyncStateSynchronized,
+		ClipboardContent:  systrun.ClipboardContentCustom,
+		NeedCollaboration: true,
+		Expectations:      []systrun.ExpectationFunc{systrun.ExpectationPRCreated},
+	}
+
+	sysTest := systrun.New(t, testConfig)
+	err := sysTest.Run()
+	require.NoError(err)
+}

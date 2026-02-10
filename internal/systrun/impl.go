@@ -1006,8 +1006,9 @@ func (st *SystemTest) setSyncState(
 	// Set the expected dev branch name that will be used later for PR
 	createdGithubIssueURL, _ := st.ctx.Value(contextPkg.CtxKeyCreatedGithubIssueURL).(string)
 	jiraTicket, _ := st.ctx.Value(contextPkg.CtxKeyJiraTicket).(string)
-	if createdGithubIssueURL == "" && jiraTicket == "" {
-		return errors.New("a Jira ticket or GitHub issue must be use to create dev branch")
+	customBranchName, _ := st.ctx.Value(contextPkg.CtxKeyCustomBranchName).(string)
+	if createdGithubIssueURL == "" && jiraTicket == "" && customBranchName == "" {
+		return errors.New("a Jira ticket, GitHub issue, or custom branch name must be used to create dev branch")
 	}
 
 	// authenticate with GitHub using the fork token

@@ -1616,8 +1616,8 @@ func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber 
 	if len(issueName) > 0 {
 		body = IssueSign + strIssueNum + oneSpace + issueName
 	}
-	// Prepare new notes
-	notesObj, err := notesPkg.Serialize(githubIssueURL, "", notesPkg.BranchTypeDev)
+	// Prepare new notes with issue name as description
+	notesObj, err := notesPkg.Serialize(githubIssueURL, "", notesPkg.BranchTypeDev, issueName)
 	if err != nil {
 		return "", nil, err
 	}
@@ -3241,6 +3241,9 @@ func GetIssueDescription(notes []string) (string, error) {
 		}
 
 		description = "[" + jiraTicketID + "] " + description
+	default:
+		// If no GitHub or Jira URL, use the description from notes (from qs dev {some text})
+		description = notesObj.Description
 	}
 	if err != nil {
 		return "", fmt.Errorf("error retrieving issue description: %w", err)
