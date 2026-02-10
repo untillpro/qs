@@ -21,6 +21,10 @@ func GetBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 	newArgs := splitQuotedArgs(args...)
 	comments = make([]string, 0, len(newArgs)+1) // 1 for json notes
 	comments = append(comments, newArgs...)
+
+	// Store the original description (joined arguments) for PR title and commit message
+	description := strings.Join(newArgs, " ")
+
 	for i, arg := range newArgs {
 		arg = strings.TrimSpace(arg)
 		if i == 0 {
@@ -41,8 +45,8 @@ func GetBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 		branch = branch + "-" + arg
 	}
 	branch = CleanArgFromSpecSymbols(branch)
-	// Prepare new notes
-	notesObj, err := notes.Serialize("", "", notes.BranchTypeDev)
+	// Prepare new notes with description
+	notesObj, err := notes.Serialize("", "", notes.BranchTypeDev, description)
 	if err != nil {
 		return "", []string{}, err
 	}
