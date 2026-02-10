@@ -4,6 +4,7 @@ A powerful Git workflow automation tool that simplifies repository management, b
 
 ## Features
 
+
 - 🚀 **Streamlined Git workflows** - Automate common Git operations
 - 🔄 **Fork management** - Easy repository forking and upstream configuration
 - 🌿 **Branch lifecycle** - Create, manage, and clean up development branches
