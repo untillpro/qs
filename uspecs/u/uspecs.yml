@@ -1,0 +1,8 @@
+# uspecs installation metadata
+# DO NOT EDIT - managed by uspecs
+version: 0.1.0-a0
+invocation_methods: [nlia]
+installed_at: 2026-02-21T16:20:27Z
+modified_at: 2026-02-21T16:20:27Z
+commit: 97c4e5cb605baeec49bddcafdbcb0e6553d23f59
+commit_timestamp: 2026-02-21T16:16:19Z
