@@ -66,11 +66,15 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		return fmt.Errorf("you are in %s/%s repo with upstream remote but no fork detected\nExecute 'qs fork' first", org, repo)
 	}
 
-	curBranch, isMain, err := gitcmds.IamInMainBranch(wd)
+	curBranch, err := gitcmds.GetCurrentBranchName(wd)
 	if err != nil {
 		return err
 	}
-	if !isMain {
+	mainBranch, err := gitcmds.GetMainBranch(wd)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(curBranch, mainBranch) {
 		fmt.Println("--------------------------------------------------------")
 		fmt.Println("You are in")
 		repo, org, err := gitcmds.GetRepoAndOrgName(wd)
@@ -97,7 +101,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 	}
 
 	// sync local MainBranch to ensure it's up to date with origin and upstream remotes
-	if err := gitcmds.SyncMainBranch(wd); err != nil {
+	if err := gitcmds.SyncMainBranch(wd, mainBranch, upstreamExists); err != nil {
 		return err
 	}
 
@@ -171,7 +175,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			}
 		}
 
-		if err := gitcmds.CreateDevBranch(wd, branch, notes, checkRemoteBranchExistence); err != nil {
+		if err := gitcmds.CreateDevBranch(wd, branch, mainBranch, notes, checkRemoteBranchExistence); err != nil {
 			return err
 		}
 	default:

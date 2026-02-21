@@ -550,12 +550,11 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 		return fmt.Errorf("failed to get last commit message: %w: %s", err, stderr)
 	}
 
-	commitMessageParts, ok := ctx.Value(contextCfg.CtxKeyCommitMessage).([]string)
+	commitMessage, ok := ctx.Value(contextCfg.CtxKeyCommitMessage).(string)
 	if !ok {
 		return fmt.Errorf("commit message not found in context")
 	}
 
-	commitMessage := strings.Join(commitMessageParts, " ")
 	if !strings.Contains(stdout, commitMessage) {
 		return fmt.Errorf("remote branch %s does not have commit message '%s'", remoteBranchName, commitMessage)
 	}

@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
@@ -19,7 +18,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		return fmt.Errorf("git status failed: %w", err)
 	}
 
-	_, isMain, err := gitcmds.IamInMainBranch(wd)
+	currentBranch, isMain, err := gitcmds.IamInMainBranch(wd)
 	if err != nil {
 		return err
 	}
@@ -51,7 +50,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 		}
 	}
 
-	return gitcmds.Upload(cmd, wd, neetToCommit)
+	return gitcmds.Upload(cmd, wd, currentBranch, neetToCommit)
 }
 
 func setCommitMessage(
@@ -60,52 +59,34 @@ func setCommitMessage(
 	wd string,
 	isMainBranch bool,
 ) error {
-	// find out a type of the branch
-	branchType, err := gitcmds.GetBranchType(wd)
+	_, branchType, err := gitcmds.GetBranchType(wd)
 	if err != nil {
 		return err
 	}
 
-	// calculate total length of commit message parts
-	totalLength := 0
-	if len(cfgUpload.Message) > 0 {
-		totalLength = len(strings.Join(cfgUpload.Message, " "))
-	}
-
-	// each branch type has different tolerance to the length of the commit message
-	finalCommitMessages := make([]string, 0, len(cfgUpload.Message))
+	msg := cfgUpload.Message
 	switch branchType {
 	case notesPkg.BranchTypeDev:
-		if totalLength == 0 {
-			// for dev branch default commit message is "wip" (work in process)
-			finalCommitMessages = append(finalCommitMessages, gitcmds.DefaultCommitMessage)
-		} else {
-			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
+		if msg == "" {
+			msg = gitcmds.DefaultCommitMessage
 		}
 	case notesPkg.BranchTypePr:
-		// if a commit message is not specified or is shorter than 8 characters
 		switch {
-		case totalLength == 0:
+		case msg == "":
 			return ErrEmptyCommitMessage
-		case totalLength < minimumCommitMessageLen:
+		case len(msg) < minimumCommitMessageLen:
 			return ErrShortCommitMessage
-		default:
-			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
 		}
 	default:
-		if totalLength == 0 {
+		if msg == "" {
 			if isMainBranch {
 				return ErrEmptyCommitMessage
 			}
-			// default commit message for custom branch must be "wip" (work in process)
-			finalCommitMessages = append(finalCommitMessages, gitcmds.DefaultCommitMessage)
-		} else {
-			finalCommitMessages = append(finalCommitMessages, cfgUpload.Message...)
+			msg = gitcmds.DefaultCommitMessage
 		}
-
 	}
-	// put commit a message to context
-	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, finalCommitMessages))
+
+	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, msg))
 
 	return nil
 }

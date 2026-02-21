@@ -5,8 +5,7 @@ const (
 	pushParamDesc    = "Upload sources to repo"
 	pushMessageWord  = "message"
 	pushMessageParam = "m"
-	pushMsgComment   = `Use the given string as the commit message. If multiple -m options are given
- their values are concatenated as separate paragraphs`
+	pushMsgComment   = "Use the given string as the commit message"
 
 	pullParamDesc = "Download sources from repo"
 

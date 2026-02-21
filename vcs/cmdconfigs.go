@@ -2,7 +2,7 @@ package vcs
 
 // CfgUpload defines upload command config
 type CfgUpload struct {
-	Message []string
+	Message string
 }
 
 // CfgDownload defines download command config
