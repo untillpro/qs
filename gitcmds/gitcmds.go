@@ -611,9 +611,9 @@ func Release(wd string) error {
 }
 
 // Upload uploads sources to git repo
-func Upload(cmd *cobra.Command, wd string, needToCommit bool) error {
+func Upload(cmd *cobra.Command, wd, currentBranch string, needToCommit bool) error {
 	if needToCommit {
-		commitMessageParts := cmd.Context().Value(contextPkg.CtxKeyCommitMessage).([]string)
+		commitMessage := cmd.Context().Value(contextPkg.CtxKeyCommitMessage).(string)
 
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, "add", ".").
@@ -630,10 +630,7 @@ func Upload(cmd *cobra.Command, wd string, needToCommit bool) error {
 		}
 		logger.Verbose(stdout)
 
-		params := []string{"commit", "-a"}
-		for _, m := range commitMessageParts {
-			params = append(params, mimm, m)
-		}
+		params := []string{"commit", "-a", mimm, commitMessage}
 
 		_, stderr, err = new(exec.PipedExec).
 			Command(git, params...).
@@ -682,12 +679,6 @@ func Upload(cmd *cobra.Command, wd string, needToCommit bool) error {
 		return fmt.Errorf("error pulling before push: %w", err)
 	}
 
-	brName, err := GetCurrentBranchName(wd)
-	if err != nil {
-		return err
-	}
-
-	// Push notes to origin
 	err = helper.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, push, origin, refsNotes).
@@ -713,17 +704,14 @@ func Upload(cmd *cobra.Command, wd string, needToCommit bool) error {
 		helper.Delay()
 	}
 
-	// Push branch to origin
-	// Check if branch already has upstream tracking
-	hasUpstream, err := hasUpstreamBranch(wd, brName)
+	hasUpstream, err := hasUpstreamBranch(wd, currentBranch)
 	if err != nil {
 		return fmt.Errorf("failed to check upstream branch: %w", err)
 	}
 
-	// Only use -u flag if upstream is not already configured
-	pushArgs := []string{push, origin, brName}
+	pushArgs := []string{push, origin, currentBranch}
 	if !hasUpstream {
-		pushArgs = []string{push, "-u", origin, brName}
+		pushArgs = []string{push, "-u", origin, currentBranch}
 	}
 
 	err = helper.Retry(func() error {
@@ -875,17 +863,17 @@ func Download(wd string) error {
 	}
 	logger.Verbose(stdout)
 
-	// Get current branch info
-	currentBranchName, isMain, err := IamInMainBranch(wd)
+	currentBranchName, err := GetCurrentBranchName(wd)
 	if err != nil {
 		return err
 	}
 
-	// Get the name of the main branch
 	mainBranchName, err := GetMainBranch(wd)
 	if err != nil {
 		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
+
+	isMain := strings.EqualFold(currentBranchName, mainBranchName)
 
 	// check out on the main branch
 	if !isMain {
@@ -954,11 +942,6 @@ func Download(wd string) error {
 	}
 
 	if upstreamExists {
-		// First, ensure we're on the main branch for upstream merge
-		currentBranchName, isMain, err := IamInMainBranch(wd)
-		if err != nil {
-			return err
-		}
 		if !isMain {
 			if err := CheckoutOnBranch(wd, mainBranchName); err != nil {
 				return err
@@ -972,7 +955,6 @@ func Download(wd string) error {
 				RunToStrings()
 			if err != nil {
 				logger.Verbose(stderr)
-				// Check if fast-forward failed
 				if checkAndShowFastForwardFailure(stderr, mainBranchName) {
 					return fmt.Errorf("cannot fast-forward merge upstream/%s", mainBranchName)
 				}
@@ -990,7 +972,6 @@ func Download(wd string) error {
 		}
 		logger.Verbose(stdout)
 
-		// Checkout back to the original branch if needed
 		if !isMain {
 			if err := CheckoutOnBranch(wd, currentBranchName); err != nil {
 				return err
@@ -1631,19 +1612,7 @@ func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber 
 // 2. Pull from origin/main to main with rebase
 // 3. Push to origin/main
 // In single remote mode (no upstream), only syncs with origin
-func SyncMainBranch(wd string) error {
-	mainBranch, err := GetMainBranch(wd)
-	if err != nil {
-		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
-	}
-
-	// Check if upstream remote exists
-	upstreamExists, err := HasRemote(wd, "upstream")
-	if err != nil {
-		return fmt.Errorf("failed to check if upstream exists: %w", err)
-	}
-
-	// Pull from upstream/main if upstream exists (fork workflow)
+func SyncMainBranch(wd, mainBranch string, upstreamExists bool) error {
 	if upstreamExists {
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, pull, "--rebase", "upstream", mainBranch, "--no-edit").
@@ -1827,10 +1796,10 @@ func buildDevBranchName(issueURL string) (string, error) {
 }
 
 // GetBranchType returns branch type based on notes or branch name
-func GetBranchType(wd string) (notesPkg.BranchType, error) {
+func GetBranchType(wd string) (string, notesPkg.BranchType, error) {
 	currentBranchName, err := GetCurrentBranchName(wd)
 	if err != nil {
-		return notesPkg.BranchTypeUnknown, err
+		return "", notesPkg.BranchTypeUnknown, err
 	}
 
 	notes, _, err := GetNotes(wd, currentBranchName)
@@ -1842,16 +1811,16 @@ func GetBranchType(wd string) (notesPkg.BranchType, error) {
 		notesObj, ok := notesPkg.Deserialize(notes)
 		if !ok {
 			if isOldStyledBranch(notes) {
-				return notesPkg.BranchTypeDev, nil
+				return currentBranchName, notesPkg.BranchTypeDev, nil
 			}
 		}
 
 		if notesObj != nil {
-			return notesObj.BranchType, nil
+			return currentBranchName, notesObj.BranchType, nil
 		}
 	}
 
-	return GetBranchTypeByName(currentBranchName), nil
+	return currentBranchName, GetBranchTypeByName(currentBranchName), nil
 }
 
 // isOldStyledBranch checks if branch is old styled
@@ -1950,16 +1919,10 @@ func normalizeBranchName(branchName string) string {
 // branch - branch name
 // notes - notes for branch
 // checkRemoteBranchExistence - if true, checks if a branch already exists in remote
-func CreateDevBranch(wd, branchName string, notes []string, checkRemoteBranchExistence bool) error {
-	// Normalize branch name to comply with Git naming rules
+func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRemoteBranchExistence bool) error {
 	branchName = normalizeBranchName(branchName)
 	if branchName == "" {
 		return errors.New("branch name is empty after normalization")
-	}
-
-	mainBranch, err := GetMainBranch(wd)
-	if err != nil {
-		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
 	stdout, stderr, err := new(exec.PipedExec).
@@ -2112,7 +2075,10 @@ func GetNotes(wd, branchName string) (notes []string, revCount int, err error) {
 		return nil, 0, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
-	// get all revision of the branch which does not belong to main branch
+	return getNotesWithMainBranch(wd, branchName, mainBranchName)
+}
+
+func getNotesWithMainBranch(wd, branchName, mainBranchName string) (notes []string, revCount int, err error) {
 	stdout, stderr, err := new(exec.PipedExec).
 		Command(git, "rev-list", mainBranchName+".."+branchName).
 		WorkingDir(wd).
@@ -2126,10 +2092,8 @@ func GetNotes(wd, branchName string) (notes []string, revCount int, err error) {
 		return notes, 0, errors.New("error: No commits found in current branch")
 	}
 
-	// get all notes from revisions got from a previous step
 	revList := strings.Split(strings.TrimSpace(stdout), caret)
 	for _, rev := range revList {
-		// get notes from each revision
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, "notes", "show", rev).
 			WorkingDir(wd).
@@ -2142,7 +2106,6 @@ func GetNotes(wd, branchName string) (notes []string, revCount int, err error) {
 
 			return notes, len(revList), fmt.Errorf("failed to get notes: %w", err)
 		}
-		// split notes into lines
 		rawNotes := strings.Split(stdout, caret)
 		for _, rawNote := range rawNotes {
 			note := strings.TrimSpace(rawNote)

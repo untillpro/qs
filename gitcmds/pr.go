@@ -19,8 +19,7 @@ type PRInfo struct {
 }
 
 func Pr(wd string, needDraft bool) error {
-	// find out the type of the branch
-	branchType, err := GetBranchType(wd)
+	currentBranchName, branchType, err := GetBranchType(wd)
 	if err != nil {
 		return err
 	}
@@ -30,27 +29,25 @@ func Pr(wd string, needDraft bool) error {
 		return errors.New("you must be on dev or pr branch")
 	}
 
-	currentBranchName, err := GetCurrentBranchName(wd)
-	if err != nil {
-		return err
-	}
-
 	parentRepoName, err := GetParentRepoName(wd)
 	if err != nil {
 		return err
 	}
 
-	// Fetch notes from origin before checking if they exist
+	mainBranch, err := GetMainBranch(wd)
+	if err != nil {
+		return err
+	}
+
 	_, _, err = new(exec.PipedExec).
 		Command(git, fetch, origin, "--force", refsNotes).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(fmt.Sprintf("Failed to fetch notes: %v", err))
-		// Continue anyway, as notes might exist locally
 	}
 
-	notes, revCount, err := GetNotes(wd, currentBranchName)
+	notes, revCount, err := getNotesWithMainBranch(wd, currentBranchName, mainBranch)
 	if err != nil {
 		return err
 	}
@@ -81,6 +78,7 @@ func Pr(wd string, needDraft bool) error {
 			if err := MakeUpstreamForBranch(wd, parentRepoName); err != nil {
 				return err
 			}
+			upstreamExists = true
 		}
 
 		// Check if there are any modified files in the current branch
@@ -92,8 +90,7 @@ func Pr(wd string, needDraft bool) error {
 			return errors.New(errMsgModFiles)
 		}
 
-		// Create a new branch for the PR
-		prBranchName, err := createPRBranch(wd, currentBranchName, issueDescription)
+		prBranchName, err := createPRBranch(wd, currentBranchName, issueDescription, notes, revCount, upstreamExists, mainBranch)
 		if err != nil {
 			return fmt.Errorf("failed to create PR branch: %w", err)
 		}
@@ -123,8 +120,7 @@ func Pr(wd string, needDraft bool) error {
 		return nil
 	}
 
-	// Extract notes before any operations
-	notes, revCount, err = GetNotes(wd, currentBranchName)
+	notes, revCount, err = getNotesWithMainBranch(wd, currentBranchName, mainBranch)
 	if err != nil {
 		return err
 	}
@@ -327,14 +323,7 @@ func RemoveBranch(wd, branchName string) error {
 // Returns:
 // - name of the PR branch
 // - error if any operation fails
-func createPRBranch(wd, devBranchName, issueDescription string) (string, error) {
-	// Step 1: Get issue description from notes for a commit message
-	// extract notes from the dev branch before any operations
-	notes, revCount, err := GetNotes(wd, devBranchName)
-	if err != nil {
-		return "", err
-	}
-	// get json notes object from dev branch
+func createPRBranch(wd, devBranchName, issueDescription string, notes []string, revCount int, upstreamExists bool, mainBranchName string) (string, error) {
 	notesObj, ok := notesPkg.Deserialize(notes)
 	if !ok {
 		return "", errors.New("error deserializing notes")
@@ -352,16 +341,6 @@ func createPRBranch(wd, devBranchName, issueDescription string) (string, error) 
 	prBranchName := strings.TrimSuffix(devBranchName, "-dev") + "-pr"
 
 	upstreamRemote := "upstream"
-	upstreamExists, err := HasRemote(wd, upstreamRemote)
-	if err != nil {
-		return "", err
-	}
-
-	mainBranchName, err := GetMainBranch(wd)
-	if err != nil {
-		return "", fmt.Errorf("failed to get main branch: %w", err)
-	}
-
 	if !upstreamExists {
 		upstreamRemote = "origin"
 	}
@@ -370,6 +349,7 @@ func createPRBranch(wd, devBranchName, issueDescription string) (string, error) 
 	var (
 		stdout string
 		stderr string
+		err    error
 	)
 
 	// Step 3: Fetch the latest upstream main
