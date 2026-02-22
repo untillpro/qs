@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"runtime"
 	"strconv"
 	"sync"
 
@@ -140,38 +139,6 @@ func forkCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-// redText returns the given text wrapped in ANSI escape codes (for Linux/macOS)
-// or formatted for Windows.
-func redText(text string) string {
-	if runtime.GOOS == "windows" {
-		// Windows: Use cmd ANSI sequences if supported, otherwise just return text
-		return "\033[31m" + text + "\033[0m"
-	}
-	// Linux/macOS ANSI escape codes for red text
-	return "\033[31m" + text + "\033[0m"
-}
-
-// CheckCommands verifies if the required commands are installed on the system
-func CheckCommands(commands []string) error {
-	missing := []string{}
-	for _, cmd := range commands {
-		_, err := exec.LookPath(cmd)
-		if err != nil {
-			missing = append(missing, cmd)
-		}
-	}
-
-	if len(missing) > 0 {
-		if len(missing) == 1 {
-			return fmt.Errorf(redText("Error: missing required command: %s"), missing[0])
-		}
-
-		return fmt.Errorf(redText("Error: missing required commands: %v"), missing)
-	}
-
-	return nil
-}
-
 // shouldSkipPrerequisiteChecks returns true for commands that don't need prerequisite checks
 func shouldSkipPrerequisiteChecks(cmdName string) bool {
 	skipCommands := []string{
@@ -207,8 +174,19 @@ func needsGitHubCLI(cmdName string) bool {
 
 // checkRequiredBashCommands checks if all required bash commands are available
 func checkRequiredBashCommands() error {
-	requiredCommands := []string{"grep", "sed", "jq", "gawk", "wc", "curl", "chmod"}
-	return CheckCommands(requiredCommands)
+	missing := []string{}
+	for _, cmd := range requiredCommands {
+		_, err := exec.LookPath(cmd)
+		if err != nil {
+			missing = append(missing, cmd)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing following commands: %s\nSee https://github.com/untillpro/qs?tab=readme-ov-file#git", missing)
+	}
+
+	return nil
 }
 
 // ExecRootCmd executes the root command with the given arguments.
@@ -217,12 +195,13 @@ func checkRequiredBashCommands() error {
 // - error: Any error that occurred during execution.
 func ExecRootCmd(ctx context.Context, args []string) (context.Context, error) {
 	params := &qsGlobalParams{}
-	rootCmd := PrepareRootCmd(
+	rootCmd, err := PrepareRootCmd(
 		ctx,
 		"qs",
 		"Quick git wrapper",
 		args,
 		"",
+		params,
 		updateCmd(ctx, params),
 		downloadCmd(ctx, params),
 		releaseCmd(ctx, params),
@@ -233,51 +212,25 @@ func ExecRootCmd(ctx context.Context, args []string) (context.Context, error) {
 		upgradeCmd(ctx),
 		versionCmd(ctx),
 	)
-	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		wd, err := getWorkingDir(params)
-		if err != nil {
-			return err
-		}
-		params.Dir = wd
-
-		if cmd.Name() != commands.CommandNameUpgrade && cmd.Name() != commands.CommandNameVersion {
-			ok, err := gitcmds.CheckIfGitRepo(params.Dir)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return errors.New("this is not a git repository")
-			}
-		}
-
-		return nil
+	if err != nil {
+		return nil, err
 	}
-	rootCmd.Flags().StringVarP(&params.Dir, "change-dir", "C", "", "change to dir before running the command. Any files named on the command line are interpreted after changing directories")
-
-	initChangeDirFlags(rootCmd.Commands(), params)
 
 	return ExecCommandAndCatchInterrupt(rootCmd)
 }
 
-func getWorkingDir(params *qsGlobalParams) (string, error) {
-	if params.Dir != "" {
-		return params.Dir, nil
-	}
+func initChangeDirFlags(cmds []*cobra.Command, params *qsGlobalParams) error {
 	wd, err := os.Getwd()
 	if err != nil {
-		return "", fmt.Errorf("failed to get current directory: %w", err)
+		return fmt.Errorf("failed to get current directory: %w", err)
 	}
-
-	return wd, nil
-}
-
-func initChangeDirFlags(cmds []*cobra.Command, params *qsGlobalParams) {
 	for _, cmd := range cmds {
 		if cmd.Name() == "version" {
 			continue
 		}
-		cmd.Flags().StringVarP(&params.Dir, "change-dir", "C", "", "change to dir before running the command. Any files named on the command line are interpreted after changing directories")
+		cmd.Flags().StringVarP(&params.Dir, "change-dir", "C", wd, "change to dir before running the command. Any files named on the command line are interpreted after changing directories")
 	}
+	return nil
 }
 
 // ExecCommandAndCatchInterrupt executes the given command and catches interrupts.
@@ -326,12 +279,11 @@ func goAndCatchInterrupt(cmd *cobra.Command, f func(ctx context.Context) (*cobra
 	return cmdExecuted.Context(), err
 }
 
-func PrepareRootCmd(ctx context.Context, use string, short string, args []string, version string, cmds ...*cobra.Command) *cobra.Command {
-
+func PrepareRootCmd(ctx context.Context, use string, short string, args []string, version string, params *qsGlobalParams, cmds ...*cobra.Command) (*cobra.Command, error) {
 	var rootCmd = &cobra.Command{
 		Use:   use,
 		Short: short,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Set log level first - handle all log level options
 			if ok, _ := cmd.Flags().GetBool("trace"); ok {
 				logger.SetLogLevel(logger.LogLevelTrace)
@@ -346,15 +298,12 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 
 			// Skip checks for commands that don't need them
 			if shouldSkipPrerequisiteChecks(cmd.Name()) {
-				return
+				return nil
 			}
 
 			// Check required bash commands
 			if err := checkRequiredBashCommands(); err != nil {
-				fmt.Println(" ")
-				fmt.Println(err)
-				fmt.Println("See https://github.com/untillpro/qs?tab=readme-ov-file#git")
-				os.Exit(1)
+				return err
 			}
 
 			// Check QS version (unless skipped)
@@ -365,10 +314,23 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 			}
 
 			// Check GitHub CLI (for commands that need it)
-			if needsGitHubCLI(cmd.Name()) && !helper.CheckGH() {
-				fmt.Println("GitHub CLI check failed")
-				os.Exit(1)
+			if needsGitHubCLI(cmd.Name()) {
+				if err := helper.CheckGH(); err != nil {
+					return err
+				}
 			}
+
+			if cmd.Name() != commands.CommandNameUpgrade && cmd.Name() != commands.CommandNameVersion {
+				ok, err := gitcmds.CheckIfGitRepo(params.Dir)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return errors.New("this is not a git repository")
+				}
+			}
+
+			return nil
 		},
 	}
 
@@ -383,5 +345,6 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 	rootCmd.PersistentFlags().BoolVarP(&commands.Verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().Bool("trace", false, "Extremely verbose output")
 	rootCmd.SilenceUsage = true
-	return rootCmd
+	err := initChangeDirFlags(rootCmd.Commands(), params)
+	return rootCmd, err
 }
