@@ -130,10 +130,6 @@ func Status(wd string) error {
 	if err != nil {
 		logger.Verbose(stderr)
 
-		if strings.Contains(err.Error(), err128) {
-			return errors.New("this is not a git repository")
-		}
-
 		if len(stderr) > 0 {
 			return errors.New(stderr)
 		}
