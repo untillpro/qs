@@ -332,6 +332,9 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 
 			return nil
 		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return gitcmds.Status(params.Dir)
+		},
 	}
 
 	rootCmd.SetContext(ctx)
