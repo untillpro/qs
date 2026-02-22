@@ -39,10 +39,9 @@ func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRem
 				Command(git, "checkout", "--track", originSlash+mainBranch).
 				WorkingDir(wd).
 				Run(os.Stdout, os.Stdout)
-			if err != nil {
-				return err
-			}
 		}
+	}
+	if err != nil {
 		return err
 	}
 
@@ -168,8 +167,8 @@ func normalizeBranchName(branchName string) string {
 	// Remove leading dots
 	normalized = strings.TrimLeft(normalized, ".")
 
-	// Remove trailing slashes
-	normalized = strings.TrimRight(normalized, "/")
+	// Remove trailing and leading slashes
+	normalized = strings.Trim(normalized, "/")
 
 	// Remove trailing dash
 	normalized = strings.TrimRight(normalized, "-")
