@@ -15,11 +15,10 @@ import (
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
 	"github.com/untillpro/qs/internal/helper"
-	"github.com/untillpro/qs/vcs"
 )
 
 func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
-	var cfgUpload vcs.CfgUpload
+	commintMessage := ""
 	var uploadCmd = &cobra.Command{
 		Use:   commands.CommandNameU,
 		Short: pushParamDesc,
@@ -29,10 +28,10 @@ func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 				return err
 			}
 
-			return commands.U(cmd, cfgUpload, wd)
+			return commands.U(cmd, commintMessage, wd)
 		},
 	}
-	uploadCmd.Flags().StringVarP(&cfgUpload.Message, pushMessageWord, pushMessageParam, "", pushMsgComment)
+	uploadCmd.Flags().StringVarP(&commintMessage, pushMessageWord, pushMessageParam, "", pushMsgComment)
 
 	return uploadCmd
 }

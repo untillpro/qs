@@ -10,10 +10,9 @@ import (
 	"github.com/untillpro/qs/gitcmds"
 	contextPkg "github.com/untillpro/qs/internal/context"
 	notesPkg "github.com/untillpro/qs/internal/notes"
-	"github.com/untillpro/qs/vcs"
 )
 
-func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
+func U(cmd *cobra.Command, commitMessage string, wd string) error {
 	if err := gitcmds.Status(wd); err != nil {
 		return fmt.Errorf("git status failed: %w", err)
 	}
@@ -40,7 +39,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 	neetToCommit := len(files) > 0
 	// If there are files to commit, set commit message
 	if neetToCommit {
-		if err := setCommitMessage(cmd, cfgUpload, wd, isMain); err != nil {
+		if err := setCommitMessage(cmd, commitMessage, wd, isMain); err != nil {
 			return err
 		}
 
@@ -55,7 +54,7 @@ func U(cmd *cobra.Command, cfgUpload vcs.CfgUpload, wd string) error {
 
 func setCommitMessage(
 	cmd *cobra.Command,
-	cfgUpload vcs.CfgUpload,
+	commitMessage string,
 	wd string,
 	isMainBranch bool,
 ) error {
@@ -64,29 +63,28 @@ func setCommitMessage(
 		return err
 	}
 
-	msg := cfgUpload.Message
 	switch branchType {
 	case notesPkg.BranchTypeDev:
-		if msg == "" {
-			msg = gitcmds.DefaultCommitMessage
+		if commitMessage == "" {
+			commitMessage = gitcmds.DefaultCommitMessage
 		}
 	case notesPkg.BranchTypePr:
 		switch {
-		case msg == "":
+		case commitMessage == "":
 			return ErrEmptyCommitMessage
-		case len(msg) < minimumCommitMessageLen:
+		case len(commitMessage) < minimumCommitMessageLen:
 			return ErrShortCommitMessage
 		}
 	default:
-		if msg == "" {
+		if commitMessage == "" {
 			if isMainBranch {
 				return ErrEmptyCommitMessage
 			}
-			msg = gitcmds.DefaultCommitMessage
+			commitMessage = gitcmds.DefaultCommitMessage
 		}
 	}
 
-	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, msg))
+	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, commitMessage))
 
 	return nil
 }
