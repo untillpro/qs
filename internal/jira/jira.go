@@ -9,8 +9,8 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/utils"
 )
 
 // GetJiraTicketIDFromArgs retrieves a JIRA ticket ID from the provided arguments.
@@ -50,7 +50,7 @@ func GetJiraBranchName(args ...string) (branch string, comments []string, err er
 			}
 
 			if issueName == "" {
-				branch, _, err = helper.GetBranchName(false, args...)
+				branch, _, err = utils.GetBranchName(false, args...)
 				if err != nil {
 					return "", nil, err
 				}
@@ -62,7 +62,7 @@ func GetJiraBranchName(args ...string) (branch string, comments []string, err er
 					return "", nil, err
 				}
 				comments = append(comments, notesObj)
-				brName, _, err = helper.GetBranchName(false, issueName)
+				brName, _, err = utils.GetBranchName(false, issueName)
 				if err != nil {
 					return "", nil, err
 				}
@@ -109,12 +109,6 @@ func GetJiraIssueName(ticketURL, ticketID string) (string, string, error) {
 	)
 
 	email = os.Getenv("JIRA_EMAIL")
-	if email == "" {
-		email, err = helper.GetUserEmail() // Replace with your email
-		if err != nil {
-			return "", ticketID, err
-		}
-	}
 	if email == "" {
 		return "", ticketID, errors.New("error: please export JIRA_EMAIL")
 	}

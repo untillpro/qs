@@ -9,7 +9,6 @@ const (
 	decimalBase                 = 10
 
 	bitSizeOfInt64        = 64
-	refsNotes             = "refs/notes/*:refs/notes/*"
 	LargeFileHookFilename = "large-file-hook.sh"
 
 	// Error message fragments for main branch sync issues (exported for test use)
@@ -46,12 +45,12 @@ while IFS= read -r -d '' entry; do
   fi
 done < <(git status --porcelain -z)
 
-if (( $totalsize > 100000 )); then 
+if (( $totalsize > 100000 )); then
   echo " Attempt to commit too large files: Files size = $totalsize"
 	 exit 1
 fi
 
-if (( $totalcnt > 200 )); then 
+if (( $totalcnt > 200 )); then
   echo " Attempt to commit too much files: Files number = $totalcnt"
 	 exit 1
 fi

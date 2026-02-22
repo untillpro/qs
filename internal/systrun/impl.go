@@ -26,9 +26,8 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
-	contextPkg "github.com/untillpro/qs/internal/context"
-	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/jira"
+	"github.com/untillpro/qs/utils"
 )
 
 // checkPrerequisites ensures all required tools are available
@@ -72,7 +71,7 @@ func (st *SystemTest) checkCommand() error {
 
 // createTestEnvironment sets up the test repositories based on configuration
 func (st *SystemTest) createTestEnvironment() error {
-	st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyCloneRepoPath, st.cloneRepoPath)
+	st.ctx = context.WithValue(st.ctx, utils.CtxKeyCloneRepoPath, st.cloneRepoPath)
 
 	// Setup upstream repo if needed
 	if st.cfg.UpstreamState != RemoteStateNull {
@@ -118,9 +117,7 @@ func (st *SystemTest) createTestEnvironment() error {
 	}
 
 	// Need some time to ensure the repo is created
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	if err := st.cloneRepo(cloneURL, st.cloneRepoPath, authToken); err != nil {
 		return err
@@ -181,7 +178,7 @@ func (st *SystemTest) createAnotherClone() error {
 	// set path to another clone
 	st.anotherCloneRepoPath = filepath.Join(tempPath, st.repoName)
 	// put path to the another clone to the context
-	st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyAnotherCloneRepoPath, st.anotherCloneRepoPath)
+	st.ctx = context.WithValue(st.ctx, utils.CtxKeyAnotherCloneRepoPath, st.anotherCloneRepoPath)
 
 	// clone  repo to the temp dir
 	cloneCmd := exec.Command(git, "clone", remoteOriginURL)
@@ -232,7 +229,7 @@ func (st *SystemTest) createAnotherClone() error {
 		return err
 	}
 
-	remoteBranchName, ok := st.ctx.Value(contextPkg.CtxKeyDevBranchName).(string)
+	remoteBranchName, ok := st.ctx.Value(utils.CtxKeyDevBranchName).(string)
 	if !ok {
 		return fmt.Errorf("remote branch name not found in context")
 	}
@@ -254,9 +251,7 @@ func (st *SystemTest) configureCollaboration() error {
 		return err
 	}
 
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	if err := acceptPendingInvitations(st.cfg.GHConfig.ForkToken); err != nil {
 		return err
@@ -283,7 +278,7 @@ func inviteCollaborator(owner, repo, username, token string) error {
 	req.Header.Set("Content-Type", "application/json")
 
 	var resp *netHttp.Response
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		resp, err = netHttp.DefaultClient.Do(req)
 
 		return err
@@ -329,7 +324,7 @@ func acceptPendingInvitations(token string) error {
 		acceptReq.Header.Set("Accept", "application/vnd.github+json")
 
 		var acceptResp *netHttp.Response
-		err = helper.Retry(func() error {
+		err = utils.Retry(func() error {
 			var err error
 			acceptResp, err = netHttp.DefaultClient.Do(acceptReq)
 
@@ -346,8 +341,8 @@ func acceptPendingInvitations(token string) error {
 			fmt.Printf("Failed to accept invitation ID %d: %s\n", invite.ID, acceptResp.Status)
 		}
 		//
-		//if helper.IsTest() {
-		//	helper.Delay()
+		//if utils.IsTest() {
+		//	utils.Delay()
 		//}
 	}
 
@@ -366,7 +361,7 @@ func (st *SystemTest) processClipboardContent() error {
 	case ClipboardContentCustom:
 		clipboardContent = st.getCustomClipboardContent()
 
-		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyCustomBranchName, clipboardContent+"-dev")
+		st.ctx = context.WithValue(st.ctx, utils.CtxKeyCustomBranchName, clipboardContent+"-dev")
 	case ClipboardContentUnavailableGithubIssue:
 		clipboardContent = fmt.Sprintf("https://github.com/%s/%s/issues/abc",
 			st.cfg.GHConfig.UpstreamAccount,
@@ -378,26 +373,26 @@ func (st *SystemTest) processClipboardContent() error {
 			return err
 		}
 
-		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyCreatedGithubIssueURL, clipboardContent)
+		st.ctx = context.WithValue(st.ctx, utils.CtxKeyCreatedGithubIssueURL, clipboardContent)
 	case ClipboardContentJiraTicket:
 		clipboardContent = os.Getenv("JIRA_TICKET_URL")
 		if clipboardContent == "" {
 			return errors.New("JIRA_TICKET_URL environment variable not set, skipping test")
 		}
 
-		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyJiraTicket, clipboardContent)
+		st.ctx = context.WithValue(st.ctx, utils.CtxKeyJiraTicket, clipboardContent)
 
 		jiraTicketID, ok := jira.GetJiraTicketIDFromArgs(clipboardContent)
 		if !ok {
 			return fmt.Errorf("invalid JIRA ticket URL: %s", clipboardContent)
 		}
 
-		st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyBranchPrefix, jiraTicketID)
+		st.ctx = context.WithValue(st.ctx, utils.CtxKeyBranchPrefix, jiraTicketID)
 	default:
 		return fmt.Errorf("unknown clipboard content type: %s", st.cfg.ClipboardContent)
 	}
 	// put clipboard value to context
-	st.ctx = context.WithValue(st.ctx, contextPkg.CtxKeyClipboard, clipboardContent)
+	st.ctx = context.WithValue(st.ctx, utils.CtxKeyClipboard, clipboardContent)
 
 	return nil
 }
@@ -413,7 +408,7 @@ func (st *SystemTest) createGitHubIssue() (string, error) {
 
 	var output []byte
 	// Run gh issue create command
-	err := helper.Retry(func() error {
+	err := utils.Retry(func() error {
 		var err error
 		cmd := exec.Command("gh", "issue", "create",
 			"--title", issueTitle,
@@ -453,7 +448,7 @@ func checkoutOnBranch(wd, branchName string) error {
 // createUpstreamRepo creates the upstream repository
 func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 	// GitHub Authentication and repo creation with retry
-	err := helper.Retry(func() error {
+	err := utils.Retry(func() error {
 		//nolint:gosec
 		cmd := exec.Command(
 			"gh",
@@ -475,8 +470,8 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 	}
 
 	// Verify repository was created and is accessible with retry
-	err = helper.Retry(func() error {
-		return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.UpstreamAccount, repoName, st.cfg.GHConfig.UpstreamToken)
+	err = utils.Retry(func() error {
+		return utils.VerifyGitHubRepoExists(st.cfg.GHConfig.UpstreamAccount, repoName, st.cfg.GHConfig.UpstreamToken)
 	}) // Retry up to 5 times for verification (GitHub eventual consistency)
 	if err != nil {
 		return fmt.Errorf("upstream repository verification failed: %w", err)
@@ -542,7 +537,7 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 		}
 
 		// Push changes with retry
-		err = helper.Retry(func() error {
+		err = utils.Retry(func() error {
 			return repo.Push(&gitPkg.PushOptions{
 				RemoteName: origin,
 				Auth: &http.BasicAuth{
@@ -563,7 +558,7 @@ func (st *SystemTest) createUpstreamRepo(repoName, repoURL string) error {
 func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 	if st.cfg.UpstreamState != RemoteStateNull {
 		// Fork the upstream repo with retry
-		err := helper.Retry(func() error {
+		err := utils.Retry(func() error {
 			//nolint:gosec
 			cmd := exec.Command(
 				"gh",
@@ -585,15 +580,15 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 		}
 
 		// Verify fork was created and is accessible with retry
-		err = helper.Retry(func() error {
-			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
+		err = utils.Retry(func() error {
+			return utils.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
 		})
 		if err != nil {
 			return fmt.Errorf("fork repository verification failed: %w", err)
 		}
 	} else {
 		// Create an independent repo with retry
-		err := helper.Retry(func() error {
+		err := utils.Retry(func() error {
 			//nolint:gosec
 			cmd := exec.Command(
 				"gh",
@@ -615,8 +610,8 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 		}
 
 		// Verify repository was created and is accessible with retry
-		err = helper.Retry(func() error {
-			return helper.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
+		err = utils.Retry(func() error {
+			return utils.VerifyGitHubRepoExists(st.cfg.GHConfig.ForkAccount, repoName, st.cfg.GHConfig.ForkToken)
 		})
 		if err != nil {
 			return fmt.Errorf("fork repository verification failed: %w", err)
@@ -682,7 +677,7 @@ func (st *SystemTest) createForkRepo(repoName, repoURL string) error {
 			}
 
 			// Push changes with retry
-			err = helper.Retry(func() error {
+			err = utils.Retry(func() error {
 				return repo.Push(&gitPkg.PushOptions{
 					RemoteName: origin,
 					Auth: &http.BasicAuth{
@@ -716,7 +711,7 @@ func (st *SystemTest) cloneRepo(repoURL, clonePath, token string) error {
 		},
 	}
 
-	err := helper.Retry(func() error {
+	err := utils.Retry(func() error {
 		_, err := gitPkg.PlainClone(clonePath, false, cloneOpts)
 
 		return err
@@ -1004,9 +999,9 @@ func (st *SystemTest) setSyncState(
 	}
 
 	// Set the expected dev branch name that will be used later for PR
-	createdGithubIssueURL, _ := st.ctx.Value(contextPkg.CtxKeyCreatedGithubIssueURL).(string)
-	jiraTicket, _ := st.ctx.Value(contextPkg.CtxKeyJiraTicket).(string)
-	customBranchName, _ := st.ctx.Value(contextPkg.CtxKeyCustomBranchName).(string)
+	createdGithubIssueURL, _ := st.ctx.Value(utils.CtxKeyCreatedGithubIssueURL).(string)
+	jiraTicket, _ := st.ctx.Value(utils.CtxKeyJiraTicket).(string)
+	customBranchName, _ := st.ctx.Value(utils.CtxKeyCustomBranchName).(string)
 	if createdGithubIssueURL == "" && jiraTicket == "" && customBranchName == "" {
 		return errors.New("a Jira ticket, GitHub issue, or custom branch name must be used to create dev branch")
 	}
@@ -1043,7 +1038,7 @@ func (st *SystemTest) setSyncState(
 			return err
 		}
 		// Push the dev branch to the remote with retry logic
-		err = helper.Retry(func() error {
+		err = utils.Retry(func() error {
 			//nolint:gosec
 			pushCmd := exec.Command(git, changeDirFlag, st.cloneRepoPath, "push", "-u", origin, devBranchName)
 			pushCmd.Env = append(os.Environ(), fmt.Sprintf(formatGithubTokenEnv, st.cfg.GHConfig.ForkToken))
@@ -1077,7 +1072,7 @@ func (st *SystemTest) setSyncState(
 			return fmt.Errorf("failed to get remote URL: %w", err)
 		}
 
-		devBranchName := st.ctx.Value(contextPkg.CtxKeyDevBranchName).(string)
+		devBranchName := st.ctx.Value(utils.CtxKeyDevBranchName).(string)
 		if devBranchName == "" {
 			return errors.New("failed to determine dev branch name")
 		}
@@ -1088,9 +1083,7 @@ func (st *SystemTest) setSyncState(
 		}
 	}
 
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	return nil
 }
@@ -1603,7 +1596,7 @@ func setBranchState(
 		return err
 	}
 	// Push the branch to the remote
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		_, stderr, err = new(goUtilsExec.PipedExec).
 			Command(git, "push", "-u", origin, branchName).
 			WorkingDir(wd).
@@ -1639,7 +1632,7 @@ func setBranchState(
 		cmd.Dir = wd
 
 		// create a pull request
-		err = helper.Retry(func() error {
+		err = utils.Retry(func() error {
 			return cmd.Run()
 		})
 		if err != nil {
@@ -1651,7 +1644,7 @@ func setBranchState(
 		if prMerged {
 			// merge the pull request
 			// here is a code to merge the pull request
-			err = helper.Retry(func() error {
+			err = utils.Retry(func() error {
 				_, stderr, err = new(goUtilsExec.PipedExec).
 					Command("gh", "pr", "merge", "--merge", forkAccount+":"+defaultPrBranchName).
 					WorkingDir(wd).
@@ -1685,7 +1678,7 @@ func setBranchState(
 	}
 
 	if !hasRtBranch {
-		err := helper.Retry(func() error {
+		err := utils.Retry(func() error {
 			_, stderr, err = new(goUtilsExec.PipedExec).
 				Command(git, "push", origin, "--delete", branchName).
 				WorkingDir(wd).
