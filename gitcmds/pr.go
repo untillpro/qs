@@ -1,6 +1,7 @@
 package gitcmds
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -554,4 +555,104 @@ func updateNotesObjInNoteLines(notes []string, notesObj notesPkg.Notes) []string
 	}
 
 	return append(newNotes, notesObj.String())
+}
+
+func createPR(
+	wd,
+	parentRepoName,
+	prBranchName,
+	issueDescription string,
+	notes []string,
+	asDraft bool,
+) (stdout string, stderr string, err error) {
+	if len(notes) == 0 {
+		return "", "", errors.New(ErrMsgPRNotesImpossible)
+	}
+
+	var isCustomBranch bool
+	prTitle := issueDescription
+	if len(prTitle) == 0 {
+		isCustomBranch = true
+		fmt.Print("Enter pull request title: ")
+		reader := bufio.NewReader(os.Stdin)
+
+		// Read until newline (includes spaces)
+		prTitle, err = reader.ReadString(caretByte)
+		if err != nil {
+			return "", "", err
+		}
+
+		prTitle = strings.TrimSpace(prTitle)
+		if len(prTitle) < minPRTitleLength {
+			return "", "", errors.New("too short pull request title")
+		}
+	}
+
+	var strNotes string
+	var issueURL string
+	strNotes, issueURL = GetNoteAndURL(notes)
+	b := GetBodyFromNotes(notes)
+	if len(b) == 0 && !isCustomBranch {
+		b = strNotes
+	}
+	if len(issueURL) > 0 {
+		b = b + caret + issueURL
+	}
+	strBody := fmt.Sprintln(b)
+
+	repoName, forkAccount, err := GetRepoAndOrgName(wd)
+	if err != nil {
+		return "", "", err
+	}
+
+	repo := parentRepoName
+	if len(repo) == 0 {
+		// Single remote mode: no parent repo, PR to same repo
+		repo = forkAccount + slash + repoName
+	}
+
+	// Determine the head reference for the PR
+	// In fork mode: use "forkAccount:branchName" format
+	// In single remote mode: use just "branchName" format
+	headRef := prBranchName
+	if len(parentRepoName) > 0 {
+		// Fork mode: specify the fork account
+		headRef = forkAccount + ":" + prBranchName
+	}
+
+	args := []string{
+		"pr",
+		"create",
+		fmt.Sprintf(`--head=%s`, headRef),
+		fmt.Sprintf(`--repo=%s`, repo),
+		fmt.Sprintf(`--body=%s`, strings.TrimSpace(strBody)),
+		fmt.Sprintf(`--title=%s`, strings.TrimSpace(prTitle)),
+	}
+	if asDraft {
+		args = append(args, "--draft")
+	}
+	err = utils.Retry(func() error {
+		stdout, stderr, err = new(exec.PipedExec).
+			Command("gh", args...).
+			RunToStrings()
+
+		return err
+	})
+	if err != nil {
+		return stdout, stderr, err
+	}
+
+	prInfo, stdout, stderr, err := DoesPrExist(wd, parentRepoName, prBranchName, PRStateOpen)
+	if err != nil {
+		return stdout, stderr, err
+	}
+	if prInfo == nil {
+		return stdout, stderr, errors.New("PR not created")
+	}
+	// print PR URL
+	if len(prInfo.URL) > 0 {
+		fmt.Println(prInfo.URL)
+	}
+
+	return stdout, stderr, err
 }

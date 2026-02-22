@@ -75,7 +75,7 @@ func (st *SystemTest) createTestEnvironment() error {
 
 	// Setup upstream repo if needed
 	if st.cfg.UpstreamState != RemoteStateNull {
-		upstreamRepoURL := gitcmds.BuildRemoteURL(
+		upstreamRepoURL := BuildRemoteURL(
 			st.cfg.GHConfig.UpstreamAccount,
 			st.cfg.GHConfig.UpstreamToken,
 			st.repoName,
@@ -88,7 +88,7 @@ func (st *SystemTest) createTestEnvironment() error {
 
 	// Setup fork repo if needed
 	if st.cfg.ForkState != RemoteStateNull {
-		forkRepoURL := gitcmds.BuildRemoteURL(
+		forkRepoURL := BuildRemoteURL(
 			st.cfg.GHConfig.ForkAccount,
 			st.cfg.GHConfig.ForkToken,
 			st.repoName,
@@ -206,7 +206,7 @@ func (st *SystemTest) createAnotherClone() error {
 			return err
 		}
 
-		if err := gitcmds.CreateRemote(
+		if err := CreateRemote(
 			st.anotherCloneRepoPath,
 			upstream,
 			upstreamAccount,
@@ -218,7 +218,7 @@ func (st *SystemTest) createAnotherClone() error {
 		}
 	}
 
-	if err := gitcmds.CreateRemote(
+	if err := CreateRemote(
 		st.anotherCloneRepoPath,
 		origin,
 		forkAccount,
@@ -729,7 +729,7 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 	switch {
 	case st.cfg.ForkState != RemoteStateNull && st.cfg.UpstreamState != RemoteStateNull:
 		// Both upstream and fork exist, configure both remotes
-		if err := gitcmds.CreateRemote(
+		if err := CreateRemote(
 			wd,
 			origin,
 			st.cfg.GHConfig.ForkAccount,
@@ -740,7 +740,7 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 			return err
 		}
 
-		if err := gitcmds.CreateRemote(
+		if err := CreateRemote(
 			wd,
 			upstream,
 			st.cfg.GHConfig.UpstreamAccount,
@@ -753,7 +753,7 @@ func (st *SystemTest) configureRemotes(wd, repoName string) error {
 
 	case st.cfg.ForkState == RemoteStateNull && st.cfg.UpstreamState != RemoteStateNull:
 		// Only upstream exists, make sure origin points to upstream
-		if err := gitcmds.CreateRemote(
+		if err := CreateRemote(
 			wd,
 			origin,
 			st.cfg.GHConfig.UpstreamAccount,
@@ -1106,7 +1106,7 @@ func (st *SystemTest) setMainBranchConflict() error {
 	defer os.RemoveAll(upstreamRepoPath)
 
 	// Clone upstream repo
-	upstreamURL := gitcmds.BuildRemoteURL(
+	upstreamURL := BuildRemoteURL(
 		st.cfg.GHConfig.UpstreamAccount,
 		st.cfg.GHConfig.UpstreamToken,
 		st.repoName,
@@ -1196,7 +1196,7 @@ func (st *SystemTest) setMainBranchDiverged() error {
 	defer os.RemoveAll(upstreamRepoPath)
 
 	// Clone upstream repo
-	upstreamURL := gitcmds.BuildRemoteURL(
+	upstreamURL := BuildRemoteURL(
 		st.cfg.GHConfig.UpstreamAccount,
 		st.cfg.GHConfig.UpstreamToken,
 		st.repoName,
@@ -1357,7 +1357,7 @@ func (st *SystemTest) pushFromAnotherClone(originRemoteURL, branchName, headOfFi
 	}
 
 	// Step 4: Create the remote in the cloned repository
-	if err := gitcmds.CreateRemote(
+	if err := CreateRemote(
 		tempClonePath,
 		origin,
 		account,

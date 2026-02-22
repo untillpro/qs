@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -183,4 +184,99 @@ func EnsureLargeFileHookUpToDate(wd string) error {
 	}
 
 	return nil
+}
+
+func getGlobalHookFolder() string {
+	stdout, _, err := new(exec.PipedExec).
+		Command(git, "config", "--global", "core.hooksPath").
+		RunToStrings()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(stdout)
+}
+
+func getLocalHookFolder(wd string) (string, error) {
+	dir, err := GetRootFolder(wd)
+	if err != nil {
+		return "", err
+	}
+	filename := "/.git/hooks/pre-commit"
+	filepath := dir + filename
+
+	return strings.TrimSpace(filepath), nil
+}
+
+// LocalPreCommitHookExist - s.e.
+func LocalPreCommitHookExist(wd string) (bool, error) {
+	filepath, err := getLocalHookFolder(wd)
+	if err != nil {
+		return false, err
+	}
+	// Check if the file already exists
+	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+		return false, nil
+	}
+
+	return largeFileHookExist(filepath), nil
+}
+
+func largeFileHookExist(filepath string) bool {
+	substring := LargeFileHookFilename
+	_, _, err := new(exec.PipedExec).Command("grep", "-l", substring, filepath).RunToStrings()
+
+	return err == nil
+}
+
+// SetGlobalPreCommitHook - s.e.
+func SetGlobalPreCommitHook(wd string) error {
+	var err error
+	path := getGlobalHookFolder()
+
+	if len(path) == 0 {
+		rootUser, err := user.Current()
+		if err != nil {
+			return err
+		}
+
+		path = rootUser.HomeDir
+		path += "/.git/hooks"
+		if err = os.MkdirAll(path, os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	// Set global hooks folder
+	err = new(exec.PipedExec).
+		Command(git, "config", "--global", "core.hookspath", path).
+		Run(os.Stdout, os.Stdout)
+	if err != nil {
+		return err
+	}
+
+	filepath := path + "/pre-commit"
+	f, err := createOrOpenFile(filepath)
+	if err != nil {
+		return err
+	}
+
+	_ = f.Close()
+	if !largeFileHookExist(filepath) {
+		return fillPreCommitFile(wd, filepath)
+	}
+
+	return nil
+}
+
+
+func GetRootFolder(wd string) (string, error) {
+	stdout, _, err := new(exec.PipedExec).
+		Command(git, "rev-parse", "--show-toplevel").
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(stdout), nil
 }

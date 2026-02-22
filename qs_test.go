@@ -25,6 +25,6 @@ func TestClipBoard(t *testing.T) {
 }
 
 func TestIssueRepoFromURL(t *testing.T) {
-	repo := gitcmds.GetIssueRepoFromURL("https://github.com/untillpro/qs/issues/24")
+	repo := gitcmds.GetGithubIssueRepoFromURL("https://github.com/untillpro/qs/issues/24")
 	assert.Equal(t, "untillpro/qs", repo)
 }
