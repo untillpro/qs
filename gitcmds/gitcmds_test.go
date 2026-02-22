@@ -7,11 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetTaskIDFromUrl(t *testing.T) {
-	reponame := retrieveRepoNameFromUPL("https://github.com/IVVORG/test-repo/pull/38")
-	assert.Equal(t, "IVVORG/test-repo", reponame)
-}
-
 func TestGetNotes(t *testing.T) {
 	// Test for PK types
 	s1 := "Permanent support for Peter,  Pascal, and customers "

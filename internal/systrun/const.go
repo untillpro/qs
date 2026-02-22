@@ -15,6 +15,7 @@ const (
 	changeDirFlag               = "-C"
 	defaultDevBranchName        = "branch-name-dev"
 	defaultPrBranchName         = "branch-name-pr"
+	slash                       = "/"
 )
 
 const (
