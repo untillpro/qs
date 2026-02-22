@@ -84,7 +84,7 @@ func GitStatus(wd string) (string, error) {
 		logger.Verbose(stderr)
 
 		if len(stderr) > 0 {
-			err = errors.New(strings.TrimSpace(stderr))
+			err = fmt.Errorf("%s: %w", strings.TrimSpace(stderr), err)
 		}
 	}
 
