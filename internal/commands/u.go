@@ -13,10 +13,6 @@ import (
 )
 
 func U(cmd *cobra.Command, commitMessage string, wd string) error {
-	if err := gitcmds.Status(wd); err != nil {
-		return fmt.Errorf("git status failed: %w", err)
-	}
-
 	currentBranch, isMain, err := gitcmds.IamInMainBranch(wd)
 	if err != nil {
 		return err

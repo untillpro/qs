@@ -118,7 +118,6 @@ func GetJiraIssueName(ticketURL, ticketID string) (string, string, error) {
 	if email == "" {
 		return "", ticketID, errors.New("error: please export JIRA_EMAIL")
 	}
-	fmt.Println("User email: ", email)
 
 	// Build the request URL
 	url := fmt.Sprintf("%s/rest/api/3/issue/%s", jiraDomain, ticketID)
