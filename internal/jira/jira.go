@@ -110,11 +110,6 @@ func GetJiraIssueName(ticketURL, ticketID string) (string, string, error) {
 
 	email = os.Getenv("JIRA_EMAIL")
 	if email == "" {
-		if err != nil {
-			return "", ticketID, err
-		}
-	}
-	if email == "" {
 		return "", ticketID, errors.New("error: please export JIRA_EMAIL")
 	}
 

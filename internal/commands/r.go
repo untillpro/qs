@@ -126,7 +126,7 @@ func Release(wd string) error {
 	{
 		newVersion.Minor++
 		newVersion.PreRelease = "SNAPSHOT"
-		if err := targetVersion.Save(); err != nil {
+		if err := newVersion.Save(); err != nil {
 			return fmt.Errorf("error saving file 'version': %w", err)
 		}
 	}
