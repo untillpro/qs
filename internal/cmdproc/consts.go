@@ -31,3 +31,5 @@ const (
 	upgradeParamDesc        = "Print command to upgrade qs"
 	versionParamDesc        = "Print qs version"
 )
+
+var requiredCommands = []string{"grep", "sed", "jq", "gawk", "wc", "curl", "chmod"}

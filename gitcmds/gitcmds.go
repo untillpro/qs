@@ -64,7 +64,18 @@ const (
 	issuelinePosRepo = 3
 )
 
-func CheckIfGitRepo(wd string) (string, error) {
+func CheckIfGitRepo(wd string) (bool, error) {
+	_, err := GitStatus(wd)
+	if err != nil {
+		if strings.Contains(err.Error(), err128) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func GitStatus(wd string) (string, error) {
 	stdout, stderr, err := new(exec.PipedExec).
 		Command("git", "status", "-s").
 		WorkingDir(wd).
@@ -72,10 +83,8 @@ func CheckIfGitRepo(wd string) (string, error) {
 	if err != nil {
 		logger.Verbose(stderr)
 
-		if strings.Contains(err.Error(), err128) {
-			err = errors.New("this is not a git repository")
-		} else if len(stderr) > 0 {
-			err = errors.New(strings.TrimSpace(stderr))
+		if len(stderr) > 0 {
+			err = fmt.Errorf("%s: %w", strings.TrimSpace(stderr), err)
 		}
 	}
 
@@ -84,7 +93,7 @@ func CheckIfGitRepo(wd string) (string, error) {
 
 // ChangedFilesExist s.e.
 func ChangedFilesExist(wd string) (string, bool, error) {
-	files, err := CheckIfGitRepo(wd)
+	files, err := GitStatus(wd)
 	uncommitedFiles := strings.TrimSpace(files)
 
 	return uncommitedFiles, len(uncommitedFiles) > 0, err
@@ -120,10 +129,6 @@ func Status(wd string) error {
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
-
-		if strings.Contains(err.Error(), err128) {
-			return errors.New("this is not a git repository")
-		}
 
 		if len(stderr) > 0 {
 			return errors.New(stderr)

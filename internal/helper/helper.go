@@ -68,19 +68,14 @@ func Delay() {
 	time.Sleep(time.Duration(timeoutMs) * time.Millisecond)
 }
 
-func CheckGH() bool {
+func CheckGH() error {
 	if !ghInstalled() {
-		fmt.Print("\nGithub cli utility 'gh' is not installed.\nTo install visit page https://cli.github.com/\n")
-
-		return false
+		return fmt.Errorf("Github cli utility 'gh' is not installed.\nTo install visit page https://cli.github.com/")
 	}
 	if !ghLoggedIn() {
-		fmt.Print("\nGH utility is not logged in\n")
-
-		return false
+		return fmt.Errorf("GH utility is not logged in")
 	}
-
-	return true
+	return nil
 }
 
 func CheckQsVer() bool {
