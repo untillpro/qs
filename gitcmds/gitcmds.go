@@ -88,26 +88,6 @@ func ChangedFilesExist(wd string) (string, bool, error) {
 	return uncommitedFiles, len(uncommitedFiles) > 0, err
 }
 
-// stashEntriesExist checks if there are any stash entries in the git repository
-func stashEntriesExist(wd string) (bool, error) {
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "stash", "list").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return false, errors.New(stderr)
-		}
-
-		return false, fmt.Errorf("failed to check stash entries: %w", err)
-	}
-	stashEntries := strings.TrimSpace(stdout)
-
-	return len(stashEntries) > 0, nil
-}
-
 // Stash stashes uncommitted changes
 func Stash(wd string) error {
 	_, stderr, err := new(exec.PipedExec).
@@ -127,19 +107,32 @@ func Stash(wd string) error {
 	return nil
 }
 
-// Unstash pops the latest stash
+// Unstash pops the latest stash if stash entries exist
 func Unstash(wd string) error {
 	stdout, stderr, err := new(exec.PipedExec).
-		Command("git", "stash", "pop").
+		Command(git, "stash", "list").
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
 		logger.Verbose(stderr)
 
-		const msg = "No stash entries found"
-		if strings.Contains(stdout, msg) || strings.Contains(stderr, msg) {
-			return nil // No stash to pop, return nil
+		if len(stderr) > 0 {
+			return errors.New(stderr)
 		}
+
+		return fmt.Errorf("failed to check stash entries: %w", err)
+	}
+
+	if len(strings.TrimSpace(stdout)) == 0 {
+		return nil
+	}
+
+	_, stderr, err = new(exec.PipedExec).
+		Command(git, "stash", "pop").
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
 
 		if len(stderr) > 0 {
 			return errors.New(stderr)
@@ -288,28 +281,6 @@ func GetRepoAndOrgName(wd string) (repo string, org string, err error) {
 	}
 
 	return
-}
-
-func PopStashedFiles(wd string) error {
-	if ok, err := stashEntriesExist(wd); !ok {
-		return err
-	}
-
-	_, stderr, err := new(exec.PipedExec).
-		Command(git, "stash", "pop").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return errors.New(stderr)
-		}
-
-		return fmt.Errorf("PopStashedFiles error: %s", stderr)
-	}
-
-	return nil
 }
 
 func GetMainBranch(wd string) (string, error) {
