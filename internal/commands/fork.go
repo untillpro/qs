@@ -21,7 +21,7 @@ func Fork(wd string) error {
 		logger.Verbose(fmt.Sprintf("Failed to set upstream: %v", err))
 	}
 
-	if err := gitcmds.PopStashedFiles(wd); err != nil {
+	if err := gitcmds.Unstash(wd); err != nil {
 		logger.Verbose(fmt.Sprintf("Failed to pop stashed files: %v", err))
 	}
 
