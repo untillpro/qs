@@ -23,12 +23,10 @@ func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 		Use:   commands.CommandNameU,
 		Short: pushParamDesc,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := getWorkingDir(params)
-			if err != nil {
+			if err := gitcmds.Status(params.Dir); err != nil {
 				return err
 			}
-
-			return commands.U(cmd, commintMessage, wd)
+			return commands.U(cmd, commintMessage, params.Dir)
 		},
 	}
 	uploadCmd.Flags().StringVarP(&commintMessage, pushMessageWord, pushMessageParam, "", pushMsgComment)
@@ -41,12 +39,7 @@ func downloadCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 		Use:   commands.CommandNameD,
 		Short: pullParamDesc,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := getWorkingDir(params)
-			if err != nil {
-				return err
-			}
-
-			return commands.D(wd)
+			return commands.D(params.Dir)
 		},
 	}
 
@@ -58,12 +51,7 @@ func releaseCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 		Use:   commands.CommandNameR,
 		Short: releaseParamDesc,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := getWorkingDir(params)
-			if err != nil {
-				return err
-			}
-
-			return commands.R(wd)
+			return commands.R(params.Dir)
 		},
 	}
 
@@ -75,12 +63,7 @@ func guiCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 		Use:   commands.CommandNameG,
 		Short: guiParamDesc,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := getWorkingDir(params)
-			if err != nil {
-				return err
-			}
-
-			return commands.G(wd)
+			return commands.G(params.Dir)
 		},
 	}
 
@@ -92,17 +75,13 @@ func prCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 		Use:   commands.CommandNamePR,
 		Short: prParamDesc,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := getWorkingDir(params)
-			if err != nil {
-				return err
-			}
 			// Ask for confirmation before creating the PR
 			var needDraft = false
 			if cmd.Flag(prdraftParamFull).Value.String() == "true" {
 				needDraft = true
 			}
 
-			return commands.Pr(wd, needDraft)
+			return commands.Pr(params.Dir, needDraft)
 		},
 	}
 	cmd.Flags().BoolP(prdraftParamFull, prdraftParam, false, prdraftMsgComment)
@@ -139,12 +118,7 @@ func devCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 		Use:   commands.CommandNameDev,
 		Short: devParamDesc,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := getWorkingDir(params)
-			if err != nil {
-				return err
-			}
-
-			return commands.Dev(cmd, wd, args)
+			return commands.Dev(cmd, params.Dir, args)
 		},
 	}
 	cmd.Flags().BoolP(devDelParamFull, devDelParam, false, devDelMsgComment)
@@ -158,12 +132,7 @@ func forkCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 		Use:   commands.CommandNameFork,
 		Short: forkParamDesc,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := getWorkingDir(params)
-			if err != nil {
-				return err
-			}
-
-			return commands.Fork(wd)
+			return commands.Fork(params.Dir)
 		},
 	}
 
@@ -263,13 +232,14 @@ func ExecRootCmd(ctx context.Context, args []string) (context.Context, error) {
 		upgradeCmd(ctx),
 		versionCmd(ctx),
 	)
-	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		wd, err := getWorkingDir(params)
 		if err != nil {
 			return err
 		}
+		params.Dir = wd
 
-		return gitcmds.Status(wd)
+		return nil
 	}
 	rootCmd.Flags().StringVarP(&params.Dir, "change-dir", "C", "", "change to dir before running the command. Any files named on the command line are interpreted after changing directories")
 
