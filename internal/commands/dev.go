@@ -21,10 +21,6 @@ import (
 )
 
 func Dev(cmd *cobra.Command, wd string, args []string) error {
-	if _, err := gitcmds.CheckIfGitRepo(wd); err != nil {
-		return err
-	}
-
 	parentRepo, err := gitcmds.GetParentRepoName(wd)
 	if err != nil {
 		return err

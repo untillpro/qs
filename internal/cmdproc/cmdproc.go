@@ -2,6 +2,7 @@ package cmdproc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -238,6 +239,16 @@ func ExecRootCmd(ctx context.Context, args []string) (context.Context, error) {
 			return err
 		}
 		params.Dir = wd
+
+		if cmd.Name() != commands.CommandNameUpgrade && cmd.Name() != commands.CommandNameVersion {
+			ok, err := gitcmds.CheckIfGitRepo(params.Dir)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return errors.New("this is not a git repository")
+			}
+		}
 
 		return nil
 	}
