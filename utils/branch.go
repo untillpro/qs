@@ -1,4 +1,4 @@
-package helper
+package utils
 
 import (
 	"errors"
@@ -36,9 +36,9 @@ func GetBranchName(ignoreEmptyArg bool, args ...string) (branch string, comments
 			url := arg
 			topicID := GetTaskIDFromURL(url)
 			if topicID == arg {
-				branch = branch + msymbol + topicID
+				branch = branch + "-" + topicID
 			} else {
-				branch = topicID + msymbol + branch
+				branch = topicID + "-" + branch
 			}
 			break
 		}
@@ -68,7 +68,7 @@ func clearEmptyArgs(args []string) (newargs []string) {
 func splitQuotedArgs(args ...string) []string {
 	var newargs []string
 	for _, arg := range args {
-		subargs := strings.Split(arg, oneSpace)
+		subargs := strings.Split(arg, " ")
 		if len(subargs) == 0 {
 			continue
 		}

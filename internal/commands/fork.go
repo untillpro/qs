@@ -33,9 +33,9 @@ func notCommittedRefused(wd string) (bool, error) {
 	if !fileExists {
 		return false, err
 	}
-	fmt.Println(confMsgModFiles1)
+	fmt.Println("You have modified files: ")
 	fmt.Println("----   " + s)
-	fmt.Print(confMsgModFiles2)
+	fmt.Print("All will be kept not commted. Continue(y/n)?")
 	var response string
 	_, _ = fmt.Scanln(&response)
 

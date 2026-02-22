@@ -14,14 +14,14 @@ import (
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
-	"github.com/untillpro/qs/internal/helper"
+	"github.com/untillpro/qs/utils"
 )
 
 func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	commintMessage := ""
 	var uploadCmd = &cobra.Command{
 		Use:   commands.CommandNameU,
-		Short: pushParamDesc,
+		Short: "Upload sources to repo",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := gitcmds.Status(params.Dir); err != nil {
 				return err
@@ -29,7 +29,7 @@ func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 			return commands.U(cmd, commintMessage, params.Dir)
 		},
 	}
-	uploadCmd.Flags().StringVarP(&commintMessage, pushMessageWord, pushMessageParam, "", pushMsgComment)
+	uploadCmd.Flags().StringVarP(&commintMessage, "message", "m", "", "Use the given string as the commit message")
 
 	return uploadCmd
 }
@@ -37,9 +37,9 @@ func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 func downloadCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameD,
-		Short: pullParamDesc,
+		Short: "Download sources from repo",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return commands.D(params.Dir)
+			return gitcmds.Download(params.Dir)
 		},
 	}
 
@@ -49,9 +49,9 @@ func downloadCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 func releaseCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameR,
-		Short: releaseParamDesc,
+		Short: "Create a release",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return commands.R(params.Dir)
+			return commands.Release(params.Dir)
 		},
 	}
 
@@ -61,9 +61,9 @@ func releaseCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 func guiCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameG,
-		Short: guiParamDesc,
+		Short: "Show GUI",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return commands.G(params.Dir)
+			return gitcmds.Gui(params.Dir)
 		},
 	}
 
@@ -73,18 +73,18 @@ func guiCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 func prCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNamePR,
-		Short: prParamDesc,
+		Short: "Make pull request",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Ask for confirmation before creating the PR
 			var needDraft = false
-			if cmd.Flag(prdraftParamFull).Value.String() == "true" {
+			if cmd.Flag("draft").Value.String() == "true" {
 				needDraft = true
 			}
 
-			return commands.Pr(params.Dir, needDraft)
+			return gitcmds.Pr(params.Dir, needDraft)
 		},
 	}
-	cmd.Flags().BoolP(prdraftParamFull, prdraftParam, false, prdraftMsgComment)
+	cmd.Flags().BoolP("draft", "d", false, "Create draft of pull request")
 
 	return cmd
 }
@@ -92,7 +92,7 @@ func prCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 func versionCmd(_ context.Context) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameVersion,
-		Short: versionParamDesc,
+		Short: "Print qs version",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return commands.Version()
 		},
@@ -104,7 +104,7 @@ func versionCmd(_ context.Context) *cobra.Command {
 func upgradeCmd(_ context.Context) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameUpgrade,
-		Short: upgradeParamDesc,
+		Short: "Print command to upgrade qs",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return commands.Upgrade()
 		},
@@ -114,15 +114,18 @@ func upgradeCmd(_ context.Context) *cobra.Command {
 }
 
 func devCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
+	doDelete := false
+	ignoreHook := false
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameDev,
-		Short: devParamDesc,
+		Short: "Create developer branch",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return commands.Dev(cmd, params.Dir, args)
+			return commands.Dev(cmd, params.Dir, doDelete, ignoreHook, args)
 		},
 	}
-	cmd.Flags().BoolP(devDelParamFull, devDelParam, false, devDelMsgComment)
-	cmd.Flags().BoolP(ignorehookDelParamFull, ignorehookDelParam, false, devIgnoreHookMsgComment)
+
+	cmd.Flags().BoolVarP(&doDelete, "delete", "d", false, "Deletes all merged branches from forked repository")
+	cmd.Flags().BoolVarP(&ignoreHook, "ignore-hook", "i", false, "Ignore creating local hook")
 
 	return cmd
 }
@@ -130,7 +133,7 @@ func devCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 func forkCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	var cmd = &cobra.Command{
 		Use:   commands.CommandNameFork,
-		Short: forkParamDesc,
+		Short: "Fork original repo",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return commands.Fork(params.Dir)
 		},
@@ -139,43 +142,10 @@ func forkCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {
 	return cmd
 }
 
-// shouldSkipPrerequisiteChecks returns true for commands that don't need prerequisite checks
-func shouldSkipPrerequisiteChecks(cmdName string) bool {
-	skipCommands := []string{
-		commands.CommandNameVersion,
-		commands.CommandNameUpgrade,
-		"help",
-	}
-
-	for _, skipCmd := range skipCommands {
-		if cmdName == skipCmd {
-			return true
-		}
-	}
-
-	return false
-}
-
-// needsGitHubCLI returns true for commands that require GitHub CLI
-func needsGitHubCLI(cmdName string) bool {
-	ghCommands := []string{
-		commands.CommandNameFork,
-		commands.CommandNameDev,
-		commands.CommandNamePR,
-	}
-
-	for _, ghCmd := range ghCommands {
-		if cmdName == ghCmd {
-			return true
-		}
-	}
-	return false
-}
-
 // checkRequiredBashCommands checks if all required bash commands are available
 func checkRequiredBashCommands() error {
 	missing := []string{}
-	for _, cmd := range requiredCommands {
+	for _, cmd := range requiredBashCommands {
 		_, err := exec.LookPath(cmd)
 		if err != nil {
 			missing = append(missing, cmd)
@@ -297,7 +267,7 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 			}
 
 			// Skip checks for commands that don't need them
-			if shouldSkipPrerequisiteChecks(cmd.Name()) {
+			if cmdsSkipPrerequisites[cmd.Name()] {
 				return nil
 			}
 
@@ -308,14 +278,14 @@ func PrepareRootCmd(ctx context.Context, use string, short string, args []string
 
 			// Check QS version (unless skipped)
 			skipQsVerCheck, _ := strconv.ParseBool(os.Getenv(commands.EnvSkipQsVersionCheck))
-			if !skipQsVerCheck && !helper.CheckQsVer() {
-				fmt.Println(msgOkSeeYou)
+			if !skipQsVerCheck && !commands.CheckQsVer() {
+				fmt.Println("Ok, see you")
 				os.Exit(1)
 			}
 
 			// Check GitHub CLI (for commands that need it)
-			if needsGitHubCLI(cmd.Name()) {
-				if err := helper.CheckGH(); err != nil {
+			if cmdsNeedGH[cmd.Name()] {
+				if err := utils.CheckGH(); err != nil {
 					return err
 				}
 			}

@@ -1,18 +1,11 @@
 package gitcmds
 
-type fileStatus int
-
-const (
-	fileStatusUntracked fileStatus = iota
-	fileStatusAdded
-	fileStatusModified
-	fileStatusDeleted
-	fileStatusRenamed
-)
-
-type FileInfo struct {
-	status       fileStatus
+type fileInfo struct {
 	name         string
-	oldName      string
 	sizeIncrease int64
+}
+
+type PRInfo struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
 }

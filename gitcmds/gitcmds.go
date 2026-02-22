@@ -8,19 +8,15 @@ import (
 	"net/url"
 	"os"
 	"os/user"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	goGitPkg "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
-	contextPkg "github.com/untillpro/qs/internal/context"
-	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
@@ -119,468 +115,10 @@ func stashEntriesExist(wd string) (bool, error) {
 	return len(stashEntries) > 0, nil
 }
 
-// Status shows git repo status
-func Status(wd string) error {
-	stdout, stderr, err := new(exec.PipedExec).
-		Command("git", "remote", "-v").
-		WorkingDir(wd).
-		Command("grep", fetch).
-		Command("sed", "s/(fetch)//").
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return errors.New(stderr)
-		}
-
-		return err
-	}
-
-	// Print the colorized git status output
-	printLn(stdout)
-
-	// Get git status output with colors for display
-	statusStdout, statusStderr, err := new(exec.PipedExec).
-		Command("git", "-c", "color.status=always", "status", "-s", "-b", "-uall").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(statusStderr)
-
-		if len(statusStderr) > 0 {
-			return errors.New(statusStderr)
-		}
-
-		return fmt.Errorf("git status failed: %w", err)
-	}
-
-	// Print the colorized git status output
-	printLn(statusStdout)
-
-	// Get clean output for parsing (without color codes)
-	cleanStatusStdout, stderr, err := new(exec.PipedExec).
-		Command("git", "status", "-s", "-b", "-uall").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return errors.New(stderr)
-		}
-
-		return fmt.Errorf("failed to get clean status for parsing: %w", err)
-	}
-
-	files, err := getListOfChangedFiles(wd, cleanStatusStdout)
-	if err != nil {
-		return fmt.Errorf("failed to get list of changed and new files: %w", err)
-	}
-
-	// Calculate and display file size information using clean output
-	if err := displaySummary(files); err != nil {
-		logger.Verbose(fmt.Sprintf("Failed to calculate file sizes: %v", err))
-	}
-
-	return nil
-}
-
-// getListOfChangedFiles parses the git status output and returns lists of changed files
-func getListOfChangedFiles(wd, statusOutput string) ([]FileInfo, error) {
-	lines := strings.Split(strings.TrimSpace(statusOutput), "\n")
-	if len(lines) == 0 {
-		return []FileInfo{}, nil
-	}
-
-	files := make([]FileInfo, 0, len(lines))
-
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "rev-parse", "--absolute-git-dir").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return nil, errors.New(stderr)
-		}
-
-		return nil, fmt.Errorf("failed to get absolute git dir: %w", err)
-	}
-	gitDir := strings.TrimSpace(stdout)
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		// Skip a branch information line (starts with ##)
-		if strings.HasPrefix(line, "##") {
-			continue
-		}
-
-		// Parse git status line format: "XY filename"
-		// nolint:revive
-		if len(line) < 4 {
-			continue // Line too short to contain status + space + filename
-		}
-
-		statusCode := strings.TrimSpace(line[:2])
-		name := strings.TrimSpace(line[2:])
-
-		// Unquote Git filenames (Git quotes filenames with spaces and special characters)
-		name = unquoteGitFilename(name)
-
-		oldName := name
-		if name == "" {
-			continue // Skip empty filenames
-		}
-
-		if strings.Contains(name, " -> ") {
-			// Handle renamed files (format: "old -> new")
-			parts := strings.Split(name, " -> ")
-			if len(parts) == 2 {
-				name = strings.TrimSpace(unquoteGitFilename(parts[1]))    // Use the new filename
-				oldName = strings.TrimSpace(unquoteGitFilename(parts[0])) // Use the old filename
-			} else {
-				// TODO: Handle file name which -> as part of the file name
-				continue // Skip malformed renamed files
-			}
-		}
-
-		var (
-			status fileStatus
-			err1   error
-			err2   error
-		)
-
-		switch statusCode {
-		case `A`, `AM`:
-			status = fileStatusAdded
-		case `M`, `MM`, `RM`:
-			status = fileStatusModified
-		case `D`:
-			status = fileStatusDeleted
-		case `R`:
-			status = fileStatusRenamed
-		case `??`:
-			status = fileStatusUntracked
-		default:
-			return nil, fmt.Errorf("unknown file status %s for file %s", statusCode, name)
-		}
-
-		oldSize := int64(0)
-		newFileSize := int64(0)
-		switch status {
-		case fileStatusAdded:
-			newFileSize, err1 = getFileSize(wd, name)
-		case fileStatusModified:
-			newFileSize, err1 = getFileSize(wd, name)
-			oldSize, err2 = getFileSizeFromHEAD(wd, gitDir, oldName)
-		case fileStatusDeleted:
-			oldSize, err2 = getFileSizeFromHEAD(wd, gitDir, oldName)
-		case fileStatusRenamed:
-			newFileSize, err1 = getFileSize(wd, name)
-			oldSize = newFileSize
-		case fileStatusUntracked:
-			newFileSize, err2 = getFileSize(wd, name)
-		default:
-			return nil, fmt.Errorf("unknown file status %s for file %s", statusCode, name)
-		}
-
-		if err2 != nil {
-			return nil, err2
-		}
-		if err1 != nil {
-			return nil, err1
-		}
-
-		sizeIncrease := newFileSize - oldSize
-		if sizeIncrease < 0 {
-			sizeIncrease = 0 // Ensure size increase is not negative
-		}
-
-		files = append(files, FileInfo{
-			status:       status,
-			name:         name,
-			oldName:      oldName,
-			sizeIncrease: sizeIncrease,
-		})
-	}
-
-	return files, nil
-}
-
-func getFileSizeFromHEAD(wd, gitDir, fileName string) (int64, error) {
-	repoRootDir := filepath.Dir(gitDir)
-	// compute relative path
-	relativePath, err := filepath.Rel(repoRootDir, wd)
-	if err != nil {
-		return 0, fmt.Errorf("failed to compute relative path from repo root to working dir: %w", err)
-	}
-	// workaround for Windows paths
-	filePath := strings.ReplaceAll(filepath.Join(relativePath, fileName), "\\", "/")
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, "cat-file", "-s", fmt.Sprintf("HEAD:%s", filePath)).
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Error(stderr)
-
-		if len(stderr) > 0 {
-			return 0, errors.New(stderr)
-		}
-
-		return 0, fmt.Errorf("failed to get file size from HEAD for %s: %w", fileName, err)
-	}
-
-	return strconv.ParseInt(strings.TrimSpace(stdout), decimalBase, bitSizeOfInt64)
-}
-
-func getFileSize(wd, fileName string) (int64, error) {
-	fileInfo, err := os.Stat(filepath.Join(wd, fileName))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, fmt.Errorf("file %s does not exist: %w", fileName, err)
-		}
-		return 0, fmt.Errorf("failed to get file info for %s: %w", fileName, err)
-	}
-
-	return fileInfo.Size(), nil
-}
-
-// displaySummary calculates and displays file size information
-func displaySummary(files []FileInfo) error {
-	var (
-		totalSize   int64
-		largestFile FileInfo
-	)
-
-	for _, file := range files {
-		totalSize += file.sizeIncrease
-		if file.sizeIncrease > largestFile.sizeIncrease {
-			largestFile = file
-		}
-	}
-
-	// Print summary only if there are files to summarize
-	if totalSize > 0 {
-		fmt.Println()
-		fmt.Println("Summary:")
-
-		// Format total size with underscores and color
-		totalSizeStr := formatSizeWithUnderscores(totalSize)
-		fmt.Printf("  %s %s bytes\n", "Total positive delta:    ", totalSizeStr)
-
-		// Find the largest file
-		if largestFile.name != "" {
-			largestSizeStr := formatSizeWithUnderscores(largestFile.sizeIncrease)
-			fmt.Printf("  %s %s (%s bytes)\n", "Largest positive delta:  ", largestFile.name, largestSizeStr)
-		}
-	}
-
-	return nil
-}
-
-func unquoteGitFilename(filename string) string {
-	// Unquote Git filenames that are quoted with double quotes
-	if strings.HasPrefix(filename, `"`) && strings.HasSuffix(filename, `"`) {
-		filename = filename[1 : len(filename)-1]
-		// Unescape common escape sequences
-		filename = strings.ReplaceAll(filename, `\"`, `"`)
-		filename = strings.ReplaceAll(filename, `\\`, `\`)
-	}
-
-	return filename
-}
-
-// formatSizeWithUnderscores formats a number with underscores as thousand separators
-func formatSizeWithUnderscores(size int64) string {
-	str := strconv.FormatInt(size, decimalBase)
-	if len(str) <= countOfZerosIn1000 {
-		return str
-	}
-
-	var result strings.Builder
-	for i, digit := range str {
-		if i > 0 && (len(str)-i)%countOfZerosIn1000 == 0 {
-			result.WriteRune('_')
-		}
-		result.WriteRune(digit)
-	}
-
-	return result.String()
-}
-
-/*
-	- Pull
-	- Get current verson
-	- If PreRelease is not empty fails
-	- Calculate target version
-	- Ask
-	- Save version
-	- Commit
-	- Tag with target version
-	- Bump current version
-	- Commit
-	- Push commits and tags
-*/
-
-// Release current branch. Remove PreRelease, tag, bump version, push
-func Release(wd string) error {
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Pulling")
-	stdout, stderr, err := new(exec.PipedExec).
-		Command("git", pull).
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return errors.New(stderr)
-		}
-
-		return fmt.Errorf("error pulling: %w", err)
-	}
-	logger.Verbose(stdout)
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Reading current version")
-	currentVersion, err := utils.ReadVersion()
-	if err != nil {
-		return fmt.Errorf("error reading file 'version': %w", err)
-	}
-	if len(currentVersion.PreRelease) == 0 {
-		return errors.New("pre-release part of version does not exist: " + currentVersion.String())
-	}
-
-	// Calculate target version
-
-	targetVersion := currentVersion
-	targetVersion.PreRelease = ""
-
-	fmt.Printf("Version %v will be tagged, bumped and pushed, agree? [y]", targetVersion)
-	var response string
-	_, _ = fmt.Scanln(&response)
-	if response != "y" {
-		return errors.New("release aborted by user")
-	}
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Updating 'version' file")
-	if err := targetVersion.Save(); err != nil {
-		return fmt.Errorf("error saving file 'version': %w", err)
-	}
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Committing target version")
-	{
-		params := []string{"commit", "-a", mimm, "#scm-ver " + targetVersion.String()}
-		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, params...).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			if len(stderr) > 0 {
-				return errors.New(stderr)
-			}
-
-			return fmt.Errorf("error committing target version: %w", err)
-		}
-		logger.Verbose(stdout)
-	}
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Tagging")
-	{
-		tagName := "v" + targetVersion.String()
-		n := time.Now()
-		params := []string{"tag", mimm, "Version " + tagName + " of " + n.Format("2006/01/02 15:04:05"), tagName}
-		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, params...).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			if len(stderr) > 0 {
-				return errors.New(stderr)
-			}
-
-			return fmt.Errorf("error tagging version: %w", err)
-		}
-		logger.Verbose(stdout)
-	}
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Bumping version")
-	newVersion := currentVersion
-	{
-		newVersion.Minor++
-		newVersion.PreRelease = "SNAPSHOT"
-		if err := targetVersion.Save(); err != nil {
-			return fmt.Errorf("error saving file 'version': %w", err)
-		}
-	}
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Committing new version")
-	{
-		params := []string{"commit", "-a", mimm, "#scm-ver " + newVersion.String()}
-		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, params...).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			if len(stderr) > 0 {
-				return errors.New(stderr)
-			}
-
-			return fmt.Errorf("error committing new version: %w", err)
-		}
-	}
-
-	// *************************************************
-	_, _ = fmt.Fprintln(os.Stdout, "Pushing to origin")
-	{
-		params := []string{push, "--follow-tags", origin}
-		err = helper.Retry(func() error {
-			stdout, stderr, err = new(exec.PipedExec).
-				Command(git, params...).
-				WorkingDir(wd).
-				RunToStrings()
-			if err != nil {
-				if len(stderr) > 0 {
-					return errors.New(stderr)
-				}
-
-				return fmt.Errorf("error pushing to origin: %w", err)
-			}
-
-			return nil
-		})
-		if err != nil {
-			if len(stderr) > 0 {
-				logger.Verbose(stderr)
-			}
-
-			return err
-		}
-		logger.Verbose(stdout)
-	}
-
-	return nil
-}
-
 // Upload uploads sources to git repo
 func Upload(cmd *cobra.Command, wd, currentBranch string, needToCommit bool) error {
 	if needToCommit {
-		commitMessage := cmd.Context().Value(contextPkg.CtxKeyCommitMessage).(string)
+		commitMessage := cmd.Context().Value(utils.CtxKeyCommitMessage).(string)
 
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(git, "add", ".").
@@ -646,9 +184,9 @@ func Upload(cmd *cobra.Command, wd, currentBranch string, needToCommit bool) err
 		return fmt.Errorf("error pulling before push: %w", err)
 	}
 
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, push, origin, refsNotes).
+			Command(git, push, origin, utils.RefsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -667,9 +205,7 @@ func Upload(cmd *cobra.Command, wd, currentBranch string, needToCommit bool) err
 		return err
 	}
 
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	hasUpstream, err := hasUpstreamBranch(wd, currentBranch)
 	if err != nil {
@@ -681,7 +217,7 @@ func Upload(cmd *cobra.Command, wd, currentBranch string, needToCommit bool) err
 		pushArgs = []string{push, "-u", origin, currentBranch}
 	}
 
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		var pushErr error
 		stdout, stderr, pushErr = new(exec.PipedExec).
 			Command(git, pushArgs...).
@@ -785,7 +321,7 @@ func Download(wd string) error {
 		stdout string
 	)
 	// Step 2: fetch origin --prune
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, fetch, origin, "--prune").
 			WorkingDir(wd).
@@ -808,9 +344,9 @@ func Download(wd string) error {
 	logger.Verbose(stdout)
 
 	// Step 3: git fetch origin --force refs/notes/*:refs/notes/*
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, fetch, origin, "--force", refsNotes).
+			Command(git, fetch, origin, "--force", utils.RefsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -915,7 +451,7 @@ func Download(wd string) error {
 			}
 		}
 
-		err = helper.Retry(func() error {
+		err = utils.Retry(func() error {
 			stdout, stderr, err = new(exec.PipedExec).
 				Command(git, pull, "--ff-only", "upstream", mainBranchName).
 				WorkingDir(wd).
@@ -1193,7 +729,7 @@ func Fork(wd string) (string, error) {
 		stdout string
 		stderr string
 	)
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command("gh", "repo", "fork", org+slash+repo, "--clone=false").
 			WorkingDir(wd).
@@ -1224,16 +760,16 @@ func Fork(wd string) (string, error) {
 	}
 
 	// Verify fork was created and is accessible with retry
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		// Try to get user email to get a valid token context, then verify repo
-		userEmail, emailErr := helper.GetUserEmail()
+		userEmail, emailErr := utils.GetUserEmail()
 		if emailErr != nil {
 			return fmt.Errorf("failed to verify GitHub authentication: %w", emailErr)
 		}
 		logger.Verbose(fmt.Sprintf("Verified GitHub authentication for user: %s", userEmail))
 
 		// Verify the forked repository exists and is accessible
-		return helper.VerifyGitHubRepoExists(userName, repo, "")
+		return utils.VerifyGitHubRepoExists(userName, repo, "")
 	})
 	if err != nil {
 		logger.Verbose(fmt.Sprintf("Fork verification failed: %v", err))
@@ -1396,11 +932,9 @@ func MakeUpstream(wd string, repo string) error {
 	printLn(stdout)
 
 	// delay to ensure remote is added
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, "fetch", "origin").
 			WorkingDir(wd).
@@ -1539,9 +1073,7 @@ func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber 
 	} // delay to ensure branch is created
 	logger.Verbose(stdout)
 
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	branch = strings.TrimSpace(stdout)
 	segments := strings.Split(branch, slash)
@@ -1617,7 +1149,7 @@ func SyncMainBranch(wd, mainBranch string, upstreamExists bool) error {
 	logger.Verbose(stdout)
 
 	// Push to origin from MainBranch
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		var pushErr error
 		stdout, stderr, pushErr = new(exec.PipedExec).
 			Command(git, push, "origin", mainBranch).
@@ -1752,7 +1284,7 @@ func buildDevBranchName(issueURL string) (string, error) {
 	if len(branchName) > maximumBranchNameLength {
 		branchName = branchName[:maximumBranchNameLength]
 	}
-	branchName = helper.CleanArgFromSpecSymbols(branchName)
+	branchName = utils.CleanArgFromSpecSymbols(branchName)
 	// Add suffix "-dev" for a dev branch
 	branchName += "-dev"
 
@@ -1938,7 +1470,7 @@ func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRem
 
 	// Fetch notes from origin before pushing
 	stdout, stderr, err = new(exec.PipedExec).
-		Command(git, fetch, origin, "--force", refsNotes).
+		Command(git, fetch, origin, "--force", utils.RefsNotes).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -1961,9 +1493,9 @@ func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRem
 	}
 
 	// Push notes to origin with retry
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, push, origin, refsNotes).
+			Command(git, push, origin, utils.RefsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 
@@ -1974,12 +1506,10 @@ func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRem
 
 		return fmt.Errorf("failed to push notes to origin: %w", err)
 	}
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	// Push branch to origin with retry
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command(git, push, "-u", origin, branchName).
 			WorkingDir(wd).
@@ -1993,9 +1523,7 @@ func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRem
 		return fmt.Errorf("failed to push branch to origin: %w, stdout: %s", err, stdout)
 	}
 
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	return nil
 }
@@ -2209,7 +1737,7 @@ func DeleteBranchesRemote(wd string, brs []string) error {
 	}
 
 	for _, br := range brs {
-		err := helper.Retry(func() error {
+		err := utils.Retry(func() error {
 			_, _, deleteErr := new(exec.PipedExec).
 				Command(git, push, origin, ":"+br).
 				WorkingDir(wd).
@@ -2460,7 +1988,7 @@ func createPR(
 	if asDraft {
 		args = append(args, "--draft")
 	}
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command("gh", args...).
 			RunToStrings()
@@ -2696,175 +2224,6 @@ func GetRootFolder(wd string) (string, error) {
 	return strings.TrimSpace(stdout), nil
 }
 
-// SetLocalPreCommitHook - s.e.
-func SetLocalPreCommitHook(wd string) error {
-	// Turn off globa1 hooks
-	err := new(exec.PipedExec).
-		Command(git, "config", "--global", "--get", "core.hookspath").
-		Run(os.Stdout, os.Stdout)
-	if err == nil {
-		_, stderr, err := new(exec.PipedExec).
-			Command(git, "config", "--global", "--unset", "core.hookspath").
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			if len(stderr) > 0 {
-				return errors.New(stderr)
-			}
-
-			return fmt.Errorf("failed to unset global hooks path: %w", err)
-		}
-	}
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return err
-	}
-	PreCommitHooksDirPath := filepath.Join(dir, ".git/hooks")
-
-	if err := os.MkdirAll(PreCommitHooksDirPath, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create hooks directory: %w", err)
-	}
-
-	PreCommitFilePath := filepath.Join(PreCommitHooksDirPath, "pre-commit")
-
-	// Check if the file already exists
-	f, err := createOrOpenFile(PreCommitFilePath)
-	if err != nil {
-		return err
-	}
-	_ = f.Close()
-
-	if !largeFileHookExist(PreCommitFilePath) {
-		return fillPreCommitFile(wd, PreCommitFilePath)
-	}
-
-	return nil
-}
-
-func createOrOpenFile(filepath string) (*os.File, error) {
-	_, err := os.Stat(filepath)
-	var f *os.File
-	if os.IsNotExist(err) {
-		// Create file pre-commit
-		f, err = os.Create(filepath)
-		if err != nil {
-			return nil, err
-		}
-
-		_, err = f.WriteString("#!/bin/bash\n")
-	} else {
-		f, err = os.OpenFile(filepath, os.O_APPEND|os.O_WRONLY, bashFilePerm)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return f, nil
-}
-
-func fillPreCommitFile(wd, myFilePath string) error {
-	fPreCommit, err := createOrOpenFile(myFilePath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = fPreCommit.Close()
-	}()
-
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return err
-	}
-	fName := "/.git/hooks/" + LargeFileHookFilename
-	lfPath := dir + fName
-
-	lf, err := os.Create(lfPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = lf.Close()
-	}()
-
-	if _, err := lf.WriteString(largeFileHookContent); err != nil {
-		return fmt.Errorf("failed to write large file hook content: %w", err)
-	}
-
-	preCommitContentBuf := strings.Builder{}
-	preCommitContentBuf.WriteString("#!/bin/bash\n")
-	preCommitContentBuf.WriteString("\n#Here is large files commit prevent is added by [qs]\n")
-	preCommitContentBuf.WriteString("bash " + lfPath + caret)
-	if _, err := fPreCommit.WriteString(preCommitContentBuf.String()); err != nil {
-		return fmt.Errorf("failed to write pre-commit hook content: %w", err)
-	}
-
-	return new(exec.PipedExec).Command("chmod", "+x", myFilePath).Run(os.Stdout, os.Stdout)
-}
-
-// isLargeFileHookContentUpToDate checks if the current large-file-hook.sh content matches the expected content
-func isLargeFileHookContentUpToDate(wd string) (bool, error) {
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return false, err
-	}
-
-	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
-
-	// Check if the file exists
-	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
-		return false, nil // File doesn't exist, so it's not up to date
-	}
-
-	// Read the current content
-	currentContent, err := os.ReadFile(hookPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to read large file hook: %w", err)
-	}
-
-	// Compare with expected content
-	return string(currentContent) == largeFileHookContent, nil
-}
-
-// updateLargeFileHookContent updates the large-file-hook.sh file with the current content
-func updateLargeFileHookContent(wd string) error {
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return err
-	}
-
-	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
-
-	// Create or overwrite the hook file
-	lf, err := os.Create(hookPath)
-	if err != nil {
-		return fmt.Errorf("failed to create large file hook: %w", err)
-	}
-	defer func() {
-		_ = lf.Close()
-	}()
-
-	if _, err := lf.WriteString(largeFileHookContent); err != nil {
-		return fmt.Errorf("failed to write large file hook content: %w", err)
-	}
-
-	return nil
-}
-
-// EnsureLargeFileHookUpToDate checks and updates the large file hook if needed
-func EnsureLargeFileHookUpToDate(wd string) error {
-	upToDate, err := isLargeFileHookContentUpToDate(wd)
-	if err != nil {
-		return err
-	}
-
-	if !upToDate {
-		return updateLargeFileHookContent(wd)
-	}
-
-	return nil
-}
-
 func UpstreamNotExist(wd string) bool {
 	return len(getRemotes(wd)) < 2
 }
@@ -2909,13 +2268,6 @@ func GetEffectiveUpstreamRemote(wd string) (string, error) {
 	}
 
 	return "origin", nil
-}
-
-func GawkInstalled() bool {
-	_, _, err := new(exec.PipedExec).
-		Command("gawk", "--version").
-		RunToStrings()
-	return err == nil
 }
 
 func extractIntegerPrefix(input string) (string, error) {
@@ -2987,60 +2339,6 @@ func GetIssueNumFromBranchName(parentrepo string, curbranch string) (issuenum st
 	}
 
 	return "", false
-}
-
-func LinkIssueToMileStone(issueNum string, parentrepo string) error {
-	if issueNum == "" {
-		return nil
-	}
-	if parentrepo == "" {
-		return nil
-	}
-	stdout, stderr, err := new(exec.PipedExec).
-		Command("gh", "api", "repos/"+parentrepo+"/milestones", "--jq", ".[] | .title").
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return errors.New(stderr)
-		}
-
-		return fmt.Errorf("link issue to mileStone error: %w", err)
-	}
-
-	milestones := strings.Split(stdout, caret)
-	// Sample date string in the "yyyy.mm.dd" format.
-	dateString := "2006.01.02"
-	// Get the current date and time.
-	currentTime := time.Now()
-	for _, milestone := range milestones {
-		// Parse the input string into a time.Time value.
-		t, err := time.Parse(dateString, milestone)
-		if err == nil {
-			if currentTime.Before(t) {
-				// Next milestone is found
-				stdout, stderr, err = new(exec.PipedExec).
-					Command("gh", "issue", "edit", issueNum, "--milestone", milestone, "--repo", parentrepo).
-					RunToStrings()
-				if err != nil {
-					logger.Verbose(stderr)
-
-					if len(stderr) > 0 {
-						return errors.New(stderr)
-					}
-
-					return fmt.Errorf("failed to link issue to milestone: %w", err)
-				}
-				logger.Verbose(stdout)
-				fmt.Println("Issue #" + issueNum + " added to milestone '" + milestone + "'")
-
-				return nil
-			}
-		}
-	}
-
-	return nil
 }
 
 func GetCurrentBranchName(wd string) (string, error) {
@@ -3193,4 +2491,45 @@ func OpenGitRepository(dir string) (*goGitPkg.Repository, error) {
 	}
 
 	return repo, nil
+}
+
+func RemoveBranch(wd, branchName string) error {
+	// Delete branch locally
+	_, stderr, err := new(exec.PipedExec).
+		Command("git", "branch", "-D", branchName).
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+
+		return fmt.Errorf("failed to delete local branch %s: %w", branchName, err)
+	}
+
+	// Delete branch from origin
+	return utils.Retry(func() error {
+		_, stderr, err = new(exec.PipedExec).
+			Command("git", "push", "origin", "--delete", branchName).
+			WorkingDir(wd).
+			RunToStrings()
+		if err != nil {
+			logger.Verbose(stderr)
+
+			// If a branch does not exist on origin, we can ignore the error
+			if strings.Contains(stderr, "remote ref does not exist") {
+				return nil
+			}
+
+			if len(stderr) > 0 {
+				return errors.New(stderr)
+			}
+
+			return fmt.Errorf("failed to delete remote branch %s: %w", branchName, err)
+		}
+
+		return nil
+	})
 }

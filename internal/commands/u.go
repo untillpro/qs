@@ -8,8 +8,8 @@ import (
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
-	contextPkg "github.com/untillpro/qs/internal/context"
 	notesPkg "github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/utils"
 )
 
 func U(cmd *cobra.Command, commitMessage string, wd string) error {
@@ -23,7 +23,7 @@ func U(cmd *cobra.Command, commitMessage string, wd string) error {
 
 	// Fetch notes from origin
 	_, _, err = new(exec.PipedExec).
-		Command(git, fetch, origin, "--force", refsNotes).
+		Command("git", "fetch", "origin", "--force", utils.RefsNotes).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -80,7 +80,7 @@ func setCommitMessage(
 		}
 	}
 
-	cmd.SetContext(context.WithValue(cmd.Context(), contextPkg.CtxKeyCommitMessage, commitMessage))
+	cmd.SetContext(context.WithValue(cmd.Context(), utils.CtxKeyCommitMessage, commitMessage))
 
 	return nil
 }

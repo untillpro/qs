@@ -13,9 +13,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	goUtilsExec "github.com/untillpro/goutils/exec"
 	"github.com/untillpro/qs/gitcmds"
-	contextCfg "github.com/untillpro/qs/internal/context"
-	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/utils"
 )
 
 // SystemTest represents a single system test for the qs utility
@@ -84,12 +83,12 @@ func (cfg *TestConfig) NoUpstream() bool {
 
 // ExpectationCustomBranchIsCurrentBranch represents checker for ExpectationCurrentBranch
 func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
-	currentBranch, err := gitcmds.GetCurrentBranchName(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	currentBranch, err := gitcmds.GetCurrentBranchName(ctx.Value(utils.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return err
 	}
 
-	customBranchName := ctx.Value(contextCfg.CtxKeyCustomBranchName).(string)
+	customBranchName := ctx.Value(utils.CtxKeyCustomBranchName).(string)
 	if currentBranch != customBranchName {
 		return fmt.Errorf("current branch '%s' does not match expected branch '%s'", currentBranch, customBranchName)
 	}
@@ -100,7 +99,7 @@ func ExpectationCustomBranchIsCurrentBranch(ctx context.Context) error {
 // ExpectationCloneIsSyncedWithFork checks if the clone is synchronized with the fork
 func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 	// Compare local and remote branches to ensure they're in sync
-	repo, err := gitcmds.OpenGitRepository(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitcmds.OpenGitRepository(ctx.Value(utils.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return err
 	}
@@ -138,7 +137,7 @@ func ExpectationCloneIsSyncedWithFork(ctx context.Context) error {
 func ExpectationForkExists(ctx context.Context) error {
 	// Implement the logic to check if the fork exists
 	// get remotes of the local repo and check if remote, called origin, exists
-	repo, err := gitcmds.OpenGitRepository(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitcmds.OpenGitRepository(ctx.Value(utils.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return err
 	}
@@ -160,12 +159,12 @@ func ExpectationForkExists(ctx context.Context) error {
 // ExpectationBranchLinkedToIssue represents the expected state of a branch linked to a GitHub issue
 func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 	// extract repo and issue number from e.createdGithubIssueURL using regex
-	repoOwner, repoName, issueNum, err := parseGithubIssueURL(ctx.Value(contextCfg.CtxKeyCreatedGithubIssueURL).(string))
+	repoOwner, repoName, issueNum, err := parseGithubIssueURL(ctx.Value(utils.CtxKeyCreatedGithubIssueURL).(string))
 	if err != nil {
 		return fmt.Errorf("failed to parse GitHub issue URL: %w", err)
 	}
 	// Get current branch from the repo
-	devBranchName, err := findBranchNameWithPrefix(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string), issueNum)
+	devBranchName, err := findBranchNameWithPrefix(ctx.Value(utils.CtxKeyCloneRepoPath).(string), issueNum)
 	if err != nil {
 		return err
 	}
@@ -173,7 +172,7 @@ func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
 	// Run gh issue develop --list command with retry logic
 	var output []byte
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		cmd := exec.Command("gh", "issue", "develop", "--list", "--repo", repoURL, issueNum)
 		var cmdErr error
 		output, cmdErr = cmd.Output()
@@ -194,7 +193,7 @@ func ExpectationBranchLinkedToIssue(ctx context.Context) error {
 // ExpectationLargeFileHooksInstalled checks if the large file hooks are installed
 func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
 	// Check if the large file hooks are installed
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}
@@ -221,7 +220,7 @@ func ExpectationLargeFileHooksInstalled(ctx context.Context) error {
 
 // ExpectationLargeFileHookFunctional tests that the large file hook actually prevents commits of large files
 func ExpectationLargeFileHookFunctional(ctx context.Context) error {
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}
@@ -283,7 +282,7 @@ func ExpectationLargeFileHookFunctional(ctx context.Context) error {
 // ExpectationCurrentBranchHasPrefix checks if the current branch has the expected prefix
 func ExpectationCurrentBranchHasPrefix(ctx context.Context) error {
 	// Open the repository
-	repo, err := gitcmds.OpenGitRepository(ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string))
+	repo, err := gitcmds.OpenGitRepository(ctx.Value(utils.CtxKeyCloneRepoPath).(string))
 	if err != nil {
 		return err
 	}
@@ -295,7 +294,7 @@ func ExpectationCurrentBranchHasPrefix(ctx context.Context) error {
 	}
 
 	// Check if the branch name starts with the expected prefix
-	branchPrefix := ctx.Value(contextCfg.CtxKeyBranchPrefix).(string)
+	branchPrefix := ctx.Value(utils.CtxKeyBranchPrefix).(string)
 	if !strings.HasPrefix(head.Name().Short(), branchPrefix) {
 		return fmt.Errorf("branch name '%s' does not start with expected prefix '%s'", head.Name().Short(), branchPrefix)
 	}
@@ -311,17 +310,17 @@ func ExpectationCurrentBranchHasPrefix(ctx context.Context) error {
 // 5. If an actual pull request was created in the upstream repo
 func ExpectationPRCreated(ctx context.Context) error {
 	// 1. Check if PR branch exists with correct naming
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}
 
-	anotherCloneRepoPath, ok := ctx.Value(contextCfg.CtxKeyAnotherCloneRepoPath).(string)
+	anotherCloneRepoPath, ok := ctx.Value(utils.CtxKeyAnotherCloneRepoPath).(string)
 	if ok && anotherCloneRepoPath != "" {
 		cloneRepoPath = anotherCloneRepoPath
 	}
 
-	devBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
+	devBranchName, ok := ctx.Value(utils.CtxKeyDevBranchName).(string)
 	if !ok {
 		return fmt.Errorf("dev branch name not found in context")
 	}
@@ -511,19 +510,19 @@ func ExpectationPRCreated(ctx context.Context) error {
 // ExpectationRemoteBranchWithCommitMessage checks if the remote branch exists and has specific commit message
 func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 	// Check if the remote branch exists
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}
 
-	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
+	remoteBranchName, ok := ctx.Value(utils.CtxKeyDevBranchName).(string)
 	if !ok {
 		return fmt.Errorf("remote branch name not found in context")
 	}
 
 	// Check if branch exists on the remote with retry logic
 	var stdout, stderr string
-	err := helper.Retry(func() error {
+	err := utils.Retry(func() error {
 		var lsErr error
 		stdout, stderr, lsErr = new(goUtilsExec.PipedExec).
 			Command(git, "ls-remote", "--heads", origin, remoteBranchName).
@@ -550,7 +549,7 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 		return fmt.Errorf("failed to get last commit message: %w: %s", err, stderr)
 	}
 
-	commitMessage, ok := ctx.Value(contextCfg.CtxKeyCommitMessage).(string)
+	commitMessage, ok := ctx.Value(utils.CtxKeyCommitMessage).(string)
 	if !ok {
 		return fmt.Errorf("commit message not found in context")
 	}
@@ -565,12 +564,12 @@ func ExpectationRemoteBranchWithCommitMessage(ctx context.Context) error {
 // ExpectationNotesDownloaded checks if the notes are downloaded from the remote branch
 func ExpectationNotesDownloaded(ctx context.Context) error {
 	// Step 1: Get the remote URL and repo name
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}
 
-	remoteBranchName, ok := ctx.Value(contextCfg.CtxKeyDevBranchName).(string)
+	remoteBranchName, ok := ctx.Value(utils.CtxKeyDevBranchName).(string)
 	if !ok {
 		return fmt.Errorf("remote branch name not found in context")
 	}
@@ -639,7 +638,7 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 }
 
 func expectationLocalBranchExists(ctx context.Context, expectedCount int) error {
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}
@@ -672,7 +671,7 @@ func expectationLocalBranchExists(ctx context.Context, expectedCount int) error 
 }
 
 func expectationRemoteBranchExists(ctx context.Context, expectedCount int) error {
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}
@@ -741,7 +740,7 @@ func ExpectationThreeRemoteBranches(ctx context.Context) error {
 
 // ExpectationFilesWithSpacesHandled checks that qs can handle files with spaces in their names
 func ExpectationFilesWithSpacesHandled(ctx context.Context) error {
-	cloneRepoPath := ctx.Value(contextCfg.CtxKeyCloneRepoPath).(string)
+	cloneRepoPath := ctx.Value(utils.CtxKeyCloneRepoPath).(string)
 	if cloneRepoPath == "" {
 		return errCloneRepoPathNotFoundInContext
 	}

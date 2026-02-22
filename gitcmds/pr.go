@@ -9,14 +9,9 @@ import (
 
 	"github.com/untillpro/goutils/exec"
 	"github.com/untillpro/goutils/logger"
-	"github.com/untillpro/qs/internal/helper"
 	notesPkg "github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/utils"
 )
-
-type PRInfo struct {
-	Title string `json:"title"`
-	URL   string `json:"url"`
-}
 
 func Pr(wd string, needDraft bool) error {
 	currentBranchName, branchType, err := GetBranchType(wd)
@@ -40,7 +35,7 @@ func Pr(wd string, needDraft bool) error {
 	}
 
 	_, _, err = new(exec.PipedExec).
-		Command(git, fetch, origin, "--force", refsNotes).
+		Command(git, fetch, origin, "--force", utils.RefsNotes).
 		WorkingDir(wd).
 		RunToStrings()
 	if err != nil {
@@ -151,9 +146,9 @@ func Pr(wd string, needDraft bool) error {
 // pushPRBranch pushes the PR branch to origin.
 func pushPRBranch(wd, prBranchName string) error {
 	// Push notes to origin
-	err := helper.Retry(func() error {
+	err := utils.Retry(func() error {
 		_, stderr, err := new(exec.PipedExec).
-			Command(git, push, origin, refsNotes).
+			Command(git, push, origin, utils.RefsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -172,12 +167,10 @@ func pushPRBranch(wd, prBranchName string) error {
 		return err
 	}
 
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	// Push PR branch to origin
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		_, stderr, err := new(exec.PipedExec).
 			Command(git, push, "-u", origin, prBranchName).
 			WorkingDir(wd).
@@ -195,9 +188,7 @@ func pushPRBranch(wd, prBranchName string) error {
 		return nil
 	}) // Retry up to 3 times for pushing PR branch
 
-	if helper.IsTest() {
-		helper.Delay()
-	}
+	utils.DelayIfTest()
 
 	return err
 }
@@ -217,7 +208,7 @@ func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (*PR
 		prExists bool
 	)
 
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command(
 				"gh",
@@ -278,47 +269,6 @@ func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (*PR
 	return &prInfo, stdout, stderr, nil
 }
 
-func RemoveBranch(wd, branchName string) error {
-	// Delete branch locally
-	_, stderr, err := new(exec.PipedExec).
-		Command("git", "branch", "-D", branchName).
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return errors.New(stderr)
-		}
-
-		return fmt.Errorf("failed to delete local branch %s: %w", branchName, err)
-	}
-
-	// Delete branch from origin
-	return helper.Retry(func() error {
-		_, stderr, err = new(exec.PipedExec).
-			Command("git", "push", "origin", "--delete", branchName).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			// If a branch does not exist on origin, we can ignore the error
-			if strings.Contains(stderr, "remote ref does not exist") {
-				return nil
-			}
-
-			if len(stderr) > 0 {
-				return errors.New(stderr)
-			}
-
-			return fmt.Errorf("failed to delete remote branch %s: %w", branchName, err)
-		}
-
-		return nil
-	})
-}
-
 // createPRBranch creates a new branch for the pull request and checks out on it.
 // Returns:
 // - name of the PR branch
@@ -353,7 +303,7 @@ func createPRBranch(wd, devBranchName, issueDescription string, notes []string, 
 	)
 
 	// Step 3: Fetch the latest upstream main
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
 			Command("git", "fetch", upstreamRemote).
 			WorkingDir(wd).
@@ -376,9 +326,9 @@ func createPRBranch(wd, devBranchName, issueDescription string, notes []string, 
 	logger.Verbose(stdout)
 
 	// Step 4: Fetch notes from the origin
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err = new(exec.PipedExec).
-			Command(git, fetch, origin, "--force", refsNotes).
+			Command(git, fetch, origin, "--force", utils.RefsNotes).
 			WorkingDir(wd).
 			RunToStrings()
 		if err != nil {
@@ -544,7 +494,7 @@ func GetGitHubIssueDescription(issueURL string) (string, error) {
 		Body  string `json:"body"`
 	}
 
-	err = helper.Retry(func() error {
+	err = utils.Retry(func() error {
 		stdout, stderr, err := new(exec.PipedExec).
 			Command(
 				"gh",

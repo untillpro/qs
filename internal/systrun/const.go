@@ -8,7 +8,6 @@ const (
 	origin                      = "origin"
 	upstream                    = "upstream"
 	git                         = "git"
-	errFormatFailedToCloneRepos = "failed to open cloned repository: %w"
 	formatGithubTokenEnv        = "GITHUB_TOKEN=%s"
 	cloneRepoDirPerm            = 0755
 	commitFilePerm              = 0644

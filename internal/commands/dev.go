@@ -14,20 +14,19 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
-	contextpkg "github.com/untillpro/qs/internal/context"
-	"github.com/untillpro/qs/internal/helper"
 	"github.com/untillpro/qs/internal/jira"
 	"github.com/untillpro/qs/internal/notes"
+	"github.com/untillpro/qs/utils"
 )
 
-func Dev(cmd *cobra.Command, wd string, args []string) error {
+func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []string) error {
 	parentRepo, err := gitcmds.GetParentRepoName(wd)
 	if err != nil {
 		return err
 	}
 
 	// qs dev -d is running
-	if cmd.Flag(devDelParamFull).Value.String() == trueStr {
+	if doDelete {
 		return deleteBranches(wd, parentRepo)
 	}
 	// qs dev is running
@@ -121,7 +120,7 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 		if _, ok := jira.GetJiraTicketIDFromArgs(args...); ok { // Jira issue
 			branch, notes, err = jira.GetJiraBranchName(args...)
 		} else {
-			branch, notes, err = helper.GetBranchName(false, args...)
+			branch, notes, err = utils.GetBranchName(false, args...)
 			branch += "-dev" // Add suffix "-dev" for a dev branch
 		}
 		if err != nil {
@@ -136,13 +135,13 @@ func Dev(cmd *cobra.Command, wd string, args []string) error {
 			return err
 		}
 
-		devMsg := strings.ReplaceAll(devConfirm, "$reponame", branch)
+		devMsg := strings.ReplaceAll("Dev branch '$reponame' will be created. Continue(y/n)? ", "$reponame", branch)
 		fmt.Print(devMsg)
 		_, _ = fmt.Scanln(&response)
 	}
 
 	// put branch name to command context
-	cmd.SetContext(context.WithValue(cmd.Context(), contextpkg.CtxKeyDevBranchName, branch))
+	cmd.SetContext(context.WithValue(cmd.Context(), utils.CtxKeyDevBranchName, branch))
 
 	exists, err := branchExists(wd, branch)
 	if err != nil {
@@ -231,7 +230,7 @@ func branchExists(wd, branchName string) (bool, error) {
 func getArgStringFromClipboard(ctx context.Context) string {
 	var err error
 	// context value is first
-	arg, ok := ctx.Value(contextpkg.CtxKeyClipboard).(string)
+	arg, ok := ctx.Value(utils.CtxKeyClipboard).(string)
 	if !ok || len(arg) == 0 {
 		arg, err = clipboard.ReadAll()
 		if err != nil {
@@ -243,7 +242,7 @@ func getArgStringFromClipboard(ctx context.Context) string {
 	var newArg string
 	for _, str := range args {
 		newArg += str
-		newArg += oneSpace
+		newArg += " "
 	}
 
 	return newArg
