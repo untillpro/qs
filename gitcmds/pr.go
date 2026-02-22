@@ -78,6 +78,7 @@ func Pr(wd string, needDraft bool) error {
 			if err := MakeUpstreamForBranch(wd, parentRepoName); err != nil {
 				return err
 			}
+			upstreamExists = true
 		}
 
 		// Check if there are any modified files in the current branch
