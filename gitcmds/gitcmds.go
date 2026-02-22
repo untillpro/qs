@@ -164,8 +164,6 @@ func Status(wd string) error {
 		if len(stderr) > 0 {
 			return errors.New(stderr)
 		}
-		// Fallback to using the colored output for parsing
-		cleanStatusStdout = statusStdout
 
 		return fmt.Errorf("failed to get clean status for parsing: %w", err)
 	}
@@ -176,44 +174,8 @@ func Status(wd string) error {
 	}
 
 	// Calculate and display file size information using clean output
-	if err := displaySummary(wd, files); err != nil {
+	if err := displaySummary(files); err != nil {
 		logger.Verbose(fmt.Sprintf("Failed to calculate file sizes: %v", err))
-	}
-
-	return nil
-}
-
-// showDiffsOfChangedFiles shows diffs for modified files in the git repository
-// nolint: unused
-func showDiffsOfChangedFiles(wd string, files []FileInfo) error {
-	if len(files) == 0 {
-		fmt.Println("No changed files to show diffs for.")
-
-		return nil
-	}
-
-	fmt.Println()
-	fmt.Println("Diffs for changed files:")
-
-	for _, file := range files {
-		if file.status != fileStatusModified {
-			continue // Only show diffs for modified files
-		}
-
-		stdout, stderr, err := new(exec.PipedExec).
-			Command(git, "diff", "--color=always", file.name).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			if len(stderr) > 0 {
-				return errors.New(stderr)
-			}
-
-			return fmt.Errorf("failed to show diff for %s: %w", file.name, err)
-		}
-		printLn(stdout)
 	}
 
 	return nil
@@ -382,7 +344,7 @@ func getFileSize(wd, fileName string) (int64, error) {
 }
 
 // displaySummary calculates and displays file size information
-func displaySummary(wd string, files []FileInfo) error {
+func displaySummary(files []FileInfo) error {
 	var (
 		totalSize   int64
 		largestFile FileInfo
@@ -648,19 +610,19 @@ func Upload(cmd *cobra.Command, wd, currentBranch string, needToCommit bool) err
 			}
 
 			params = append(params, "-n")
-			stdout, stderr, err = new(exec.PipedExec).
+			_, stderr, err = new(exec.PipedExec).
 				Command(git, params...).
 				WorkingDir(wd).
 				RunToStrings()
-			if err != nil {
-				logger.Verbose(stderr)
+		}
+		if err != nil {
+			logger.Verbose(stderr)
 
-				if len(stderr) > 0 {
-					return errors.New(stderr)
-				}
-
-				return fmt.Errorf("git commit failed: %w", err)
+			if len(stderr) > 0 {
+				return errors.New(stderr)
 			}
+
+			return fmt.Errorf("git commit failed: %w", err)
 		}
 	}
 
@@ -1504,9 +1466,6 @@ func CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL string, issueNumber 
 
 	strIssueNum := strconv.Itoa(issueNumber)
 	myrepo := org + slash + repo
-	if err != nil {
-		return "", nil, err
-	}
 
 	if len(args) > 0 {
 		issueURL := args[0]
