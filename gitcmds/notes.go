@@ -15,30 +15,27 @@ import (
 )
 
 func AddNotes(wd string, notes []string) error {
-	if len(notes) == 0 {
-		return nil
-	}
-	// Add new Notes
+	var filtered []string
 	for _, s := range notes {
-		str := strings.TrimSpace(s)
-		if len(str) > 0 {
-			stdout, stderr, err := new(exec.PipedExec).
-				Command(git, "notes", "append", "-m", str).
-				WorkingDir(wd).
-				RunToStrings()
-			if err != nil {
-				logger.Verbose(stderr)
-
-				if len(stderr) > 0 {
-					return errors.New(stderr)
-				}
-
-				return fmt.Errorf("failed to add note: %w", err)
-			}
-			printLn(stdout)
+		if str := strings.TrimSpace(s); len(str) > 0 {
+			filtered = append(filtered, str)
 		}
 	}
-
+	if len(filtered) == 0 {
+		return nil
+	}
+	stdout, stderr, err := new(exec.PipedExec).
+		Command(git, "notes", "append", "-m", strings.Join(filtered, caret+caret)). // double caret for backward compatibility
+		WorkingDir(wd).
+		RunToStrings()
+	if err != nil {
+		logger.Verbose(stderr)
+		if len(stderr) > 0 {
+			return errors.New(stderr)
+		}
+		return fmt.Errorf("failed to add note: %w", err)
+	}
+	printLn(stdout)
 	return nil
 }
 
