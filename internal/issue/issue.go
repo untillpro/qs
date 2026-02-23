@@ -25,10 +25,7 @@ type IssueInfo struct {
 }
 
 func ParseIssueFromArgs(wd string, args ...string) (IssueInfo, error) {
-	if len(args) != 1 {
-		return IssueInfo{}, nil
-	}
-	url := args[0]
+	url := args[0] // protected by caller side
 	if strings.Contains(url, "/issues/") {
 		if err := checkGitHubIssue(wd, url); err != nil {
 			return IssueInfo{}, fmt.Errorf("invalid GitHub issue link: %w", err)
