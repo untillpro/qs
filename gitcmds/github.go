@@ -6,7 +6,6 @@
 package gitcmds
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -94,30 +93,4 @@ func GetGithubIssueRepoFromURL(url string) (repoName string) {
 	}
 
 	return
-}
-
-func GetGithubIssueNameByNumber(issueNum string, parentrepo string) (string, error) {
-	stdout, stderr, err := new(exec.PipedExec).
-		Command("gh", "issue", "view", issueNum, "--repo", parentrepo, "--json", "title").
-		RunToStrings()
-	if err != nil {
-		logger.Verbose(stderr)
-
-		if len(stderr) > 0 {
-			return "", errors.New(stderr)
-		}
-
-		return "", fmt.Errorf("failed to get issue name by number: %w", err)
-	}
-
-	type issueDetails struct {
-		Title string `json:"title"`
-	}
-
-	var issue issueDetails
-	if err := json.Unmarshal([]byte(stdout), &issue); err != nil {
-		return "", fmt.Errorf("failed to parse issue title JSON: %w", err)
-	}
-
-	return issue.Title, nil
 }

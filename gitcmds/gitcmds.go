@@ -537,141 +537,6 @@ func IsBranchInMain(wd string) (bool, error) {
 	return (parent == org+slash+repo) || (strings.TrimSpace(parent) == ""), err
 }
 
-// GetMergedBranchList returns merged user's branch list
-func GetMergedBranchList(wd string) (brlist []string, err error) {
-	mbrlist := []string{}
-	_, org, err := GetRepoAndOrgName(wd)
-	if err != nil {
-		return nil, fmt.Errorf("GetRepoAndOrgName failed: %w", err)
-	}
-
-	repo, err := GetParentRepoName(wd)
-	if err != nil {
-		return nil, fmt.Errorf("GetParentRepoName failed: %w", err)
-	}
-
-	stdout, _, err := new(exec.PipedExec).
-		Command("gh", "pr", "list", "-L", "200", "--state", "merged", "--author", org, "--repo", repo).
-		WorkingDir(wd).
-		Command("gawk", "-F:", "{print $2}").
-		Command("gawk", "/MERGED/{print $1}").
-		RunToStrings()
-	if err != nil {
-		return []string{}, err
-	}
-
-	mbrlistraw := strings.Split(stdout, caret)
-	mainBranch, err := GetMainBranch(wd)
-	if err != nil {
-		return nil, fmt.Errorf(errMsgFailedToGetMainBranch, err)
-	}
-
-	curbr, err := GetCurrentBranchName(wd)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, mbranchstr := range mbrlistraw {
-		arrstr := strings.TrimSpace(mbranchstr)
-		if (strings.TrimSpace(arrstr) != "") && !strings.Contains(arrstr, curbr) && !strings.Contains(arrstr, mainBranch) {
-			mbrlist = append(mbrlist, arrstr)
-		}
-	}
-	_, _, err = new(exec.PipedExec).
-		Command(git, "remote", "prune", origin).
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		return nil, err
-	}
-
-	stdout, _, err = new(exec.PipedExec).
-		Command(git, branch, "-r").
-		WorkingDir(wd).
-		RunToStrings()
-	if err != nil {
-		return nil, err
-	}
-	mybrlist := strings.Split(stdout, caret)
-
-	for _, mybranch := range mybrlist {
-		mybranch := strings.TrimSpace(mybranch)
-		mybranch = strings.ReplaceAll(strings.TrimSpace(mybranch), originSlash, "")
-		mybranch = strings.TrimSpace(mybranch)
-		bfound := false
-		if !strings.Contains(mybranch, mainBranch) && !strings.Contains(mybranch, "HEAD") {
-			for _, mbranch := range mbrlist {
-				mbranch = strings.ReplaceAll(strings.TrimSpace(mbranch), "MERGED", "")
-				mbranch = strings.TrimSpace(mbranch)
-				if mybranch == mbranch {
-					bfound = true
-					break
-				}
-			}
-		}
-		if bfound {
-			// delete branch in fork
-			brlist = append(brlist, mybranch)
-		}
-	}
-
-	return brlist, nil
-}
-
-// DeleteBranchesRemote delete branch list
-func DeleteBranchesRemote(wd string, brs []string) error {
-	if len(brs) == 0 {
-		return nil
-	}
-
-	for _, br := range brs {
-		err := utils.Retry(func() error {
-			_, _, deleteErr := new(exec.PipedExec).
-				Command(git, push, origin, ":"+br).
-				WorkingDir(wd).
-				RunToStrings()
-			return deleteErr
-		})
-		if err != nil {
-			return fmt.Errorf("branch %s was not deleted: %w", br, err)
-		}
-
-		fmt.Printf("Branch %s deleted\n", br)
-	}
-
-	return nil
-}
-
-func PullUpstream(wd string) error {
-	mainBranch, err := GetMainBranch(wd)
-	if err != nil {
-		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
-	}
-
-	stdout, stderr, err := new(exec.PipedExec).
-		Command(git, pull, "--ff-only", "upstream", mainBranch, "--no-edit").
-		WorkingDir(wd).
-		RunToStrings()
-
-	if err != nil {
-		// Check if fast-forward failed
-		if checkAndShowFastForwardFailure(stderr, mainBranch) {
-			return fmt.Errorf("cannot fast-forward merge upstream/%s", mainBranch)
-		}
-
-		// If upstream doesn't exist, try to create it
-		parentRepoName, err := GetParentRepoName(wd)
-		if err != nil {
-			return fmt.Errorf("GetParentRepoName failed: %w", err)
-		}
-
-		return MakeUpstreamForBranch(wd, parentRepoName)
-	}
-
-	logger.Verbose(stdout)
-	return nil
-}
-
 func GetNoteAndURL(notes []string) (note string, url string) {
 	for _, s := range notes {
 		s = strings.TrimSpace(s)
@@ -844,13 +709,8 @@ func OpenGitRepository(dir string) (*goGitPkg.Repository, error) {
 		DetectDotGit: true,
 	})
 	if err != nil {
-		if errors.Is(err, goGitPkg.ErrRepositoryNotExists) {
-			return nil, errors.New("no .git directory found; please run this command inside a git repository")
-		}
-
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
-
 	return repo, nil
 }
 
