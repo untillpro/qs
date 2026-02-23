@@ -2,7 +2,6 @@ package issue
 
 import (
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -27,9 +26,6 @@ type IssueInfo struct {
 func ParseIssueFromArgs(wd string, args ...string) (IssueInfo, error) {
 	url := args[0] // protected by caller side
 	if strings.Contains(url, "/issues/") {
-		if err := checkGitHubIssue(wd, url); err != nil {
-			return IssueInfo{}, fmt.Errorf("invalid GitHub issue link: %w", err)
-		}
 		segments := strings.Split(url, "/")
 		num, err := strconv.Atoi(segments[len(segments)-1])
 		if err != nil {
@@ -40,14 +36,5 @@ func ParseIssueFromArgs(wd string, args ...string) (IssueInfo, error) {
 	if id, ok := jira.GetJiraTicketIDFromArgs(args...); ok {
 		return IssueInfo{Type: Jira, URL: url, ID: id}, nil
 	}
-	return IssueInfo{}, nil
-}
-
-func checkGitHubIssue(wd, issueURL string) error {
-	cmd := exec.Command("gh", "issue", "view", "--json", "title,state", issueURL)
-	cmd.Dir = wd
-	if _, err := cmd.Output(); err != nil {
-		return fmt.Errorf("failed to check issue link: %w", err)
-	}
-	return nil
+	return IssueInfo{Type: FreeForm}, nil
 }

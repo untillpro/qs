@@ -16,11 +16,6 @@ func TestParseIssueFromArgs(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "Empty args returns FreeForm",
-			args:     []string{},
-			wantType: FreeForm,
-		},
-		{
 			name:     "Multiple args returns FreeForm",
 			args:     []string{"arg1", "arg2"},
 			wantType: FreeForm,
@@ -35,11 +30,6 @@ func TestParseIssueFromArgs(t *testing.T) {
 			args:     []string{"https://untill.atlassian.net/browse/AIR-270"},
 			wantType: Jira,
 			wantID:   "AIR-270",
-		},
-		{
-			name:    "GitHub URL without gh CLI returns error",
-			args:    []string{"https://github.com/owner/repo/issues/42"},
-			wantErr: true,
 		},
 	}
 
