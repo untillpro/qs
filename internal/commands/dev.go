@@ -29,7 +29,7 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 		return deleteBranches(wd, parentRepo)
 	}
 	// qs dev is running
-	var branch string
+	var devBranchName string
 	var notes []string
 	var response string
 
@@ -95,20 +95,12 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 		return err
 	}
 
-	issueInfo, err := issue.ParseIssueFromArgs(wd, args...)
+	issueInfo, err := issue.ParseIssueFromArgs(args...)
 	if err != nil {
 		return err
 	}
 
-	switch issueInfo.Type {
-	case issue.GitHub:
-		branch, notes, err = gitcmds.BuildDevBranchName(issueInfo.URL)
-	case issue.Jira:
-		branch, notes, err = jira.GetJiraBranchName(args...)
-	default:
-		branch, notes, err = utils.GetBranchName(false, args...)
-		branch += "-dev"
-	}
+	devBranchName, notes, err = issue.BuildDevBranchName(issueInfo)
 	if err != nil {
 		if errors.Is(err, jira.ErrJiraIssueNotFoundOrInsufficientPermission) {
 			fmt.Print(jira.NotFoundIssueOrInsufficientAccessRightSuggestion)
@@ -117,17 +109,17 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 		return err
 	}
 
-	exists, err := branchExists(wd, branch)
+	exists, err := branchExists(wd, devBranchName)
 	if err != nil {
 		return fmt.Errorf("error checking branch existence: %w", err)
 	}
 	if exists {
-		return fmt.Errorf("dev branch '%s' already exists", branch)
+		return fmt.Errorf("dev branch '%s' already exists", devBranchName)
 	}
 
-	cmd.SetContext(context.WithValue(cmd.Context(), utils.CtxKeyDevBranchName, branch))
+	cmd.SetContext(context.WithValue(cmd.Context(), utils.CtxKeyDevBranchName, devBranchName))
 
-	fmt.Print("Dev branch '" + branch + "' will be created. Continue(y/n)? ")
+	fmt.Print("Dev branch '" + devBranchName + "' will be created. Continue(y/n)? ")
 	_, _ = fmt.Scanln(&response)
 
 	switch response {
@@ -145,12 +137,12 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 			}
 		}
 
-		if err := gitcmds.CreateDevBranch(wd, branch, mainBranch, notes); err != nil {
+		if err := gitcmds.CreateDevBranch(wd, devBranchName, mainBranch, notes); err != nil {
 			return err
 		}
 
 		if issueInfo.Type == issue.GitHub {
-			notes, err = gitcmds.LinkBranchToGithubIssue(wd, parentRepo, issueInfo.URL, issueInfo.Number, branch, args...)
+			notes, err = gitcmds.LinkBranchToGithubIssue(wd, parentRepo, issueInfo.Text, issueInfo.ID, devBranchName, args...)
 			if err != nil {
 				return err
 			}

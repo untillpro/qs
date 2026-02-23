@@ -8,9 +8,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-
-	"github.com/untillpro/qs/internal/notes"
-	"github.com/untillpro/qs/utils"
 )
 
 // GetJiraTicketIDFromArgs retrieves a JIRA ticket ID from the provided arguments.
@@ -35,54 +32,11 @@ func GetJiraTicketIDFromArgs(args ...string) (jiraTicketID string, ok bool) {
 	return "", false
 }
 
-// GetJiraBranchName generates a branch name based on a JIRA issue URL in the arguments.
-// If a JIRA URL is found, it generates a branch name in the format "<ISSUE-KEY>-<cleaned-description>".
-// Additionally, it generates comments in the format "[<ISSUE-KEY>] <original-line>".
-func GetJiraBranchName(args ...string) (branch string, comments []string, err error) {
-	comments = make([]string, 0, len(args)+1) // 1 for json notes
-	for _, arg := range args {
-		jiraTicketID, ok := GetJiraTicketIDFromArgs(arg)
-		if ok {
-			var brName string
-			issueName, _, err := GetJiraIssueName("", jiraTicketID)
-			if err != nil {
-				return "", nil, err
-			}
-
-			if issueName == "" {
-				branch, _, err = utils.GetBranchName(false, args...)
-				if err != nil {
-					return "", nil, err
-				}
-			} else {
-				jiraTicketURL := arg // Full JIRA ticket URL
-				// Prepare new notes with issue name as description
-				notesObj, err := notes.Serialize("", jiraTicketURL, notes.BranchTypeDev, issueName)
-				if err != nil {
-					return "", nil, err
-				}
-				comments = append(comments, notesObj)
-				brName, _, err = utils.GetBranchName(false, issueName)
-				if err != nil {
-					return "", nil, err
-				}
-				branch = jiraTicketID + "-" + brName
-			}
-			comments = append(comments, "["+jiraTicketID+"] "+issueName)
-		}
-	}
-	// Add suffix "-dev" for a dev branch
-	branch += "-dev"
-	comments = append(comments, args...)
-
-	return branch, comments, nil
-}
-
-// GetJiraIssueName retrieves the name of a JIRA issue based on its ticket ID or URL.
+// GetJiraIssueTitle retrieves the name of a JIRA issue based on its ticket ID or URL.
 // parameters:
 // - ticketURL: The URL of the JIRA ticket (optional).
 // - ticketID: The ID of the JIRA ticket (optional).
-func GetJiraIssueName(ticketURL, ticketID string) (string, string, error) {
+func GetJiraIssueTitle(ticketURL, ticketID string) (string, string, error) {
 	// Validate the issue key
 	if ticketID == "" {
 		var ok bool

@@ -821,7 +821,7 @@ func GetIssueDescription(notes []string) (string, error) {
 		description, err = GetGitHubIssueDescription(notesObj.GithubIssueURL)
 	case len(notesObj.JiraTicketURL) > 0:
 		var jiraTicketID string
-		description, jiraTicketID, err = jira.GetJiraIssueName(notesObj.JiraTicketURL, "")
+		description, jiraTicketID, err = jira.GetJiraIssueTitle(notesObj.JiraTicketURL, "")
 		if err != nil {
 			return "", err
 		}
