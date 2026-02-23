@@ -59,18 +59,16 @@ func BuildDevBranchName(info IssueInfo) (devBranchName string, comments []string
 	devBranchName = utils.CleanArgFromSpecSymbols(devBranchName)
 
 	// Build notes (common for GitHub and Jira when title is available)
-	var notesObj string
-	if title != "" {
-		var githubURL, jiraURL string
-		if info.Type == GitHub {
-			githubURL = info.Text
-		} else {
-			jiraURL = info.Text
-		}
-		notesObj, err = notes.Serialize(githubURL, jiraURL, notes.BranchTypeDev, title)
-		if err != nil {
-			return "", nil, err
-		}
+	var githubURL, jiraURL string
+	switch info.Type {
+	case GitHub:
+		githubURL = info.Text
+	case Jira:
+		jiraURL = info.Text
+	}
+	notesObj, err := notes.Serialize(githubURL, jiraURL, notes.BranchTypeDev, title)
+	if err != nil {
+		return "", nil, err
 	}
 
 	// Build comments
