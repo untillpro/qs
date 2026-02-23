@@ -55,7 +55,7 @@ func BuildDevBranchName(info IssueInfo) (devBranchName string, comments []string
 	}
 
 	// Convert issue title to kebab-style branch name
-	devBranchName = titleToKebab(info.ID, title)
+	devBranchName = titleToKebabWithPrefix(info.ID, title)
 	devBranchName = utils.CleanArgFromSpecSymbols(devBranchName)
 
 	// Build notes (common for GitHub and Jira when title is available)
@@ -86,7 +86,6 @@ func BuildDevBranchName(info IssueInfo) (devBranchName string, comments []string
 		}
 		comments = append(comments, "["+info.ID+"] "+title)
 		comments = append(comments, info.Text)
-		devBranchName = info.ID + "-" + devBranchName
 	default:
 		comments = append(comments, title)
 		comments = append(comments, notesObj)
@@ -97,8 +96,8 @@ func BuildDevBranchName(info IssueInfo) (devBranchName string, comments []string
 	return devBranchName, comments, nil
 }
 
-// titleToKebab converts an issue title into a kebab-case branch name prefixed with the issue ID.
-func titleToKebab(id, title string) string {
+// titleToKebabWithPrefix converts an issue title into a kebab-case branch name prefixed with the issue ID.
+func titleToKebabWithPrefix(id, title string) string {
 	kebabTitle := strings.ToLower(title)
 	kebabTitle = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(kebabTitle, "-")
 	kebabTitle = strings.Trim(kebabTitle, "-")
