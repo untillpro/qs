@@ -57,7 +57,7 @@ func SetLocalPreCommitHook(wd string) error {
 	_ = f.Close()
 
 	if !largeFileHookExist(PreCommitFilePath) {
-		return fillPreCommitFile(wd, PreCommitFilePath)
+		return fillPreCommitFile(dir, PreCommitFilePath)
 	}
 
 	return nil
@@ -84,7 +84,7 @@ func createOrOpenFile(filepath string) (*os.File, error) {
 	return f, nil
 }
 
-func fillPreCommitFile(wd, myFilePath string) error {
+func fillPreCommitFile(rootDir, myFilePath string) error {
 	fPreCommit, err := createOrOpenFile(myFilePath)
 	if err != nil {
 		return err
@@ -93,12 +93,7 @@ func fillPreCommitFile(wd, myFilePath string) error {
 		_ = fPreCommit.Close()
 	}()
 
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return err
-	}
-	fName := "/.git/hooks/" + LargeFileHookFilename
-	lfPath := dir + fName
+	lfPath := rootDir + "/.git/hooks/" + LargeFileHookFilename
 
 	lf, err := os.Create(lfPath)
 	if err != nil {
@@ -123,14 +118,8 @@ func fillPreCommitFile(wd, myFilePath string) error {
 	return new(exec.PipedExec).Command("chmod", "+x", myFilePath).Run(os.Stdout, os.Stdout)
 }
 
-// isLargeFileHookContentUpToDate checks if the current large-file-hook.sh content matches the expected content
-func isLargeFileHookContentUpToDate(wd string) (bool, error) {
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return false, err
-	}
-
-	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
+func isLargeFileHookContentUpToDate(rootDir string) (bool, error) {
+	hookPath := filepath.Join(rootDir, ".git", "hooks", LargeFileHookFilename)
 
 	// Check if the file exists
 	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
@@ -147,14 +136,8 @@ func isLargeFileHookContentUpToDate(wd string) (bool, error) {
 	return string(currentContent) == largeFileHookContent, nil
 }
 
-// updateLargeFileHookContent updates the large-file-hook.sh file with the current content
-func updateLargeFileHookContent(wd string) error {
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return err
-	}
-
-	hookPath := filepath.Join(dir, ".git", "hooks", LargeFileHookFilename)
+func updateLargeFileHookContent(rootDir string) error {
+	hookPath := filepath.Join(rootDir, ".git", "hooks", LargeFileHookFilename)
 
 	// Create or overwrite the hook file
 	lf, err := os.Create(hookPath)
@@ -172,17 +155,18 @@ func updateLargeFileHookContent(wd string) error {
 	return nil
 }
 
-// EnsureLargeFileHookUpToDate checks and updates the large file hook if needed
 func EnsureLargeFileHookUpToDate(wd string) error {
-	upToDate, err := isLargeFileHookContentUpToDate(wd)
+	rootDir, err := GetRootFolder(wd)
 	if err != nil {
 		return err
 	}
-
-	if !upToDate {
-		return updateLargeFileHookContent(wd)
+	upToDate, err := isLargeFileHookContentUpToDate(rootDir)
+	if err != nil {
+		return err
 	}
-
+	if !upToDate {
+		return updateLargeFileHookContent(rootDir)
+	}
 	return nil
 }
 
@@ -196,29 +180,20 @@ func getGlobalHookFolder() string {
 	return strings.TrimSpace(stdout)
 }
 
-func getLocalHookFolder(wd string) (string, error) {
-	dir, err := GetRootFolder(wd)
-	if err != nil {
-		return "", err
-	}
-	filename := "/.git/hooks/pre-commit"
-	filepath := dir + filename
-
-	return strings.TrimSpace(filepath), nil
+func getLocalHookFolder(rootDir string) string {
+	return rootDir + "/.git/hooks/pre-commit"
 }
 
-// LocalPreCommitHookExist - s.e.
 func LocalPreCommitHookExist(wd string) (bool, error) {
-	filepath, err := getLocalHookFolder(wd)
+	rootDir, err := GetRootFolder(wd)
 	if err != nil {
 		return false, err
 	}
-	// Check if the file already exists
-	if _, err := os.Stat(filepath); os.IsNotExist(err) {
+	fp := getLocalHookFolder(rootDir)
+	if _, err := os.Stat(fp); os.IsNotExist(err) {
 		return false, nil
 	}
-
-	return largeFileHookExist(filepath), nil
+	return largeFileHookExist(fp), nil
 }
 
 func largeFileHookExist(filepath string) bool {
@@ -262,12 +237,15 @@ func SetGlobalPreCommitHook(wd string) error {
 
 	_ = f.Close()
 	if !largeFileHookExist(filepath) {
-		return fillPreCommitFile(wd, filepath)
+		rootDir, err := GetRootFolder(wd)
+		if err != nil {
+			return err
+		}
+		return fillPreCommitFile(rootDir, filepath)
 	}
 
 	return nil
 }
-
 
 func GetRootFolder(wd string) (string, error) {
 	stdout, _, err := new(exec.PipedExec).

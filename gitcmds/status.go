@@ -158,7 +158,7 @@ func getListOfChangedFiles(wd, statusOutput string) ([]fileInfo, error) {
 		case `M`, `MM`, `RM`:
 			newFileSize, err1 = getFileSize(wd, name)
 			oldSize, err2 = getFileSizeFromHEAD(wd, gitDir, oldName)
-		case `D`:
+		case `D`, `MD`:
 			oldSize, err2 = getFileSizeFromHEAD(wd, gitDir, oldName)
 		case `R`:
 			newFileSize, err1 = getFileSize(wd, name)
