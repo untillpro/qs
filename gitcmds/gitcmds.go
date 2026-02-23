@@ -763,10 +763,10 @@ func GetCurrentBranchInfo(wd string) (currentBranch, mainBranch string, isMain b
 	logger.Verbose("Current branch: " + currentBranch)
 
 	mainBranch, err = GetMainBranch(wd)
-	logger.Verbose("Main branch: " + mainBranch)
 	if err != nil {
 		return "", "", false, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
+	logger.Verbose("Main branch: " + mainBranch)
 
 	return currentBranch, mainBranch, strings.EqualFold(currentBranch, mainBranch), nil
 }
