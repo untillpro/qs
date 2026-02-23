@@ -18,11 +18,7 @@ import (
 )
 
 // CreateDevBranch creates dev branch and pushes it to origin
-// Parameters:
-// branch - branch name
-// notes - notes for branch
-// checkRemoteBranchExistence - if true, checks if a branch already exists in remote
-func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRemoteBranchExistence bool) error {
+func CreateDevBranch(wd, branchName, mainBranch string, notes []string) error {
 	branchName = normalizeBranchName(branchName)
 	if branchName == "" {
 		return errors.New("branch name is empty after normalization")
@@ -43,24 +39,6 @@ func CreateDevBranch(wd, branchName, mainBranch string, notes []string, checkRem
 	}
 	if err != nil {
 		return err
-	}
-
-	if checkRemoteBranchExistence {
-		// check if a branch already exists in remote
-		stdout, stderr, err := new(exec.PipedExec).
-			Command(git, "ls-remote", "--heads", "origin", branchName).
-			WorkingDir(wd).
-			RunToStrings()
-		if err != nil {
-			logger.Verbose(stderr)
-
-			return err
-		}
-		logger.Verbose(stdout)
-
-		if len(stdout) > 0 {
-			return fmt.Errorf("branch %s already exists in origin remote", branchName)
-		}
 	}
 
 	// Create new branch from main

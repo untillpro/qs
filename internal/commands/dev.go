@@ -10,7 +10,6 @@ import (
 
 	"github.com/atotto/clipboard"
 	"github.com/fatih/color"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
@@ -96,48 +95,29 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 		return err
 	}
 
-	issueNum, githubIssueURL, ok, err := argContainsGithubIssueLink(wd, args...)
+	issueNum, githubIssueURL, isGithubIssue, err := argContainsGithubIssueLink(wd, args...)
 	if err != nil {
 		return err
 	}
 
-	checkRemoteBranchExistence := true
-	if ok { // github issue
-		fmt.Print("Dev branch for issue #" + strconv.Itoa(issueNum) + " will be created. Agree?(y/n)")
-		_, _ = fmt.Scanln(&response)
-		if response == pushYes {
-			branch, notes, err = gitcmds.CreateGithubLinkToIssue(wd, parentRepo, githubIssueURL, issueNum, args...)
-			if err != nil {
-				return err
-			}
-			checkRemoteBranchExistence = false // no need to check remote branch existence for issue branch
-		}
-	} else { // PK topic or Jira issue
-		if _, ok := jira.GetJiraTicketIDFromArgs(args...); ok { // Jira issue
-			branch, notes, err = jira.GetJiraBranchName(args...)
-		} else {
-			branch, notes, err = utils.GetBranchName(false, args...)
-			branch += "-dev" // Add suffix "-dev" for a dev branch
-		}
-		if err != nil {
-			// Show suggestion if issue is not found or insufficient permission to see it
-			// And exit silently
-			if errors.Is(err, jira.ErrJiraIssueNotFoundOrInsufficientPermission) {
-				fmt.Print(jira.NotFoundIssueOrInsufficientAccessRightSuggestion)
+	_, isJiraIssue := jira.GetJiraTicketIDFromArgs(args...)
 
-				return nil
-			}
-
-			return err
-		}
-
-		devMsg := strings.ReplaceAll("Dev branch '$reponame' will be created. Continue(y/n)? ", "$reponame", branch)
-		fmt.Print(devMsg)
-		_, _ = fmt.Scanln(&response)
+	switch {
+	case isGithubIssue:
+		branch, notes, err = gitcmds.BuildDevBranchName(githubIssueURL)
+	case isJiraIssue:
+		branch, notes, err = jira.GetJiraBranchName(args...)
+	default:
+		branch, notes, err = utils.GetBranchName(false, args...)
+		branch += "-dev"
 	}
-
-	// put branch name to command context
-	cmd.SetContext(context.WithValue(cmd.Context(), utils.CtxKeyDevBranchName, branch))
+	if err != nil {
+		if errors.Is(err, jira.ErrJiraIssueNotFoundOrInsufficientPermission) {
+			fmt.Print(jira.NotFoundIssueOrInsufficientAccessRightSuggestion)
+			return nil
+		}
+		return err
+	}
 
 	exists, err := branchExists(wd, branch)
 	if err != nil {
@@ -147,31 +127,38 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 		return fmt.Errorf("dev branch '%s' already exists", branch)
 	}
 
+	cmd.SetContext(context.WithValue(cmd.Context(), utils.CtxKeyDevBranchName, branch))
+
+	fmt.Print("Dev branch '" + branch + "' will be created. Continue(y/n)? ")
+	_, _ = fmt.Scanln(&response)
+
 	switch response {
 	case pushYes:
-		// Remote developer branch, linked to issue is created
-		var response string
-		// Only add upstream if we have a parent repo and upstream doesn't exist
-		// In single remote mode (no parent repo), we don't need upstream
 		if len(parentRepo) > 0 && !upstreamExists {
+			var upstreamResponse string
 			fmt.Print("Upstream not found.\nRepository " + parentRepo + " will be added as upstream. Agree[y/n]?")
-			_, _ = fmt.Scanln(&response)
-			if response != pushYes {
+			_, _ = fmt.Scanln(&upstreamResponse)
+			if upstreamResponse != pushYes {
 				fmt.Print(msgOkSeeYou)
 				return nil
 			}
-			response = ""
 			if err := gitcmds.MakeUpstreamForBranch(wd, parentRepo); err != nil {
 				return err
 			}
 		}
 
-		if err := gitcmds.CreateDevBranch(wd, branch, mainBranch, notes, checkRemoteBranchExistence); err != nil {
+		if err := gitcmds.CreateDevBranch(wd, branch, mainBranch, notes); err != nil {
 			return err
+		}
+
+		if isGithubIssue {
+			notes, err = gitcmds.LinkBranchToGithubIssue(wd, parentRepo, githubIssueURL, issueNum, branch, args...)
+			if err != nil {
+				return err
+			}
 		}
 	default:
 		fmt.Print(msgOkSeeYou)
-
 		return nil
 	}
 
@@ -194,32 +181,24 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 	return nil
 }
 
-// branchExists checks if a branch with the given name already exists in the current git repository.
 func branchExists(wd, branchName string) (bool, error) {
-	repo, err := gitcmds.OpenGitRepository(wd)
+	cmd := exec.Command("git", "branch", "--list", branchName)
+	cmd.Dir = wd
+	output, err := cmd.Output()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to check local branches: %w", err)
+	}
+	if strings.TrimSpace(string(output)) != "" {
+		return true, nil
 	}
 
-	branches, err := repo.Branches()
+	cmd = exec.Command("git", "ls-remote", "--heads", "origin", branchName)
+	cmd.Dir = wd
+	output, err = cmd.Output()
 	if err != nil {
-		return false, fmt.Errorf("failed to get branches: %w", err)
+		return false, fmt.Errorf("failed to check remote branches: %w", err)
 	}
-
-	// Find development branch name that starts with the issue ID
-	exists := false
-	_ = branches.ForEach(func(ref *plumbing.Reference) error {
-		nextBranchName := ref.Name().Short()
-		if nextBranchName == branchName {
-			exists = true
-
-			return nil
-		}
-
-		return nil
-	})
-
-	return exists, nil
+	return strings.TrimSpace(string(output)) != "", nil
 }
 
 // getArgStringFromClipboard retrieves a string from the clipboard, or uses the context value if available.
