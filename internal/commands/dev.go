@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 
 	"github.com/atotto/clipboard"
@@ -13,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
+	"github.com/untillpro/qs/internal/issue"
 	"github.com/untillpro/qs/internal/jira"
 	"github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
@@ -95,17 +95,15 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 		return err
 	}
 
-	issueNum, githubIssueURL, isGithubIssue, err := argContainsGithubIssueLink(wd, args...)
+	issueInfo, err := issue.ParseIssueFromArgs(wd, args...)
 	if err != nil {
 		return err
 	}
 
-	_, isJiraIssue := jira.GetJiraTicketIDFromArgs(args...)
-
-	switch {
-	case isGithubIssue:
-		branch, notes, err = gitcmds.BuildDevBranchName(githubIssueURL)
-	case isJiraIssue:
+	switch issueInfo.Type {
+	case issue.GitHub:
+		branch, notes, err = gitcmds.BuildDevBranchName(issueInfo.URL)
+	case issue.Jira:
 		branch, notes, err = jira.GetJiraBranchName(args...)
 	default:
 		branch, notes, err = utils.GetBranchName(false, args...)
@@ -151,8 +149,8 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 			return err
 		}
 
-		if isGithubIssue {
-			notes, err = gitcmds.LinkBranchToGithubIssue(wd, parentRepo, githubIssueURL, issueNum, branch, args...)
+		if issueInfo.Type == issue.GitHub {
+			notes, err = gitcmds.LinkBranchToGithubIssue(wd, parentRepo, issueInfo.URL, issueInfo.Number, branch, args...)
 			if err != nil {
 				return err
 			}
@@ -229,40 +227,6 @@ func setPreCommitHook(wd string) error {
 	}
 
 	return gitcmds.SetLocalPreCommitHook(wd)
-}
-
-func argContainsGithubIssueLink(wd string, args ...string) (issueNum int, issueURL string, ok bool, err error) {
-	ok = false
-	if len(args) != 1 {
-		return
-	}
-	url := args[0]
-	if strings.Contains(url, "/issues") {
-		if err := checkIssueLink(wd, url); err != nil {
-			return 0, "", false, fmt.Errorf("invalid GitHub issue link: %w", err)
-		}
-		segments := strings.Split(url, "/")
-		strIssueNum := segments[len(segments)-1]
-		i, err := strconv.Atoi(strIssueNum)
-		if err != nil {
-			return 0, "", false, fmt.Errorf("failed to convert issue number from string to int: %w", err)
-		}
-
-		return i, url, true, nil
-	}
-
-	return 0, "", false, nil
-}
-
-func checkIssueLink(wd, issueURL string) error {
-	// This function checks if the provided issueURL is a valid GitHub issue link via `gh issue view`.
-	cmd := exec.Command("gh", "issue", "view", "--json", "title,state", issueURL)
-	cmd.Dir = wd
-	if _, err := cmd.Output(); err != nil {
-		return fmt.Errorf("failed to check issue link: %w", err)
-	}
-
-	return nil
 }
 
 func deleteBranches(wd, parentRepo string) error {
