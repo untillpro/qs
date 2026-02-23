@@ -755,25 +755,20 @@ func GetCurrentBranchName(wd string) (string, error) {
 	return strings.TrimSpace(branchName), nil
 }
 
-// IamInMainBranch checks if current branch is main branch
-// Returns:
-// - the name of current branch
-// - true if current branch is main branch
-// - error if any
-func IamInMainBranch(wd string) (string, bool, error) {
-	currentBranchName, err := GetCurrentBranchName(wd)
+func GetCurrentBranchInfo(wd string) (currentBranch, mainBranch string, isMain bool, err error) {
+	currentBranch, err = GetCurrentBranchName(wd)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
-	logger.Verbose("Current branch: " + currentBranchName)
+	logger.Verbose("Current branch: " + currentBranch)
 
-	mainBranch, err := GetMainBranch(wd)
+	mainBranch, err = GetMainBranch(wd)
 	logger.Verbose("Main branch: " + mainBranch)
 	if err != nil {
-		return "", false, fmt.Errorf(errMsgFailedToGetMainBranch, err)
+		return "", "", false, fmt.Errorf(errMsgFailedToGetMainBranch, err)
 	}
 
-	return currentBranchName, strings.EqualFold(currentBranchName, mainBranch), err
+	return currentBranch, mainBranch, strings.EqualFold(currentBranch, mainBranch), nil
 }
 
 // GetRemoteUrlByName retrieves the URL of a specified remote by its name

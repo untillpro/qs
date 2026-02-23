@@ -61,15 +61,11 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 		return fmt.Errorf("you are in %s/%s repo with upstream remote but no fork detected\nExecute 'qs fork' first", org, repo)
 	}
 
-	curBranch, err := gitcmds.GetCurrentBranchName(wd)
+	curBranch, mainBranch, isMain, err := gitcmds.GetCurrentBranchInfo(wd)
 	if err != nil {
 		return err
 	}
-	mainBranch, err := gitcmds.GetMainBranch(wd)
-	if err != nil {
-		return err
-	}
-	if !strings.EqualFold(curBranch, mainBranch) {
+	if !isMain {
 		fmt.Println("--------------------------------------------------------")
 		fmt.Println("You are in")
 		repo, org, err := gitcmds.GetRepoAndOrgName(wd)

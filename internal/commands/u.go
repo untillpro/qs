@@ -13,7 +13,7 @@ import (
 )
 
 func U(cmd *cobra.Command, commitMessage string, wd string) error {
-	currentBranch, isMain, err := gitcmds.IamInMainBranch(wd)
+	currentBranch, _, isMain, err := gitcmds.GetCurrentBranchInfo(wd)
 	if err != nil {
 		return err
 	}

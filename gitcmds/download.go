@@ -77,17 +77,10 @@ func Download(wd string) error {
 	}
 	logger.Verbose(stdout)
 
-	currentBranchName, err := GetCurrentBranchName(wd)
+	currentBranchName, mainBranchName, isMain, err := GetCurrentBranchInfo(wd)
 	if err != nil {
 		return err
 	}
-
-	mainBranchName, err := GetMainBranch(wd)
-	if err != nil {
-		return fmt.Errorf(errMsgFailedToGetMainBranch, err)
-	}
-
-	isMain := strings.EqualFold(currentBranchName, mainBranchName)
 
 	// check out on the main branch
 	if !isMain {
