@@ -89,6 +89,9 @@ func BuildDevBranchName(info IssueInfo) (devBranchName string, comments []string
 		comments = append(comments, "["+info.ID+"] "+title)
 		comments = append(comments, info.Text)
 		devBranchName = info.ID + "-" + devBranchName
+	default:
+		comments = append(comments, title)
+		comments = append(comments, notesObj)
 	}
 
 	devBranchName += "-dev"
