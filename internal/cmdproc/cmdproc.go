@@ -11,10 +11,10 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 func updateCmd(_ context.Context, params *qsGlobalParams) *cobra.Command {

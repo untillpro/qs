@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 	"golang.org/x/mod/semver"
 )
 

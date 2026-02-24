@@ -10,12 +10,12 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/issue"
 	"github.com/untillpro/qs/internal/jira"
 	"github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []string) error {

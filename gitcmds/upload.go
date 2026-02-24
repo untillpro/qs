@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 // Upload uploads sources to git repo

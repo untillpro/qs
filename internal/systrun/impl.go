@@ -23,11 +23,11 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/uuid"
 	goUtilsExec "github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	"github.com/untillpro/qs/internal/commands"
 	"github.com/untillpro/qs/internal/jira"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 // checkPrerequisites ensures all required tools are available

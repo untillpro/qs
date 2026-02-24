@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 // CreateDevBranch creates dev branch and pushes it to origin

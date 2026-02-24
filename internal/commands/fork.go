@@ -3,8 +3,8 @@ package commands
 import (
 	"fmt"
 
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 func Fork(wd string) error {

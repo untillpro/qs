@@ -11,6 +11,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/untillpro/goutils v0.0.0-20231201170327-3c33c6010100
+	github.com/voedger/voedger v1.202405300917.1
 	golang.org/x/mod v0.33.0
 )
 

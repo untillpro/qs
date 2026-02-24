@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 func Pr(wd string, needDraft bool) error {

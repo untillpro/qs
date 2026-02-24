@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 // GetUserEmail - github user email
