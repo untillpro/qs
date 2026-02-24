@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/untillpro/goutils/logger"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 // current version of the Notes struct

@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/gitcmds"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 func U(cmd *cobra.Command, commitMessage string, wd string) error {

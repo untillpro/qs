@@ -90,6 +90,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/untillpro/goutils v0.0.0-20231201170327-3c33c6010100 h1:FHcCDVOkPwZBul+sWI3cIpRpVKlwUGYyKT544XGmxkM=
 github.com/untillpro/goutils v0.0.0-20231201170327-3c33c6010100/go.mod h1:D7adcEUMVzLXEjHhqZX5ss22BXJyXP3RLhJO99r8dII=
+github.com/voedger/voedger v1.202405300917.1 h1:6kkNSA8hJxp1EO/lK6TM/zp9ggVhdQc/xpQt3M3SVrU=
+github.com/voedger/voedger v1.202405300917.1/go.mod h1:4J0xgQCIso/XNccuxcWkqEg3r7yw3ZThKUICKP+JWyA=
 github.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/RsTxqYcX6fHqOXZwwMP+2VyYWJeWM2qQFM=
 github.com/xanzy/ssh-agent v0.3.3/go.mod h1:6dzNDKs0J9rVPHPhaGCukekBHKqfl+L3KghI1Bc68Uw=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=

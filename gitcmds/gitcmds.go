@@ -10,10 +10,10 @@ import (
 
 	goGitPkg "github.com/go-git/go-git/v5"
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 const (

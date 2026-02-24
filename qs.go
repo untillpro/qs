@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/untillpro/goutils/logger"
 	"github.com/untillpro/qs/internal/cmdproc"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 func main() {

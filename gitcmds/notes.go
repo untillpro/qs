@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/untillpro/goutils/exec"
-	"github.com/untillpro/goutils/logger"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 func AddNotes(wd string, notes []string) error {

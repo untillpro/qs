@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/untillpro/goutils/logger"
+	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
 // RetryConfig holds configuration for retry operations
