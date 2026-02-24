@@ -20,7 +20,7 @@ Parameters:
   - Optional: area focus (natural language like "focus on authentication", "clarify database design")
   - Optional: web search (--web flag or phrases like "with web search", "use web", "web")
 - Output
-  - Updated Decision File (see `$templates_folder/tmpl-decs.md`)
+  - Updated Decision File (see `{templates_folder}/tmpl-decs.md`)
 
 ## Scenarios
 

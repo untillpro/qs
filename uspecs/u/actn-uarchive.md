@@ -15,11 +15,19 @@ Parameters:
 - Input
   - Active Change Folder path
 - Output
-  - Folder moved to `$changes_folder/archive`
+  - Folder moved to `{changes_folder}/archive`
+  - If on PR branch and Engineer confirms: git commit and push with message, branch and refs removed
 
 Flow:
 
-- Identify Active Change Folder to archive, if unclear, ask user to specify folder name
-- Execute `bash uspecs/u/scripts/uspecs.sh change archive <change-folder-name>`
-  - Example: `bash uspecs/u/scripts/uspecs.sh change archive 2602211523-check-cmd-availability`
-- Analyze output, show to user and stop
+- Identify Active Change Folder to archive, if unclear, ask Engineer to specify folder name
+- Run `bash uspecs/u/scripts/uspecs.sh status ispr`
+  - If output is `yes`: present Engineer with the following options:
+      1. Archive + git cleanup (commit, push, delete local branch and remote tracking ref)
+      2. Archive only (no git operations)
+      3. Cancel
+    - On option 1: `bash uspecs/u/scripts/uspecs.sh change archive <change-folder-name> -d`
+    - On option 2: `bash uspecs/u/scripts/uspecs.sh change archive <change-folder-name>`
+    - On option 3: abort, no action taken
+  - Otherwise: `bash uspecs/u/scripts/uspecs.sh change archive <change-folder-name>`
+- Analyze output, show to Engineer and stop

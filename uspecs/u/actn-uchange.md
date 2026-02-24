@@ -15,8 +15,8 @@ Parameters:
 - Input
   - Change description
   - --branch option (optional): create git branch for the change
-  - Issue reference (optional): URL to a GitLab/GitHub/Jira issue that prompted the change
-    - Referenced further as `$issue_url`
+  - Issue reference (optional): URL to a GitLab/GitHub/Jira/etc. issue that prompted the change
+    - Referenced further as `{issue_url}`
 - Output
   - Active Change Folder with Change File
   - Issue File (if issue reference provided)
@@ -26,12 +26,12 @@ Flow:
 
 - Determine `change_name` from the change description: kebab-case, 15-30 chars, descriptive
 - Run script to create Change Folder:
-  - Base command: `bash uspecs/u/scripts/uspecs.sh change new $change_name`
-  - If issue reference provided add `--issue-url $issue_url` parameters
+  - Base command: `bash uspecs/u/scripts/uspecs.sh change new {change_name}`
+  - If issue reference provided add `--issue-url "{issue_url}"` parameters (quoted to handle shell-special characters such as `&`)
   - If --branch option provided add `--branch` parameter
   - Fail fast if script exits with error
   - Parse Change Folder path from script output, path is relative to project root
-- Write Change File body (`$templates_folder/tmpl-change.md`) appended to Change File created by the script
+- Write Change File body (`{templates_folder}/tmpl-change.md`) appended to Change File created by the script
 - If issue reference provided:
   - Try to fetch issue content
   - If fetch succeeds:

@@ -17,7 +17,7 @@ Parameters:
   - Change File and other files in Active Change Folder
   - Existing How File (if any)
 - Output
-  - Updated How File (see `$templates_folder/tmpl-how.md`)
+  - Updated How File (see `{templates_folder}/tmpl-how.md`)
 
 ## Scenarios
 

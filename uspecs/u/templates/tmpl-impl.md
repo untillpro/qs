@@ -20,11 +20,11 @@ Note: Sections (Functional design, Technical design, Construction) contain check
 
 ### Section: Functional design
 
-Ref. `$templates_folder/tmpl-fd.md` for specification file formats.
+Ref. `{templates_folder}/tmpl-fd.md` for specification file formats.
 
 ### Section: Technical design
 
-Ref. `$templates_folder/tmpl-td.md` for specification file formats.
+Ref. `{templates_folder}/tmpl-td.md` for specification file formats.
 
 ### Section: Provisioning and configuration
 
@@ -72,9 +72,9 @@ Rules:
 - Use relative paths for both existing files and new files that don't exist yet
 - Technical design section
   - Reference existing architecture files (e.g., `../../specs/prod/apps/vvm-orch--arch.md`) when updating them
-  - Use templates from `$templates_folder/tmpl-td.md` for structure of new files
+  - Use templates from `{templates_folder}/tmpl-td.md` for structure of new files
 - Construction section
-  - If design sections exist, run `git diff <baseline> -- $specs_folder/` to identify exact spec changes (baseline from Change File frontmatter)
+  - If design sections exist, run `git diff <baseline> -- {specs_folder}/` to identify exact spec changes (baseline from Change File frontmatter)
   - List all non-specification files that need to be created or modified, not already covered by other sections
   - Includes source files, tests, documentation, scripts, configuration - any file changes
   - Optional grouping: when items span 3+ distinct dependency categories, group under `###` headers ordered by dependency (foundational changes first, dependent changes after)

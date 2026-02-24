@@ -32,7 +32,7 @@ Flow:
   - For "some to-do items unchecked" scenario: Implement each unchecked item and check it immediately after implementation (stop at Review Item if unchecked)
   - For edge cases: Follow the specific scenario behavior
 
-Use definitions from sections below and structures from `$templates_folder/tmpl-impl.md` when executing actions
+Use definitions from sections below and structures from `{templates_folder}/tmpl-impl.md` when executing actions
 
 ## Definitions
 
@@ -41,7 +41,7 @@ Use definitions from sections below and structures from `$templates_folder/tmpl-
 The section is needed if:
 
 - Domain Files exist and define External actors
-- Change Request description impacts Functional Design Specifications (only files inside `$specs_folder`)
+- Change Request description impacts Functional Design Specifications (only files inside `{specs_folder}`)
 
 Impact:
 

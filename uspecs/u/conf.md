@@ -6,7 +6,7 @@ All paths are relative to the project root:
 
 - specs_folder: uspecs/specs
 - changes_folder: uspecs/changes
-- changes_archive: `$changes_folder/archive`
+- changes_archive: `{changes_folder}/archive`
 - templates_folder: uspecs/u/templates
 
 ## Artifacts
@@ -18,13 +18,17 @@ All paths are relative to the project root:
     - Focus on core action or feature, avoid redundant words
     - Use abbreviations when appropriate to reduce length
     - Examples: `remove-uspecs-prefix`, `fetch-issue-to-change`, `alpha-code-bp3-endpoints`
-  - Can be either Active (in `$changes_folder`) or Archived (in `$changes_archive`)
+  - Can be either Active (in `{changes_folder}`) or Archived (in `{changes_archive}`)
   - Active Change Folder files describe Active Change Request and its implementation
   - Branch naming for Change Folder (when --branch option used):
     - Format: `{change-name}` (without timestamp prefix)
     - Example: For Change Folder `2602141423-branch-option-uchange`, branch name is `branch-option-uchange`
     - Branch is created from current HEAD after Change Folder and Change File are created
     - If branch creation fails, error is reported but change creation continues
+  - PR branch naming (created by upr):
+    - Format: `{change-name}--pr`
+    - Example: For change branch `branch-option-uchange`, PR branch is `branch-option-uchange--pr`
+    - Created from pr_remote/default_branch; contains a single squashed commit
 - Change Folder System Artifacts
   - Change File: `change.md`
   - Issue File: `issue.md`
@@ -34,13 +38,13 @@ All paths are relative to the project root:
     - Clarification and brainstorming about Change Request functional and technical design
   - How File: `how.md`
     - Implementation approach idea for a Change Request
-- Domain Folder: `$specs_folder/{domain}/`
-- Context Folder: `$specs_folder/{domain}/{context-id}/`
+- Domain Folder: `{specs_folder}/{domain}/`
+- Context Folder: `{specs_folder}/{domain}/{context-id}/`
   - Contains
     - zero or many `Scenarios File`, `Requirements File`, `Technical Design File`
     - zero or one `Architecture File`
 - Functional Design Specifications
-  - Domain File: `$specs_folder/{domain}/{domain}--domain.md`
+  - Domain File: `{specs_folder}/{domain}/{domain}--domain.md`
   - Feature Files
     - Scenarios File: `{context-folder}/{feature}.feature`
     - Requirements File: `{context-folder}/{feature}--reqs.md`
@@ -49,12 +53,12 @@ All paths are relative to the project root:
   - Files like `go.mod`, `go.work`, `package.json`, `requirements.txt`, `pubspec.yaml` etc. that define project dependencies and configuration
 - Technical Design Specifications
   - Domain Technology
-    - Per domain: `$specs_folder/{domain}/{domain}--tech.md`
+    - Per domain: `{specs_folder}/{domain}/{domain}--tech.md`
     - Defines tech stack, architecture patterns etc., UI/UX guidelines etc.
   - Domain Architecture
-    - `$specs_folder/{domain}/{domain}--arch.md`
+    - `{specs_folder}/{domain}/{domain}--arch.md`
   - Domain Subsystem Architecture
-     or `$specs_folder/{domain}/{subsystem}--arch.md`
+     or `{specs_folder}/{domain}/{subsystem}--arch.md`
   - Context Architecture
     - `{context-folder}/{context}--arch.md`
   - Context Subsystem Architecture
