@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -Eeuo pipefail
 
 # checkcmds command1 [command2 ...]
 # Verifies that each listed command is available on PATH.
