@@ -19,18 +19,25 @@ A powerful Git workflow automation tool that simplifies repository management, b
 ### Required Tools
 
 #### GitHub CLI (gh) - version > 2.27
-- **Windows**: `scoop install main/gh` ([scoop.sh](https://scoop.sh/#/apps?q=gh))
+
+- **Windows**: `winget install --id GitHub.cli`
 - **macOS**: `brew install gh`
 - **Linux**: Follow [GitHub CLI installation guide](https://github.com/cli/cli)
 
+#### jq
+
+- **Windows**: `winget install -e --id jqlang.jq`
+- **macOS**: `brew install gawk jq`
+
 #### Git
+
 - **Windows**: Ensure `$Git\usr\bin` is in PATH (provides Unix utilities: `grep`, `sed`, `jq`, `gawk`, etc.)
 - **macOS**: `brew install git gawk jq` (gawk and jq required for qs operations)
 - **Linux**: Usually pre-installed, ensure `gawk` and `jq` are available
 
 #### Platform-specific Dependencies
+
 - **Linux**: `sudo apt install xclip` (for clipboard operations)
-- **macOS**: `brew install gawk jq` (if not already installed)
 
 ## Installation
 

@@ -10,6 +10,7 @@ import (
 
 	goGitPkg "github.com/go-git/go-git/v5"
 	"github.com/untillpro/goutils/exec"
+	issuePkg "github.com/untillpro/qs/internal/issue"
 	"github.com/untillpro/qs/internal/jira"
 	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/untillpro/qs/utils"
@@ -28,11 +29,9 @@ const (
 	branch            = "branch"
 	origin            = "origin"
 	originSlash       = "origin/"
-	httppref          = "https"
 	pushYes           = "y"
 	MsgPreCommitError = "Attempt to commit too"
 	MsgCommitForNotes = "Commit for keeping notes in branch"
-	oneSpace          = " "
 	err128            = "128"
 
 	repoNotFound            = "git repo name not found"
@@ -41,12 +40,8 @@ const (
 	ErrMsgPRNotesImpossible = "pull request without comments is impossible"
 	DefaultCommitMessage    = "wip"
 
-	IssuePRTtilePrefix = "Resolves issue"
-	IssueSign          = "Resolves #"
-
-	minPRTitleLength              = 8
-	minRepoNameLength             = 4
-	bashFilePerm      os.FileMode = 0644
+	minPRTitleLength             = 8
+	bashFilePerm     os.FileMode = 0644
 
 	issuelineLength  = 5
 	issuelinePosOrg  = 4
@@ -473,33 +468,15 @@ func GetBranchType(wd string) (string, notesPkg.BranchType, error) {
 	}
 
 	if len(notes) > 0 {
-		notesObj, ok := notesPkg.Deserialize(notes)
-		if !ok {
-			if isOldStyledBranch(notes) {
-				return currentBranchName, notesPkg.BranchTypeDev, nil
-			}
+		notesObj, err := notesPkg.ReadNotes(notes)
+		if err != nil {
+			return "", notesPkg.BranchTypeUnknown, err
 		}
 
-		if notesObj != nil {
-			return currentBranchName, notesObj.BranchType, nil
-		}
+		return currentBranchName, notesObj.BranchType, nil
 	}
 
 	return currentBranchName, GetBranchTypeByName(currentBranchName), nil
-}
-
-// isOldStyledBranch checks if branch is old styled
-func isOldStyledBranch(notes []string) bool {
-	for _, s := range notes {
-		s = strings.TrimSpace(s)
-		if len(s) > 0 {
-			if strings.Contains(s, IssuePRTtilePrefix) || strings.Contains(s, IssueSign) {
-				return true
-			}
-		}
-	}
-
-	return false
 }
 
 // GetParentRepoName - parent repo of forked
@@ -537,28 +514,19 @@ func IsBranchInMain(wd string) (bool, error) {
 	return (parent == org+slash+repo) || (strings.TrimSpace(parent) == ""), err
 }
 
-func GetNoteAndURL(notes []string) (note string, url string) {
-	for _, s := range notes {
-		s = strings.TrimSpace(s)
-		if len(s) > 0 {
-			if strings.Contains(s, httppref) {
-				url = s
-				if len(note) > 0 {
-					break
-				}
-			} else {
-				if note == "" {
-					note = s
-				} else {
-					note = note + oneSpace + s
-				}
-				if strings.Contains(strings.ToLower(s), strings.ToLower(IssuePRTtilePrefix)) {
-					break
-				}
-			}
-		}
+func GetNoteAndURL(rawNotes []string) (note string, url string) {
+	n, err := notesPkg.ReadNotes(rawNotes)
+	if err != nil {
+		return "", ""
 	}
-	return note, url
+	url = n.GithubIssueURL //nolint:staticcheck
+	if url == "" {
+		url = n.JiraTicketURL //nolint:staticcheck
+	}
+	if url == "" {
+		url = n.IssueURL
+	}
+	return n.Description, url
 }
 
 // GetFilesForCommit shows list of file names, ready for commit
@@ -676,28 +644,46 @@ func GetIssueDescription(notes []string) (string, error) {
 		return "", err
 	}
 
-	notesObj, ok := notesPkg.Deserialize(notes)
-	if !ok {
+	notesObj, err := notesPkg.Deserialize(notes)
+	if err != nil {
+		// Old-styled branches have plain text notes that cannot be deserialized.
+		// Return empty description so the caller can fall back gracefully.
 		return "", nil
 	}
 
-	switch {
-	case len(notesObj.GithubIssueURL) > 0:
-		description, err = GetGitHubIssueDescription(notesObj.GithubIssueURL)
-	case len(notesObj.JiraTicketURL) > 0:
-		var jiraTicketID string
-		description, jiraTicketID, err = jira.GetJiraIssueTitle(notesObj.JiraTicketURL, "")
-		if err != nil {
-			return "", err
-		}
-
-		description = "[" + jiraTicketID + "] " + description
-	default:
-		// If no GitHub or Jira URL, use the description from notes (from qs dev {some text})
+	if notesObj.Description != "" {
+		// New notes: description was stored at qs dev time - no network fetch needed.
 		description = notesObj.Description
-	}
-	if err != nil {
-		return "", fmt.Errorf("error retrieving issue description: %w", err)
+		// Resolve the URL from whichever field is populated (new or legacy).
+		issueURL := notesObj.IssueURL
+		if issueURL == "" {
+			issueURL = notesObj.GithubIssueURL //nolint:staticcheck
+		}
+		if issueURL == "" {
+			issueURL = notesObj.JiraTicketURL //nolint:staticcheck
+		}
+		// For non-GitHub URLs, prepend the extracted issue ID as a prefix.
+		if issueURL != "" && !strings.Contains(issueURL, "/issues/") {
+			if id := issuePkg.ExtractIDFromURL(issueURL); id != "" {
+				description = "[" + id + "] " + description
+			}
+		}
+	} else {
+		// Old notes without stored description: fall back to fetching from the issue tracker.
+		switch {
+		case len(notesObj.GithubIssueURL) > 0: //nolint:staticcheck
+			description, err = GetGitHubIssueDescription(notesObj.GithubIssueURL) //nolint:staticcheck
+		case len(notesObj.JiraTicketURL) > 0: //nolint:staticcheck
+			var jiraTicketID string
+			description, jiraTicketID, err = jira.GetJiraIssueTitle(notesObj.JiraTicketURL, "") //nolint:staticcheck
+			if err != nil {
+				return "", err
+			}
+			description = "[" + jiraTicketID + "] " + description
+		}
+		if err != nil {
+			return "", fmt.Errorf("error retrieving issue description: %w", err)
+		}
 	}
 
 	return description, nil

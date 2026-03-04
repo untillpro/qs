@@ -10,31 +10,37 @@ import (
 
 func TestSerialize(t *testing.T) {
 	tests := []struct {
-		name           string
-		githubIssueURL string
-		jiraTicketURL  string
-		branchType     notes.BranchType
-		wantErr        bool
+		name        string
+		issueURL    string
+		description string
+		branchType  notes.BranchType
+		wantErr     bool
 	}{
 		{
-			name:           "Basic serialization",
-			githubIssueURL: "https://github.com/org/repo/issues/1",
-			jiraTicketURL:  "https://jira.org/browse/ISSUE-1",
-			branchType:     notes.BranchTypeDev,
-			wantErr:        false,
+			name:        "GitHub issue URL",
+			issueURL:    "https://github.com/org/repo/issues/1",
+			description: "Fix login bug",
+			branchType:  notes.BranchTypeDev,
+			wantErr:     false,
 		},
 		{
-			name:           "Empty URLs",
-			githubIssueURL: "",
-			jiraTicketURL:  "",
-			branchType:     notes.BranchTypePr,
-			wantErr:        false,
+			name:        "Jira ticket URL",
+			issueURL:    "https://org.atlassian.net/browse/AIR-270",
+			description: "Live cluster restart",
+			branchType:  notes.BranchTypeDev,
+			wantErr:     false,
+		},
+		{
+			name:       "Empty URL",
+			issueURL:   "",
+			branchType: notes.BranchTypePr,
+			wantErr:    false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			serialized, err := notes.Serialize(tt.githubIssueURL, tt.jiraTicketURL, tt.branchType, "")
+			serialized, err := notes.Serialize(tt.issueURL, tt.branchType, tt.description)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -50,10 +56,13 @@ func TestSerialize(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify the contents
-			require.Equal(t, tt.githubIssueURL, n.GithubIssueURL)
-			require.Equal(t, tt.jiraTicketURL, n.JiraTicketURL)
+			require.Equal(t, tt.issueURL, n.IssueURL)
+			require.Equal(t, tt.description, n.Description)
 			require.Equal(t, tt.branchType, n.BranchType)
 			require.NotEmpty(t, n.Version)
+			// Legacy fields must not be written by new code
+			require.Empty(t, n.GithubIssueURL)
+			require.Empty(t, n.JiraTicketURL)
 		})
 	}
 }
@@ -103,24 +112,106 @@ func TestDeserialize(t *testing.T) {
 			expected: nil,
 			wantErr:  true,
 		},
+		{
+			name:     "Unsupported version",
+			input:    []string{`{"version":"9.9","github_issue_url":"","jira_ticket_url":"","branch_type":1}`},
+			expected: nil,
+			wantErr:  true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := notes.Deserialize(tt.input)
+			got, err := notes.Deserialize(tt.input)
 
 			if tt.wantErr {
-				require.False(t, ok)
+				require.Error(t, err)
 				require.Nil(t, got)
 				return
 			}
 
-			require.True(t, ok)
+			require.NoError(t, err)
 			require.NotNil(t, got)
 			require.Equal(t, tt.expected.Version, got.Version)
 			require.Equal(t, tt.expected.GithubIssueURL, got.GithubIssueURL)
 			require.Equal(t, tt.expected.JiraTicketURL, got.JiraTicketURL)
 			require.Equal(t, tt.expected.BranchType, got.BranchType)
+		})
+	}
+}
+
+func TestReadNotes(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           []string
+		wantBranchType  notes.BranchType
+		wantDescription string
+		wantURL         string
+		wantErr         bool
+	}{
+		{
+			name:            "JSON format - pure JSON blob",
+			input:           []string{`{"version":"1.0","github_issue_url":"https://github.com/org/repo/issues/1","jira_ticket_url":"","branch_type":1,"description":"My feature"}`},
+			wantBranchType:  notes.BranchTypeDev,
+			wantDescription: "My feature",
+			wantURL:         "https://github.com/org/repo/issues/1",
+		},
+		{
+			name:            "JSON format - issue_url set",
+			input:           []string{`{"version":"1.0","github_issue_url":"","jira_ticket_url":"","branch_type":1,"description":"My feature","issue_url":"https://example.com/123"}`},
+			wantBranchType:  notes.BranchTypeDev,
+			wantDescription: "My feature",
+			wantURL:         "https://example.com/123",
+		},
+		{
+			name:            "Old GH issue format - Resolves issue marker",
+			input:           []string{"Resolves issue #324 My Best problem ever", "Resolves #324"},
+			wantBranchType:  notes.BranchTypeDev,
+			wantDescription: "Resolves issue #324 My Best problem ever",
+			wantURL:         "",
+		},
+		{
+			name:            "Old PK/custom format - plain text + URL",
+			input:           []string{"Permanent support for Peter, Pascal", "https://dev.untill.com/projects/#!361164"},
+			wantBranchType:  notes.BranchTypeDev,
+			wantDescription: "Permanent support for Peter, Pascal",
+			wantURL:         "https://dev.untill.com/projects/#!361164",
+		},
+		{
+			name:    "Empty input",
+			input:   []string{},
+			wantErr: true,
+		},
+		{
+			name:    "Only empty lines",
+			input:   []string{"", "  "},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := notes.ReadNotes(tt.input)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				require.Nil(t, got)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			require.Equal(t, tt.wantBranchType, got.BranchType)
+			require.Equal(t, tt.wantDescription, got.Description)
+			// For JSON format IssueURL is separate from GithubIssueURL; check all URL fields
+			gotURL := got.IssueURL
+			if gotURL == "" {
+				gotURL = got.GithubIssueURL
+			}
+			if gotURL == "" {
+				gotURL = got.JiraTicketURL
+			}
+			require.Equal(t, tt.wantURL, gotURL)
 		})
 	}
 }

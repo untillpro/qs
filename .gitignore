@@ -18,3 +18,4 @@ Gopkg.lock
 assets/
 .idea
 .testdata
+.claude/

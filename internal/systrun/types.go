@@ -2,7 +2,6 @@ package systrun
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -370,9 +369,9 @@ func ExpectationPRCreated(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	notesObj, ok := notesPkg.Deserialize(notes)
-	if notesObj == nil || !ok {
-		return fmt.Errorf("error: No notes found in branch %s: ", expectedPRBranch)
+	notesObj, err := notesPkg.Deserialize(notes)
+	if err != nil {
+		return fmt.Errorf("error: No notes found in branch %s: %w", expectedPRBranch, err)
 	}
 
 	if notesObj.BranchType != notesPkg.BranchTypePr {
@@ -625,9 +624,9 @@ func ExpectationNotesDownloaded(ctx context.Context) error {
 	}
 
 	// Step 7: Check if notes are of correct type
-	notesObj, ok := notesPkg.Deserialize(notes)
-	if !ok {
-		return errors.New("error: No notes found in dev branch")
+	notesObj, err := notesPkg.Deserialize(notes)
+	if err != nil {
+		return fmt.Errorf("error: No notes found in dev branch: %w", err)
 	}
 
 	if notesObj.BranchType != notesPkg.BranchTypeDev {

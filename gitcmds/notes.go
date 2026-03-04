@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/untillpro/goutils/exec"
+	notesPkg "github.com/untillpro/qs/internal/notes"
 	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
@@ -97,18 +98,10 @@ func getNotesWithMainBranch(wd, branchName, mainBranchName string) (notes []stri
 	return notes, len(revList), nil
 }
 
-func GetBodyFromNotes(notes []string) string {
-	b := ""
-	if (len(notes) > 1) && strings.Contains(strings.ToLower(notes[0]), strings.ToLower(IssuePRTtilePrefix)) {
-		for i, note := range notes {
-			note = strings.TrimSpace(note)
-			if (strings.Contains(note, "https://") && !strings.Contains(note, "/issues/")) || !strings.Contains(note, "https://") {
-				strings.Split(strings.ReplaceAll(note, "\r\n", caret), "")
-				if i > 0 && len(note) > 0 {
-					b += note
-				}
-			}
-		}
+func GetBodyFromNotes(rawNotes []string) string {
+	n, err := notesPkg.ReadNotes(rawNotes)
+	if err != nil {
+		return ""
 	}
-	return b
+	return n.Description
 }

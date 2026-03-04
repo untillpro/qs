@@ -275,9 +275,9 @@ func DoesPrExist(wd, parentRepo, currentBranchName string, prState PRState) (*PR
 // - name of the PR branch
 // - error if any operation fails
 func createPRBranch(wd, devBranchName, issueDescription string, notes []string, revCount int, upstreamExists bool, mainBranchName string) (string, error) {
-	notesObj, ok := notesPkg.Deserialize(notes)
-	if !ok {
-		return "", errors.New("error deserializing notes")
+	notesObj, err := notesPkg.ReadNotes(notes)
+	if err != nil {
+		return "", fmt.Errorf("failed to read notes: %w", err)
 	}
 	// update branch type in notes object
 	notesObj.BranchType = notesPkg.BranchTypePr
@@ -300,7 +300,6 @@ func createPRBranch(wd, devBranchName, issueDescription string, notes []string, 
 	var (
 		stdout string
 		stderr string
-		err    error
 	)
 
 	// Step 3: Fetch the latest upstream main

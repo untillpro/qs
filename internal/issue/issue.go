@@ -24,8 +24,6 @@ const (
 
 const (
 	maximumBranchNameLength = 100
-	issuePRTitlePrefix      = "Resolves issue"
-	issueSign               = "Resolves #"
 )
 
 // IssueInfo holds parsed issue metadata.
@@ -36,7 +34,32 @@ const (
 type IssueInfo struct {
 	Type IssueType
 	ID   string
+	// URL holds the URL extracted from the input (fetchable or non-fetchable).
+	URL string
+	// Text holds the user-provided description text (URL excluded).
 	Text string
+}
+
+// extractURLFromText extracts the first URL (http:// or https://) from text.
+// Returns the extracted URL and the remaining text with the URL removed and trimmed.
+// If no URL is found, returns empty string and the full text as remainingText.
+func extractURLFromText(text string) (url string, remainingText string) {
+	re := regexp.MustCompile(`https?://[^\s]+`)
+	loc := re.FindStringIndex(text)
+	if loc == nil {
+		return "", text
+	}
+	url = text[loc[0]:loc[1]]
+	remaining := strings.TrimSpace(text[:loc[0]] + text[loc[1]:])
+	return url, remaining
+}
+
+// ExtractIDFromURL extracts an ID from the last slash-separated segment of a URL.
+// Strips any leading '#' and '!' characters (e.g. "#!763090" -> "763090").
+// Returns empty string if the URL has no usable segment.
+func ExtractIDFromURL(rawURL string) string {
+	segments := strings.Split(rawURL, "/")
+	return strings.TrimLeft(segments[len(segments)-1], "#!")
 }
 
 func BuildDevBranchName(info IssueInfo) (devBranchName string, comments []string, err error) {
@@ -58,38 +81,13 @@ func BuildDevBranchName(info IssueInfo) (devBranchName string, comments []string
 	devBranchName = titleToKebabWithPrefix(info.ID, title)
 	devBranchName = utils.CleanArgFromSpecSymbols(devBranchName)
 
-	// Build notes (common for GitHub and Jira when title is available)
-	var githubURL, jiraURL string
-	switch info.Type {
-	case GitHub:
-		githubURL = info.Text
-	case Jira:
-		jiraURL = info.Text
-	}
-	notesObj, err := notes.Serialize(githubURL, jiraURL, notes.BranchTypeDev, title)
+	// Build notes with unified IssueURL for all issue types.
+	notesObj, err := notes.Serialize(info.URL, notes.BranchTypeDev, title)
 	if err != nil {
 		return "", nil, err
 	}
 
-	// Build comments
-	switch info.Type {
-	case GitHub:
-		comment := issuePRTitlePrefix + " '" + title + "' "
-		body := ""
-		if len(title) > 0 {
-			body = issueSign + info.ID + " " + title
-		}
-		comments = []string{comment, body, notesObj}
-	case Jira:
-		if notesObj != "" {
-			comments = append(comments, notesObj)
-		}
-		comments = append(comments, "["+info.ID+"] "+title)
-		comments = append(comments, info.Text)
-	default:
-		comments = append(comments, title)
-		comments = append(comments, notesObj)
-	}
+	comments = []string{notesObj}
 
 	devBranchName += "-dev"
 
@@ -111,12 +109,12 @@ func titleToKebabWithPrefix(id, title string) string {
 
 // fetchGithubIssueTitle fetches the issue title from GitHub.
 func fetchGithubIssueTitle(info IssueInfo) (string, error) {
-	parts := strings.Split(info.Text, "/")
+	parts := strings.Split(info.URL, "/")
 	if len(parts) < 2 {
-		return "", fmt.Errorf("invalid issue URL format: %s", info.Text)
+		return "", fmt.Errorf("invalid issue URL format: %s", info.URL)
 	}
 
-	repoURL := strings.Split(info.Text, "/issues/")[0]
+	repoURL := strings.Split(info.URL, "/issues/")[0]
 	urlParts := strings.Split(repoURL, "/")
 	if len(urlParts) < 5 { //nolint:revive
 		return "", fmt.Errorf("invalid GitHub URL format: %s", repoURL)
@@ -148,12 +146,21 @@ func fetchGithubIssueTitle(info IssueInfo) (string, error) {
 
 func ParseIssueFromArgs(args ...string) (IssueInfo, error) {
 	text := args[0] // protected by caller side
-	if strings.Contains(text, "/issues/") {
-		segments := strings.Split(text, "/")
-		return IssueInfo{Type: GitHub, Text: text, ID: segments[len(segments)-1]}, nil
-	}
-	if id, ok := jira.GetJiraTicketIDFromArgs(args...); ok {
-		return IssueInfo{Type: Jira, Text: text, ID: id}, nil
+	url, remainingText := extractURLFromText(text)
+
+	if url != "" {
+		if strings.Contains(url, "/issues/") {
+			segments := strings.Split(url, "/")
+			return IssueInfo{Type: GitHub, URL: url, Text: remainingText, ID: segments[len(segments)-1]}, nil
+		}
+		if id, ok := jira.GetJiraTicketIDFromArgs(url); ok {
+			return IssueInfo{Type: Jira, URL: url, Text: remainingText, ID: id}, nil
+		}
+		// Non-fetchable URL: text is required for branch naming
+		if remainingText == "" {
+			return IssueInfo{}, errors.New("text is required when URL is non-fetchable")
+		}
+		return IssueInfo{Type: FreeForm, URL: url, Text: remainingText, ID: ExtractIDFromURL(url)}, nil
 	}
 	return IssueInfo{Type: FreeForm, Text: text}, nil
 }
