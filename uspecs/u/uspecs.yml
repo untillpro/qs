@@ -2,7 +2,7 @@
 # DO NOT EDIT - managed by uspecs
 version: 0.1.0-a0
 invocation_methods: [nlia]
-installed_at: 2026-02-21T18:48:11Z
-modified_at: 2026-02-25T17:58:57Z
-commit: b810301a0ef29c56fadb02d3452346312d42e570
-commit_timestamp: 2026-02-25T17:56:59Z
+installed_at: 2026-04-01T17:16:26Z
+modified_at: 2026-04-01T17:16:26Z
+commit: 364f565aee0664483703c3be02c767af2aba0094
+commit_timestamp: 2026-04-01T16:21:32Z
