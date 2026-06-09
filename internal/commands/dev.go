@@ -19,14 +19,14 @@ import (
 )
 
 func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []string) error {
-	parentRepo, err := gitcmds.GetParentRepoName(wd)
+	rc, err := gitcmds.LoadRepoContext(wd)
 	if err != nil {
 		return err
 	}
 
 	// qs dev -d is running
 	if doDelete {
-		return deleteBranches(wd, parentRepo)
+		return deleteBranches(wd, rc.ParentRepo)
 	}
 	// qs dev is running
 	var devBranchName string
@@ -42,48 +42,26 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 	// - If parentRepo exists OR upstream remote exists -> fork workflow
 	// - If no parentRepo AND no upstream remote -> single remote workflow
 	// Check if upstream remote exists
-	upstreamExists, err := gitcmds.HasRemote(wd, "upstream")
-	if err != nil {
-		return err
-	}
 
 	// Only require fork if:
 	// 1. No parent repo exists (not a fork), AND
 	// 2. Upstream remote exists (indicating fork workflow was intended)
 	// This catches the edge case where someone manually added upstream but didn't fork
-	if len(parentRepo) == 0 && upstreamExists {
-		repo, org, err := gitcmds.GetRepoAndOrgName(wd)
-		if err != nil {
-			return err
-		}
-
-		return fmt.Errorf("you are in %s/%s repo with upstream remote but no fork detected\nExecute 'qs fork' first", org, repo)
+	if len(rc.ParentRepo) == 0 && rc.UpstreamExists {
+		return fmt.Errorf("you are in %s/%s repo with upstream remote but no fork detected\nExecute 'qs fork' first", rc.Org, rc.Repo)
 	}
 
-	curBranch, mainBranch, isMain, err := gitcmds.GetCurrentBranchInfo(wd)
-	if err != nil {
-		return err
-	}
-	if !isMain {
+	if !rc.IsMain {
 		fmt.Println("--------------------------------------------------------")
 		fmt.Println("You are in")
-		repo, org, err := gitcmds.GetRepoAndOrgName(wd)
-		if err != nil {
-			return err
-		}
+		color.New(color.FgHiCyan).Println(rc.Org + "/" + rc.Repo + "/" + rc.CurrentBranch)
 
-		color.New(color.FgHiCyan).Println(org + "/" + repo + "/" + curBranch)
-
-		return fmt.Errorf("switch to main branch before running 'qs dev'. You are in %s branch ", curBranch)
+		return fmt.Errorf("switch to main branch before running 'qs dev'. You are in %s branch ", rc.CurrentBranch)
 	}
 
 	// Stash current changes if needed
 	stashedUncommittedChanges := false
-	if ok, err := gitcmds.HaveUncommittedChanges(wd); ok {
-		if err != nil {
-			return err
-		}
-
+	if rc.HasUncommittedChanges {
 		if err := gitcmds.Stash(wd); err != nil {
 			return fmt.Errorf("error stashing changes: %w", err)
 		}
@@ -91,7 +69,7 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 	}
 
 	// sync local MainBranch to ensure it's up to date with origin and upstream remotes
-	if err := gitcmds.SyncMainBranch(wd, mainBranch, upstreamExists); err != nil {
+	if err := gitcmds.SyncMainBranch(wd, rc.MainBranch, rc.UpstreamExists); err != nil {
 		return err
 	}
 
@@ -124,25 +102,25 @@ func Dev(cmd *cobra.Command, wd string, doDelete bool, ignoreHook bool, args []s
 
 	switch response {
 	case pushYes:
-		if len(parentRepo) > 0 && !upstreamExists {
+		if len(rc.ParentRepo) > 0 && !rc.UpstreamExists {
 			var upstreamResponse string
-			fmt.Print("Upstream not found.\nRepository " + parentRepo + " will be added as upstream. Agree[y/n]?")
+			fmt.Print("Upstream not found.\nRepository " + rc.ParentRepo + " will be added as upstream. Agree[y/n]?")
 			_, _ = fmt.Scanln(&upstreamResponse)
 			if upstreamResponse != pushYes {
 				fmt.Print(msgOkSeeYou)
 				return nil
 			}
-			if err := gitcmds.MakeUpstreamForBranch(wd, parentRepo); err != nil {
+			if err := gitcmds.MakeUpstreamForBranch(wd, rc.ParentRepo); err != nil {
 				return err
 			}
 		}
 
-		if err := gitcmds.CreateDevBranch(wd, devBranchName, mainBranch, notes); err != nil {
+		if err := gitcmds.CreateDevBranch(wd, devBranchName, rc.MainBranch, notes); err != nil {
 			return err
 		}
 
 		if issueInfo.Type == issue.GitHub {
-			notes, err = gitcmds.LinkBranchToGithubIssue(wd, parentRepo, issueInfo.Text, issueInfo.ID, devBranchName, args...)
+			notes, err = gitcmds.LinkBranchToGithubIssue(wd, rc.ParentRepo, issueInfo.Text, issueInfo.ID, devBranchName, args...)
 			if err != nil {
 				return err
 			}

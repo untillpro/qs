@@ -8,6 +8,7 @@ import (
 	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
+
 func main() {
 	if _, err := cmdproc.ExecRootCmd(context.Background(), os.Args); err != nil {
 		logger.Verbose(err)
