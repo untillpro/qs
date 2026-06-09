@@ -165,6 +165,9 @@ func getListOfChangedFiles(wd, statusOutput string) ([]fileInfo, error) {
 			oldSize = newFileSize
 		case `??`:
 			newFileSize, err2 = getFileSize(wd, name)
+		case `AD`:
+			// file was added, then removed -> consider it never existed
+			continue
 		default:
 			return nil, fmt.Errorf("unknown file status %s for file %s", statusCode, name)
 		}
