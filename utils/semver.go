@@ -15,6 +15,7 @@ const (
 	writeFilePermission = 0644
 )
 
+
 type Version struct {
 	*coreos.Version
 	filename string
