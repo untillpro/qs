@@ -8,6 +8,14 @@ import (
 	"github.com/voedger/voedger/pkg/goutils/logger"
 )
 
+type badStruct struct {
+	ar []int
+}
+
+func (bs badStruct) add( i int) {
+	bs.ar = append(bs.ar, i)
+}
+
 func main() {
 	if _, err := cmdproc.ExecRootCmd(context.Background(), os.Args); err != nil {
 		logger.Verbose(err)
