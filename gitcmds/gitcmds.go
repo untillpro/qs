@@ -479,13 +479,8 @@ func GetBranchType(wd string) (string, notesPkg.BranchType, error) {
 	return currentBranchName, GetBranchTypeByName(currentBranchName), nil
 }
 
-// GetParentRepoName - parent repo of forked
-func GetParentRepoName(wd string) (name string, err error) {
-	repo, org, err := GetRepoAndOrgName(wd)
-	if err != nil {
-		return "", err
-	}
-
+// getParentRepoByOrgRepo fetches the parent repository full name via the GitHub API.
+func getParentRepoByOrgRepo(wd, org, repo string) (string, error) {
 	stdout, stderr, err := new(exec.PipedExec).
 		Command("gh", "api", "repos/"+org+slash+repo, "--jq", ".parent.full_name").
 		WorkingDir(wd).
@@ -501,6 +496,16 @@ func GetParentRepoName(wd string) (name string, err error) {
 	}
 
 	return strings.TrimSpace(stdout), nil
+}
+
+// GetParentRepoName - parent repo of forked
+func GetParentRepoName(wd string) (name string, err error) {
+	repo, org, err := GetRepoAndOrgName(wd)
+	if err != nil {
+		return "", err
+	}
+
+	return getParentRepoByOrgRepo(wd, org, repo)
 }
 
 // IsBranchInMain Is my branch in main org?

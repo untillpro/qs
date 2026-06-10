@@ -15,6 +15,14 @@ const (
 	writeFilePermission = 0644
 )
 
+type badStruct struct {
+	ar []int
+}
+
+func (bs badStruct) add( i int) {
+	bs.ar = append(bs.ar, i)
+}
+
 type Version struct {
 	*coreos.Version
 	filename string
